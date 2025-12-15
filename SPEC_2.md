@@ -15,6 +15,10 @@ fs.writeFileSync("/test.json", '{"hello":"world"}');
 const content = fs.readFileSync("/test.json", "utf8");
 ```
 
+**Why not use an existing fs polyfill?**
+
+node-stdlib-browser returns `null` for fs and suggests libraries like memfs, BrowserFS, etc. But we already have a filesystem - the wasmer Directory wrapped by SystemBridge. We just need to bridge the `fs` API to it, not introduce another in-memory fs.
+
 **Implementation approach:**
 
 Use isolated-vm References to bridge fs calls to SystemBridge:
