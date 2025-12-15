@@ -19,33 +19,144 @@ const content = fs.readFileSync("/test.json", "utf8");
 
 node-stdlib-browser returns `null` for fs and suggests libraries like memfs, BrowserFS, etc. But we already have a filesystem - the wasmer Directory wrapped by SystemBridge. We just need to bridge the `fs` API to it, not introduce another in-memory fs.
 
+**File structure:**
+
+```
+src/node-process/fs/
+  index.ts        # Main exports, wires bridge refs to fs API
+  stats.ts        # Stats class matching Node's fs.Stats
+  descriptor.ts   # FileDescriptor for tracking open files
+  errors.ts       # ENOENT, EEXIST, etc. error helpers
+  constants.ts    # fs.constants (O_RDONLY, S_IFREG, etc.)
+```
+
+**Classes to implement:**
+
+```ts
+// stats.ts - File/directory statistics
+class Stats {
+  dev: number;
+  ino: number;
+  mode: number;
+  nlink: number;
+  uid: number;
+  gid: number;
+  size: number;
+  atime: Date;
+  mtime: Date;
+  ctime: Date;
+  birthtime: Date;
+
+  isFile(): boolean;
+  isDirectory(): boolean;
+  isSymbolicLink(): boolean;
+  isBlockDevice(): boolean;   // false
+  isCharacterDevice(): boolean; // false
+  isFIFO(): boolean;          // false
+  isSocket(): boolean;        // false
+}
+
+// descriptor.ts - Open file handle
+class FileDescriptor {
+  private item: string;       // path
+  private position: number;   // current read/write position
+  private flags: number;      // O_RDONLY, O_WRONLY, etc.
+
+  getPosition(): number;
+  setPosition(pos: number): void;
+  isRead(): boolean;
+  isWrite(): boolean;
+  isAppend(): boolean;
+}
+
+// errors.ts - Standard fs errors
+function createError(code: string, path: string): Error;
+// ENOENT - no such file or directory
+// EEXIST - file already exists
+// EISDIR - is a directory
+// ENOTDIR - not a directory
+// ENOTEMPTY - directory not empty
+```
+
+**Sync methods to implement (priority):**
+
+```ts
+// Read/write
+readFileSync(path, options?): string | Buffer
+writeFileSync(path, data, options?): void
+appendFileSync(path, data, options?): void
+
+// Directory
+readdirSync(path, options?): string[] | Dirent[]
+mkdirSync(path, options?): void
+rmdirSync(path): void
+
+// Stats/existence
+existsSync(path): boolean
+statSync(path): Stats
+lstatSync(path): Stats
+
+// Delete/rename
+unlinkSync(path): void
+renameSync(oldPath, newPath): void
+
+// File descriptors (for packages that use them)
+openSync(path, flags, mode?): number
+closeSync(fd): void
+readSync(fd, buffer, offset, length, position): number
+writeSync(fd, buffer, offset, length, position): number
+fstatSync(fd): Stats
+```
+
+**Async methods:**
+
+Wrap sync methods in Promise.resolve() or use callbacks:
+
+```ts
+readFile(path, options?, callback?): void | Promise<Buffer>
+writeFile(path, data, options?, callback?): void | Promise<void>
+// ... etc
+```
+
 **Implementation approach:**
 
 Use isolated-vm References to bridge fs calls to SystemBridge:
 
 ```ts
 // In NodeProcess.setupRequire():
-const fsReadRef = new ivm.Reference(async (path: string) => {
-  return this.systemBridge.readFile(path);
-});
-const fsWriteRef = new ivm.Reference((path: string, content: string) => {
-  this.systemBridge.writeFile(path, content);
-});
+const fsRefs = {
+  readFile: new ivm.Reference(async (path: string) => {
+    return this.systemBridge.readFile(path);
+  }),
+  writeFile: new ivm.Reference((path: string, content: string) => {
+    this.systemBridge.writeFile(path, content);
+  }),
+  stat: new ivm.Reference(async (path: string) => {
+    // Return serializable stats object
+    return this.systemBridge.stat(path);
+  }),
+  // ... etc
+};
 
-// Pass refs into sandbox, fs polyfill calls them:
-// fs.readFileSync = (path) => _fsRead.applySyncPromise(undefined, [path]);
+await jail.set('_fs', fsRefs);
 ```
 
-**Methods to implement:**
-- `readFileSync(path, encoding?)` - sync read via applySyncPromise
-- `writeFileSync(path, data)` - sync write
-- `existsSync(path)` - check existence
-- `mkdirSync(path, options?)` - create directory
-- `readdirSync(path)` - list directory
-- `statSync(path)` - file stats (return mock stat object)
-- `unlinkSync(path)` - delete file
+Inside the isolate, fs/index.ts builds the fs API:
 
-Async versions can wrap the sync versions in Promise.resolve() for basic compatibility.
+```ts
+// Injected into isolate
+const fs = {
+  readFileSync(path, options) {
+    const content = _fs.readFile.applySyncPromise(undefined, [path]);
+    if (options?.encoding) return content;
+    return Buffer.from(content);
+  },
+  writeFileSync(path, data) {
+    _fs.writeFile.applySync(undefined, [path, data.toString()]);
+  },
+  // ... etc
+};
+```
 
 **Test:**
 ```ts
@@ -53,6 +164,18 @@ const proc = new NodeProcess({ systemBridge: bridge });
 const result = await proc.run(`
   const fs = require("fs");
   fs.writeFileSync("/test.txt", "hello");
+  module.exports = fs.readFileSync("/test.txt", "utf8");
+`);
+expect(result).toBe("hello");
+```
+
+**Test with file descriptors:**
+```ts
+const result = await proc.run(`
+  const fs = require("fs");
+  const fd = fs.openSync("/test.txt", "w");
+  fs.writeSync(fd, "hello");
+  fs.closeSync(fd);
   module.exports = fs.readFileSync("/test.txt", "utf8");
 `);
 expect(result).toBe("hello");
