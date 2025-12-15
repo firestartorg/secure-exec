@@ -34,8 +34,9 @@ src/
 
 the end user api looks like:
 
-```
-const vm = new VirtualMachine("/path/to/local/fs");
+```ts
+const vm = new VirtualMachine();
+await vm.loadFromHost("/path/to/local/fs");
 const output = await vm.spawn("ls", ["/"]);
 console.log('output', output.stdout, output.stderr, output.code)
 ```
@@ -43,7 +44,8 @@ console.log('output', output.stdout, output.stderr, output.code)
 **goal** - run node scripts, linux commands, and shell scripts that call node:
 
 ```ts
-const vm = new VirtualMachine("/path/to/local/fs");
+const vm = new VirtualMachine();
+await vm.loadFromHost("/path/to/local/fs");
 
 // run linux commands via WASM
 const lsResult = await vm.spawn("ls", ["/"]);
