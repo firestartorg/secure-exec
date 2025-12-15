@@ -40,42 +40,43 @@ const output = await vm.spawn("ls", ["/"]);
 console.log('output', output.stdout, output.stderr, output.code)
 ```
 
-by the end of this project, we should be able to do:
+**v1 goal** - run node scripts and linux commands separately:
 
-```
-const shCode = `
-    #!/bin/sh
-    node script.js
-`;
-
-const jsCode = `
-    const fs = require("fs");
-    const path = require("path");
-
-    // test ms package (simple, no deps)
-    const ms = require("ms");
-    console.log("1 hour in ms:", ms("1h"));
-
-    // test jsonfile package (uses fs internally)
-    const jsonfile = require("jsonfile");
-    const testFile = "/test.json";
-    jsonfile.writeFileSync(testFile, { hello: "world" });
-
-`;
-
+```ts
 const vm = new VirtualMachine("/path/to/local/fs");
 
-// write scripts to the vm filesystem
-vm.writeFile("/test.sh", shCode);
-vm.writeFile("/script.js", jsCode);
+// run linux commands via WASM
+const lsResult = await vm.spawn("ls", ["/"]);
+console.log(lsResult.stdout); // lists files
 
-// run the shell script (assumes pnpm add jsonfile ms was run on host)
-const output = await vm.spawn("sh", ["/test.sh"]);
-console.log('output', output.stdout, output.stderr, output.code)
+// run node scripts via isolated-vm (assumes pnpm add ms jsonfile in host dir)
+vm.writeFile("/script.js", `
+  const ms = require("ms");
+  const jsonfile = require("jsonfile");
+  console.log("1 hour in ms:", ms("1h"));
+  jsonfile.writeFileSync("/test.json", { hello: "world" });
+`);
 
-// read back to verify
+const nodeResult = await vm.spawn("node", ["/script.js"]);
+console.log(nodeResult.stdout); // "1 hour in ms: 3600000"
+
+// read back file written by node
 const raw = vm.readFile("/test.json");
-console.log("read back:", JSON.parse(raw));
+console.log(JSON.parse(raw)); // { hello: "world" }
+```
+
+**stretch goal** - shell scripts that call node (requires custom WASM shell):
+
+```ts
+const vm = new VirtualMachine("/path/to/local/fs");
+
+vm.writeFile("/test.sh", `#!/bin/sh
+node script.js
+echo "done"
+`);
+
+// shell runs in WASM, delegates "node" back to JS → NodeProcess
+const output = await vm.spawn("sh", ["/test.sh"]);
 ```
 
 ## components
@@ -86,15 +87,41 @@ orchestrates WasixInstance and NodeProcess. provides the main `spawn()` API that
 
 ### system bridge
 
-shared layer for filesystem, network, and other system resources. both WasixInstance and NodeProcess use this to access the same underlying state. forwards filesystem operations to a dedicated folder on the host.
+shared layer for filesystem, network, and other system resources. wraps a dedicated folder on the host filesystem.
+
+**filesystem architecture:**
+- SystemBridge wraps a host directory (e.g. `/tmp/vm-abc123/`)
+- NodeProcess: fs polyfill calls back to main isolate via isolated-vm Reference API → SystemBridge → real host fs. full read/write.
+- WasixInstance: before each command, sync host fs → Wasmer Directory class. WASM can read these files. WASM writes don't persist back (known limitation of Directory class).
+- net effect: both runtimes see the same files. NodeProcess has full read/write, WasixInstance has read-only view.
 
 ### node process
 
 runs Node.js code in an isolated-vm isolate. provides polyfilled node stdlib (fs, path, etc) that routes through SystemBridge. supports requiring packages from node_modules.
 
+**fs bridging via isolated-vm Reference API:**
+```ts
+// main isolate creates references to real fs operations
+const writeFileRef = new ivm.Reference((path: string, content: string) => {
+  systemBridge.writeFile(path, content);
+});
+
+// pass reference into sandbox
+await context.global.set('_bridgeWriteFile', writeFileRef);
+
+// inside sandbox, fs polyfill calls back:
+fs.writeFileSync = (path, content) => {
+  _bridgeWriteFile.applySync(undefined, [path, content]);
+};
+```
+
+**stdout/stderr capture:** use isolated-vm's `context.eval()` return value or pass a `_log` reference that collects output.
+
 ### wasix instance
 
-uses WebAssembly.sh to emulate a Linux shell environment. provides shell commands (ls, cd, etc) via SystemBridge. when running `node` commands, delegates to NodeProcess.
+uses @wasmer/sdk to run Linux commands. uses `sharrattj/coreutils` package from Wasmer registry for ls, cat, echo, etc.
+
+**v1 limitation:** no way to intercept `node` commands from within WASM. VirtualMachine.spawn() handles routing in JS (see step 7). shell scripts that internally call node require custom WASM shell (see dependencies section).
 
 ### dependencies
 
@@ -221,7 +248,11 @@ const result = await proc.run(`
 expect(result).toBe(3600000);
 ```
 
-7. auto-install `node` program in wasix/webassembly.sh to kick out to the nodejs shim that will spawn the isolate
+7. implement hybrid routing in VirtualMachine.spawn()
+
+VirtualMachine.spawn() checks the command name and routes to the appropriate runtime:
+- `node` → NodeProcess (run JS in isolated-vm)
+- linux commands (ls, cat, echo, etc.) → WasixInstance
 
 ```ts
 import { VirtualMachine } from "./vm";
@@ -229,9 +260,16 @@ import { VirtualMachine } from "./vm";
 const vm = new VirtualMachine(tmpDir);
 vm.writeFile("/script.js", `console.log("hello from node")`);
 
+// this routes to NodeProcess, not WASM
 const result = await vm.spawn("node", ["/script.js"]);
 expect(result.stdout).toBe("hello from node\n");
+
+// this routes to WasixInstance
+const lsResult = await vm.spawn("ls", ["/"]);
+expect(lsResult.stdout).toContain("script.js");
 ```
+
+**v1 limitation:** `vm.spawn("sh", ["script-that-calls-node.sh"])` won't work because the shell runs in WASM and can't delegate back to NodeProcess. this requires the custom WASM shell approach (see dependencies section).
 
 ## future work
 
