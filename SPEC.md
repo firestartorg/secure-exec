@@ -25,7 +25,7 @@ src/
         index.ts  # class NodeProcess (using isolated-vm)
         ...etc...
     wasix/
-        index.ts  # class Wasix
+        index.ts  # class WasixInstance
         node-shim.ts  # handles shim between wasix <-> node-process (using isolated-vm)
     ...etc...
 ```
@@ -89,7 +89,7 @@ this vm will be bound to BOTH the node shim. we only care about the file system 
 
 runs Node.js code in an isolated-vm isolate. provides polyfilled node stdlib (fs, path, etc) and supports requiring packages from node_modules.
 
-### wasix vm
+### wasix instance
 
 uses WebAssembly.sh to emulate a Linux shell environment. provides shell commands (ls, cd, etc) and hooks into the node shim when running `node` commands.
 
@@ -139,9 +139,9 @@ expect(result).toBe("foo/bar");
 4. get basic wasix shell working
 
 ```ts
-import { WasixVM } from "./wasix";
+import { WasixInstance } from "./wasix";
 
-const wasix = new WasixVM();
+const wasix = new WasixInstance();
 const result = await wasix.exec("echo hello");
 expect(result.stdout).toBe("hello\n");
 ```
@@ -150,10 +150,10 @@ expect(result.stdout).toBe("hello\n");
 
 ```ts
 import { VirtualMachine } from "./vm";
-import { WasixVM } from "./wasix";
+import { WasixInstance } from "./wasix";
 
 const vm = new VirtualMachine(tmpDir);
-const wasix = new WasixVM(vm);
+const wasix = new WasixInstance(vm);
 
 vm.writeFile("/test.txt", "content");
 const result = await wasix.exec("ls /");
@@ -180,10 +180,10 @@ expect(result).toBe(3600000);
 
 ```ts
 import { VirtualMachine } from "./vm";
-import { WasixVM } from "./wasix";
+import { WasixInstance } from "./wasix";
 
 const vm = new VirtualMachine(tmpDir);
-const wasix = new WasixVM(vm);
+const wasix = new WasixInstance(vm);
 
 vm.writeFile("/script.js", `console.log("hello from node")`);
 const result = await wasix.exec("node /script.js");
