@@ -82,13 +82,15 @@ orchestrates WasixInstance and NodeProcess. provides the main `spawn()` API that
 
 ### system bridge
 
-shared layer for filesystem, network, and other system resources. wraps a dedicated folder on the host filesystem.
+shared layer for filesystem, network, and other system resources. wraps the shared Directory instance.
 
 **filesystem architecture:**
-- SystemBridge wraps a host directory (e.g. `/tmp/vm-abc123/`)
-- NodeProcess: fs polyfill calls back to main isolate via isolated-vm Reference API → SystemBridge → real host fs. full read/write.
-- WasixInstance: before each command, sync host fs → Wasmer Directory class. WASM can read these files. WASM writes don't persist back (known limitation of Directory class).
-- net effect: both runtimes see the same files. NodeProcess has full read/write, WasixInstance has read-only view.
+- Directory (from @wasmer/sdk) is the source of truth - an in-memory filesystem shared between WASM and JS
+- SystemBridge wraps Directory, not host fs
+- NodeProcess: fs polyfill → SystemBridge → Directory
+- WasixInstance: uses same Directory directly
+- both runtimes see the same files with full read/write
+- host fs path passed to VirtualMachine is for initial loading / optional persisting, not live storage
 
 ### node process
 
@@ -114,7 +116,7 @@ fs.writeFileSync = (path, content) => {
 
 ### wasix instance
 
-uses @wasmer/sdk to run Linux commands. uses `sharrattj/coreutils` package from Wasmer registry for ls, cat, echo, etc.
+uses @wasmer/sdk to run Linux commands. loads node-shim.webc package which bundles bash, coreutils, and the custom node shim for IPC bridging. see [test18-fs-polling-ipc.ts](scratch/wasmer-test/test18-fs-polling-ipc.ts) for the proven approach.
 
 ### node shim
 
@@ -256,7 +258,26 @@ const result = await vm.spawn("ls", ["/"]);
 expect(result.stdout).toContain("test.txt");
 ```
 
-6. implement package imports using the code in node_modules
+6. integrate node shim with WasixInstance
+
+WasixInstance loads the pre-built node-shim.webc and runs an IPC polling loop during exec() to handle node requests from WASM.
+
+```ts
+import { WasixInstance } from "./wasix";
+
+const wasix = new WasixInstance(systemBridge);
+
+// bash calls node, which triggers IPC:
+// 1. node shim writes args to /ipc/request.txt
+// 2. WasixInstance polls Directory, finds request
+// 3. WasixInstance calls NodeProcess to run real node
+// 4. WasixInstance writes result to /ipc/response.txt
+// 5. node shim reads response, prints stdout, exits
+const result = await wasix.exec("bash -c 'node -e \"console.log(2+2)\"'");
+expect(result.stdout).toContain("4");
+```
+
+7. implement package imports using the code in node_modules
 
 ```ts
 import { VirtualMachine } from "./vm";
@@ -272,7 +293,7 @@ const result = await proc.run(`
 expect(result).toBe(3600000);
 ```
 
-7. implement hybrid routing in VirtualMachine.spawn()
+8. implement hybrid routing in VirtualMachine.spawn()
 
 VirtualMachine.spawn() checks the command name and routes to the appropriate runtime:
 - `node` → NodeProcess (run JS in isolated-vm)
