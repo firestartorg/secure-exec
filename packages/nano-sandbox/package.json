@@ -13,6 +13,7 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "build:bridge": "esbuild bridge/index.ts --bundle --format=iife --global-name=bridge --outfile=assets/bridge.js",
+    "build:wasix": "./wasix-runtime/build.sh",
     "build": "pnpm run build:bridge && tsc",
     "test": "vitest run",
     "test:watch": "vitest"
