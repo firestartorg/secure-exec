@@ -483,4 +483,282 @@ describe("NodeProcess", () => {
       expect(result).toBe(true);
     });
   });
+
+  describe("ESM Support", () => {
+    it("should detect and run basic ESM code", async () => {
+      proc = new NodeProcess();
+      const result = await proc.exec(`
+        const x = 1 + 1;
+        export default x;
+        console.log("result:", x);
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("result: 2");
+    });
+
+    it("should import built-in modules with ESM syntax", async () => {
+      proc = new NodeProcess();
+      const result = await proc.exec(`
+        import path from 'path';
+        console.log(path.join('foo', 'bar'));
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("foo/bar");
+    });
+
+    it("should import path with node: prefix", async () => {
+      proc = new NodeProcess();
+      const result = await proc.exec(`
+        import path from 'node:path';
+        console.log(path.basename('/foo/bar/baz.txt'));
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("baz.txt");
+    });
+
+    it("should import events module", async () => {
+      proc = new NodeProcess();
+      const result = await proc.exec(`
+        import events from 'events';
+        const emitter = new events.EventEmitter();
+        let msg = '';
+        emitter.on('test', (data) => { msg = data; });
+        emitter.emit('test', 'hello');
+        console.log(msg);
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("hello");
+    });
+
+    it("should import from filesystem with ESM", async () => {
+      const dir = new Directory();
+      const bridge = new SystemBridge(dir);
+
+      // Create directory and ESM module
+      bridge.mkdir("/lib");
+      bridge.writeFile("/lib/math.js", `
+        export const add = (a, b) => a + b;
+        export const multiply = (a, b) => a * b;
+      `);
+
+      proc = new NodeProcess({ systemBridge: bridge });
+      const result = await proc.exec(`
+        import { add, multiply } from '/lib/math.js';
+        console.log('add:', add(2, 3));
+        console.log('multiply:', multiply(4, 5));
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("add: 5");
+      expect(result.stdout).toContain("multiply: 20");
+    });
+
+    it("should import CJS module from ESM", async () => {
+      const dir = new Directory();
+      const bridge = new SystemBridge(dir);
+
+      // Create directory and CJS module
+      bridge.mkdir("/lib");
+      bridge.writeFile("/lib/cjs-helper.js", `
+        module.exports = { greet: (name) => 'Hello, ' + name };
+      `);
+
+      proc = new NodeProcess({ systemBridge: bridge });
+      const result = await proc.exec(`
+        import helper from '/lib/cjs-helper.js';
+        console.log(helper.greet('World'));
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("Hello, World");
+    });
+
+    it("should handle chained ESM imports", async () => {
+      const dir = new Directory();
+      const bridge = new SystemBridge(dir);
+
+      // Create a chain of ESM imports
+      bridge.writeFile("/a.js", `
+        export const valueA = 'A';
+      `);
+      bridge.writeFile("/b.js", `
+        import { valueA } from '/a.js';
+        export const valueB = valueA + 'B';
+      `);
+      bridge.writeFile("/c.js", `
+        import { valueB } from '/b.js';
+        export const valueC = valueB + 'C';
+      `);
+
+      proc = new NodeProcess({ systemBridge: bridge });
+      const result = await proc.exec(`
+        import { valueC } from '/c.js';
+        console.log(valueC);
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("ABC");
+    });
+
+    it("should handle default and named exports together", async () => {
+      const dir = new Directory();
+      const bridge = new SystemBridge(dir);
+
+      bridge.writeFile("/mixed.js", `
+        export const PI = 3.14159;
+        export const E = 2.71828;
+        export default { name: 'math-constants' };
+      `);
+
+      proc = new NodeProcess({ systemBridge: bridge });
+      const result = await proc.exec(`
+        import constants, { PI, E } from '/mixed.js';
+        console.log('name:', constants.name);
+        console.log('PI:', PI);
+        console.log('E:', E);
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("name: math-constants");
+      expect(result.stdout).toContain("PI: 3.14159");
+      expect(result.stdout).toContain("E: 2.71828");
+    });
+
+    it("should detect .mjs as ESM regardless of content", async () => {
+      proc = new NodeProcess();
+      // Even without import/export, .mjs should be treated as ESM
+      const result = await proc.exec(
+        `console.log("from mjs");`,
+        "/test.mjs"
+      );
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("from mjs");
+    });
+
+    it("should detect .cjs as CJS regardless of content", async () => {
+      proc = new NodeProcess();
+      const result = await proc.exec(
+        `module.exports = 42; console.log("from cjs");`,
+        "/test.cjs"
+      );
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("from cjs");
+    });
+
+    it("should import JSON with ESM", async () => {
+      const dir = new Directory();
+      const bridge = new SystemBridge(dir);
+
+      bridge.writeFile("/config.json", JSON.stringify({ debug: true, version: "1.0.0" }));
+
+      proc = new NodeProcess({ systemBridge: bridge });
+      const result = await proc.exec(`
+        import config from '/config.json';
+        console.log('debug:', config.debug);
+        console.log('version:', config.version);
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("debug: true");
+      expect(result.stdout).toContain("version: 1.0.0");
+    });
+
+    it("should support dynamic import() for built-in modules", async () => {
+      proc = new NodeProcess();
+      const result = await proc.exec(`
+        async function main() {
+          const path = await import('path');
+          console.log(path.default.join('foo', 'bar'));
+        }
+        main();
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("foo/bar");
+    });
+
+    it("should support dynamic import() for filesystem modules", async () => {
+      const dir = new Directory();
+      const bridge = new SystemBridge(dir);
+
+      bridge.mkdir("/lib");
+      bridge.writeFile("/lib/utils.js", `
+        export const double = (x) => x * 2;
+        export const triple = (x) => x * 3;
+      `);
+
+      proc = new NodeProcess({ systemBridge: bridge });
+      const result = await proc.exec(`
+        async function main() {
+          const utils = await import('/lib/utils.js');
+          console.log('double:', utils.double(5));
+          console.log('triple:', utils.triple(5));
+        }
+        main();
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("double: 10");
+      expect(result.stdout).toContain("triple: 15");
+    });
+
+    it("should support conditional dynamic imports", async () => {
+      const dir = new Directory();
+      const bridge = new SystemBridge(dir);
+
+      bridge.writeFile("/a.js", `export const name = 'module-a';`);
+      bridge.writeFile("/b.js", `export const name = 'module-b';`);
+
+      proc = new NodeProcess({ systemBridge: bridge });
+      const result = await proc.exec(`
+        async function loadModule(useA) {
+          if (useA) {
+            return await import('/a.js');
+          } else {
+            return await import('/b.js');
+          }
+        }
+
+        async function main() {
+          const modA = await loadModule(true);
+          const modB = await loadModule(false);
+          console.log('a:', modA.name);
+          console.log('b:', modB.name);
+        }
+        main();
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("a: module-a");
+      expect(result.stdout).toContain("b: module-b");
+    });
+
+    it("should support dynamic import() with CJS modules", async () => {
+      const dir = new Directory();
+      const bridge = new SystemBridge(dir);
+
+      bridge.mkdir("/lib");
+      bridge.writeFile("/lib/cjs-mod.js", `
+        module.exports = { greeting: 'Hello from CJS' };
+      `);
+
+      proc = new NodeProcess({ systemBridge: bridge });
+      const result = await proc.exec(`
+        async function main() {
+          const mod = await import('/lib/cjs-mod.js');
+          console.log(mod.default.greeting);
+        }
+        main();
+      `);
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("Hello from CJS");
+    });
+  });
 });
