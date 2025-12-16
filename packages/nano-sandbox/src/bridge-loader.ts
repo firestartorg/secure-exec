@@ -8,8 +8,8 @@ const require = createRequire(import.meta.url);
  * This returns the compiled JavaScript code as a string wrapped in an IIFE.
  */
 export function getFsModuleCode(): string {
-  // Read the compiled bridge.js file (IIFE format) from @anthropic/ivm-bridge
-  const bridgePath = require.resolve("@anthropic/ivm-bridge");
+  // Read the compiled bridge.js file (IIFE format) from @nano-sandbox/ivm-bridge
+  const bridgePath = require.resolve("@nano-sandbox/ivm-bridge");
   const code = fs.readFileSync(bridgePath, "utf8");
 
   // The compiled code creates a global `bridge` variable with the module exports

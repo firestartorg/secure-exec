@@ -44,7 +44,7 @@ importers:
 
   packages/nano-sandbox:
     dependencies:
-      '@anthropic/ivm-bridge':
+      '@nano-sandbox/ivm-bridge':
         specifier: workspace:*
         version: link:../ivm-bridge
       '@wasmer/sdk':

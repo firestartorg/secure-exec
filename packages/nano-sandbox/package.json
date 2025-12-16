@@ -17,7 +17,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@anthropic/ivm-bridge": "workspace:*",
+    "@nano-sandbox/ivm-bridge": "workspace:*",
     "@wasmer/sdk": "^0.9.0",
     "esbuild": "^0.27.1",
     "isolated-vm": "^5.0.1",
