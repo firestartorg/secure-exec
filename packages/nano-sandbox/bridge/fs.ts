@@ -433,7 +433,6 @@ class WriteStream {
 
   constructor(filePath: string | Buffer, _options?: { encoding?: BufferEncoding; flags?: string; mode?: number }) {
     this.path = filePath;
-    console.log('[WriteStream] Created for path:', filePath);
   }
 
   // WriteStream-specific methods
@@ -452,8 +451,6 @@ class WriteStream {
 
   // Writable methods
   write(chunk: unknown, encodingOrCallback?: BufferEncoding | ((error: Error | null | undefined) => void), callback?: (error: Error | null | undefined) => void): boolean {
-    const chunkLen = chunk && typeof (chunk as { length?: number }).length === 'number' ? (chunk as { length: number }).length : 0;
-    console.log('[WriteStream] write() called, chunk length:', chunkLen);
     if (this.writableEnded || this.destroyed) {
       const err = new Error("write after end");
       if (typeof encodingOrCallback === "function") {
@@ -486,7 +483,6 @@ class WriteStream {
   }
 
   end(chunkOrCb?: unknown, encodingOrCallback?: BufferEncoding | (() => void), callback?: () => void): this {
-    console.log('[WriteStream] end() called, total chunks:', this._chunks.length, 'bytesWritten:', this.bytesWritten);
     if (this.writableEnded) return this;
 
     let cb: (() => void) | undefined;
@@ -929,6 +925,39 @@ const fs = {
     _fs.rmdir.applySyncPromise(undefined, [toPathString(path)]);
   },
 
+  rmSync(path: PathLike, options?: { force?: boolean; recursive?: boolean }): void {
+    const pathStr = toPathString(path);
+    const opts = options || {};
+    try {
+      const stats = fs.statSync(pathStr);
+      if (stats.isDirectory()) {
+        if (opts.recursive) {
+          // Recursively remove directory contents
+          const entries = fs.readdirSync(pathStr);
+          for (const entry of entries) {
+            const entryPath = pathStr.endsWith("/") ? pathStr + entry : pathStr + "/" + entry;
+            const entryStats = fs.statSync(entryPath);
+            if (entryStats.isDirectory()) {
+              fs.rmSync(entryPath, { recursive: true });
+            } else {
+              fs.unlinkSync(entryPath);
+            }
+          }
+          fs.rmdirSync(pathStr);
+        } else {
+          fs.rmdirSync(pathStr);
+        }
+      } else {
+        fs.unlinkSync(pathStr);
+      }
+    } catch (e) {
+      if (opts.force && (e as NodeJS.ErrnoException).code === "ENOENT") {
+        return; // Ignore ENOENT when force is true
+      }
+      throw e;
+    }
+  },
+
   existsSync(path: PathLike): boolean {
     const pathStr = toPathString(path);
     return _fs.exists.applySyncPromise(undefined, [pathStr]);
@@ -1156,6 +1185,26 @@ const fs = {
   },
 
   // Async methods - wrap sync methods in callbacks/promises
+  //
+  // IMPORTANT: Low-level fd operations (open, close, read, write) and operations commonly
+  // used by streaming libraries (stat, lstat, rename, unlink) must defer their callbacks
+  // using queueMicrotask(). This is critical for proper stream operation.
+  //
+  // Why: Node.js streams (like tar, minipass, fs-minipass) use callback chains where each
+  // callback triggers the next read/write operation. These streams also rely on events like
+  // 'drain' to know when to resume writing. If callbacks fire synchronously, the event loop
+  // never gets a chance to process these events, causing streams to stall after the first chunk.
+  //
+  // Example problem without queueMicrotask:
+  //   1. tar calls fs.read() with callback
+  //   2. Our sync implementation calls callback immediately
+  //   3. Callback writes to stream, stream buffer fills, returns false (needs drain)
+  //   4. Code sets up 'drain' listener and returns
+  //   5. But we never returned to event loop, so 'drain' never fires
+  //   6. Stream hangs forever
+  //
+  // With queueMicrotask, step 2 defers the callback, allowing the event loop to process
+  // pending events (including 'drain') before the next operation starts.
 
   readFile(
     path: string,
@@ -1271,14 +1320,79 @@ const fs = {
 
   rmdir(path: string, callback?: NodeCallback<void>): Promise<void> | void {
     if (callback) {
+      // Defer callback to next tick to allow event loop to process stream events
+      const cb = callback;
       try {
         fs.rmdirSync(path);
-        callback(null);
+        queueMicrotask(() => cb(null));
       } catch (e) {
-        callback(e as Error);
+        queueMicrotask(() => cb(e as Error));
       }
     } else {
       return Promise.resolve(fs.rmdirSync(path));
+    }
+  },
+
+  // rm - remove files or directories (with recursive support)
+  rm(
+    path: string,
+    options?: { force?: boolean; recursive?: boolean } | NodeCallback<void>,
+    callback?: NodeCallback<void>
+  ): Promise<void> | void {
+    let opts: { force?: boolean; recursive?: boolean } = {};
+    let cb: NodeCallback<void> | undefined;
+
+    if (typeof options === "function") {
+      cb = options;
+    } else if (options) {
+      opts = options;
+      cb = callback;
+    } else {
+      cb = callback;
+    }
+
+    const doRm = (): void => {
+      try {
+        const stats = fs.statSync(path);
+        if (stats.isDirectory()) {
+          if (opts.recursive) {
+            // Recursively remove directory contents
+            const entries = fs.readdirSync(path);
+            for (const entry of entries) {
+              const entryPath = path.endsWith("/") ? path + entry : path + "/" + entry;
+              const entryStats = fs.statSync(entryPath);
+              if (entryStats.isDirectory()) {
+                fs.rmSync(entryPath, { recursive: true });
+              } else {
+                fs.unlinkSync(entryPath);
+              }
+            }
+            fs.rmdirSync(path);
+          } else {
+            fs.rmdirSync(path);
+          }
+        } else {
+          fs.unlinkSync(path);
+        }
+      } catch (e) {
+        if (opts.force && (e as NodeJS.ErrnoException).code === "ENOENT") {
+          return; // Ignore ENOENT when force is true
+        }
+        throw e;
+      }
+    };
+
+    if (cb) {
+      // Defer callback to next tick to allow event loop to process stream events
+      try {
+        doRm();
+        queueMicrotask(() => cb(null));
+      } catch (e) {
+        queueMicrotask(() => cb(e as Error));
+      }
+    } else {
+      doRm();
+      return Promise.resolve();
     }
   },
 
@@ -1292,10 +1406,13 @@ const fs = {
 
   stat(path: string, callback?: NodeCallback<Stats>): Promise<Stats> | void {
     if (callback) {
+      // Defer callback to next tick to allow event loop to process stream events
+      const cb = callback;
       try {
-        callback(null, fs.statSync(path));
+        const stats = fs.statSync(path);
+        queueMicrotask(() => cb(null, stats));
       } catch (e) {
-        callback(e as Error);
+        queueMicrotask(() => cb(e as Error));
       }
     } else {
       return Promise.resolve(fs.statSync(path));
@@ -1304,10 +1421,13 @@ const fs = {
 
   lstat(path: string, callback?: NodeCallback<Stats>): Promise<Stats> | void {
     if (callback) {
+      // Defer callback to next tick to allow event loop to process stream events
+      const cb = callback;
       try {
-        callback(null, fs.lstatSync(path));
+        const stats = fs.lstatSync(path);
+        queueMicrotask(() => cb(null, stats));
       } catch (e) {
-        callback(e as Error);
+        queueMicrotask(() => cb(e as Error));
       }
     } else {
       return Promise.resolve(fs.lstatSync(path));
@@ -1316,11 +1436,13 @@ const fs = {
 
   unlink(path: string, callback?: NodeCallback<void>): Promise<void> | void {
     if (callback) {
+      // Defer callback to next tick to allow event loop to process stream events
+      const cb = callback;
       try {
         fs.unlinkSync(path);
-        callback(null);
+        queueMicrotask(() => cb(null));
       } catch (e) {
-        callback(e as Error);
+        queueMicrotask(() => cb(e as Error));
       }
     } else {
       return Promise.resolve(fs.unlinkSync(path));
@@ -1333,11 +1455,13 @@ const fs = {
     callback?: NodeCallback<void>
   ): Promise<void> | void {
     if (callback) {
+      // Defer callback to next tick to allow event loop to process stream events
+      const cb = callback;
       try {
         fs.renameSync(oldPath, newPath);
-        callback(null);
+        queueMicrotask(() => cb(null));
       } catch (e) {
-        callback(e as Error);
+        queueMicrotask(() => cb(e as Error));
       }
     } else {
       return Promise.resolve(fs.renameSync(oldPath, newPath));
@@ -1372,11 +1496,13 @@ const fs = {
       mode = undefined;
     }
     if (callback) {
+      // Defer callback to next tick to allow event loop to process stream events
+      const cb = callback;
       try {
         const fd = fs.openSync(path, flags, mode);
-        callback(null, fd);
+        queueMicrotask(() => cb(null, fd));
       } catch (e) {
-        callback(e as Error);
+        queueMicrotask(() => cb(e as Error));
       }
     } else {
       return Promise.resolve(fs.openSync(path, flags, mode));
@@ -1385,11 +1511,13 @@ const fs = {
 
   close(fd: number, callback?: NodeCallback<void>): Promise<void> | void {
     if (callback) {
+      // Defer callback to next tick to allow event loop to process stream events
+      const cb = callback;
       try {
         fs.closeSync(fd);
-        callback(null);
+        queueMicrotask(() => cb(null));
       } catch (e) {
-        callback(e as Error);
+        queueMicrotask(() => cb(e as Error));
       }
     } else {
       return Promise.resolve(fs.closeSync(fd));
@@ -1405,11 +1533,13 @@ const fs = {
     callback?: (err: Error | null, bytesRead?: number, buffer?: Uint8Array) => void
   ): Promise<number> | void {
     if (callback) {
+      // Defer callback to next tick to allow event loop to process stream events
+      const cb = callback;
       try {
         const bytesRead = fs.readSync(fd, buffer, offset, length, position);
-        callback(null, bytesRead, buffer);
+        queueMicrotask(() => cb(null, bytesRead, buffer));
       } catch (e) {
-        callback(e as Error);
+        queueMicrotask(() => cb(e as Error));
       }
     } else {
       return Promise.resolve(fs.readSync(fd, buffer, offset, length, position));
@@ -1438,6 +1568,8 @@ const fs = {
       position = undefined;
     }
     if (callback) {
+      // Defer callback to next tick to allow event loop to process stream events
+      const cb = callback;
       try {
         const bytesWritten = fs.writeSync(
           fd,
@@ -1446,9 +1578,9 @@ const fs = {
           length as number | undefined,
           position as number | null | undefined
         );
-        callback(null, bytesWritten);
+        queueMicrotask(() => cb(null, bytesWritten));
       } catch (e) {
-        callback(e as Error);
+        queueMicrotask(() => cb(e as Error));
       }
     } else {
       return Promise.resolve(
@@ -1553,6 +1685,9 @@ const fs = {
           path
         );
       }
+    },
+    async rm(path: string, options?: { force?: boolean; recursive?: boolean }) {
+      return fs.rmSync(path, options);
     },
   },
 

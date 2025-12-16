@@ -5,9 +5,8 @@ import { SystemBridge } from "../system-bridge/index";
 import * as fs from "fs";
 import * as path from "path";
 
-// Find npm installation path
-const NPM_BIN = "/opt/homebrew/opt/node@22/bin/npm";
-const NPM_PATH = fs.realpathSync(NPM_BIN).replace(/\/bin\/npm-cli\.js$/, "");
+// Find npm installation path - use standalone npm (no symlinks)
+const NPM_PATH = path.resolve(__dirname, "../../scratch/npm-standalone/node_modules/npm");
 
 /**
  * Recursively copy a directory from host filesystem to virtual filesystem

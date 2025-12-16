@@ -4,6 +4,11 @@
 // Each module provides polyfills for Node.js built-in modules that need to
 // communicate with the host environment via isolated-vm bridge functions.
 
+// IMPORTANT: Import polyfills FIRST before any other modules!
+// Some packages (like whatwg-url) use TextEncoder/TextDecoder at module load time.
+// This import installs them on globalThis before other imports execute.
+import "./polyfills.js";
+
 // File system module
 import fs from "./fs.js";
 
