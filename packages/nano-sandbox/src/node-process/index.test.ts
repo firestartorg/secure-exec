@@ -1019,4 +1019,185 @@ describe("NodeProcess", () => {
       });
     });
   });
+
+  describe("Phase 3: child_process via CommandExecutor", () => {
+    // Mock command executor for testing
+    const mockExecutor = {
+      async exec(command: string) {
+        if (command.includes("echo")) {
+          const match = command.match(/echo\s+["']?([^"']+)["']?/);
+          const text = match ? match[1] : "";
+          return { stdout: text + "\n", stderr: "", code: 0 };
+        }
+        if (command.includes("fail")) {
+          return { stdout: "", stderr: "command failed", code: 1 };
+        }
+        return { stdout: "executed: " + command, stderr: "", code: 0 };
+      },
+      async run(command: string, args: string[] = []) {
+        if (command === "echo") {
+          return { stdout: args.join(" ") + "\n", stderr: "", code: 0 };
+        }
+        if (command === "cat") {
+          return { stdout: "file content", stderr: "", code: 0 };
+        }
+        return { stdout: "", stderr: "command not found: " + command, code: 127 };
+      }
+    };
+
+    describe("require child_process", () => {
+      it("should load child_process module when CommandExecutor is provided", async () => {
+        proc = new NodeProcess({ commandExecutor: mockExecutor });
+        const result = await proc.run(`
+          const cp = require('child_process');
+          module.exports = {
+            hasExec: typeof cp.exec === 'function',
+            hasExecSync: typeof cp.execSync === 'function',
+            hasSpawn: typeof cp.spawn === 'function',
+            hasSpawnSync: typeof cp.spawnSync === 'function',
+            hasFork: typeof cp.fork === 'function'
+          };
+        `);
+        expect(result.exports).toEqual({
+          hasExec: true,
+          hasExecSync: true,
+          hasSpawn: true,
+          hasSpawnSync: true,
+          hasFork: true
+        });
+      });
+
+      it("should throw when child_process is required without CommandExecutor", async () => {
+        proc = new NodeProcess();
+        const result = await proc.exec(`
+          const cp = require('child_process');
+        `);
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain("CommandExecutor");
+      });
+    });
+
+    describe("exec", () => {
+      it("should execute shell commands", async () => {
+        proc = new NodeProcess({ commandExecutor: mockExecutor });
+        // Use sync method to test the callback pattern
+        const result = await proc.run(`
+          const { exec } = require('child_process');
+          const child = exec('echo hello');
+          // Child should have the expected properties
+          module.exports = {
+            hasCallback: typeof child.on === 'function',
+            spawnargs: child.spawnargs
+          };
+        `);
+        expect(result.exports).toEqual({
+          hasCallback: true,
+          spawnargs: ['bash', '-c', 'echo hello']
+        });
+      });
+
+      it("should return ChildProcess with event methods", async () => {
+        proc = new NodeProcess({ commandExecutor: mockExecutor });
+        const result = await proc.run(`
+          const { exec } = require('child_process');
+          const child = exec('echo test');
+          module.exports = {
+            hasOn: typeof child.on === 'function',
+            hasStdout: child.stdout !== undefined,
+            hasStderr: child.stderr !== undefined,
+            hasPid: typeof child.pid === 'number'
+          };
+        `);
+        expect(result.exports).toEqual({
+          hasOn: true,
+          hasStdout: true,
+          hasStderr: true,
+          hasPid: true
+        });
+      });
+    });
+
+    describe("spawn", () => {
+      it("should spawn commands with args", async () => {
+        proc = new NodeProcess({ commandExecutor: mockExecutor });
+        const result = await proc.run(`
+          const { spawn } = require('child_process');
+          const child = spawn('echo', ['hello', 'world']);
+          module.exports = {
+            hasOn: typeof child.on === 'function',
+            hasStdout: child.stdout !== undefined,
+            spawnargs: child.spawnargs
+          };
+        `);
+        expect(result.exports).toMatchObject({
+          hasOn: true,
+          hasStdout: true,
+          spawnargs: ['echo', 'hello', 'world']
+        });
+      });
+    });
+
+    describe("execSync", () => {
+      it("should execute shell commands synchronously", async () => {
+        proc = new NodeProcess({ commandExecutor: mockExecutor });
+        const result = await proc.run(`
+          const { execSync } = require('child_process');
+          const output = execSync('echo hello', { encoding: 'utf8' });
+          module.exports = output.trim();
+        `);
+        expect(result.exports).toBe("hello");
+      });
+
+      it("should throw on non-zero exit code", async () => {
+        proc = new NodeProcess({ commandExecutor: mockExecutor });
+        const result = await proc.exec(`
+          const { execSync } = require('child_process');
+          try {
+            execSync('fail');
+          } catch (err) {
+            console.log('caught:', err.status);
+          }
+        `);
+        expect(result.stdout).toContain("caught: 1");
+      });
+    });
+
+    describe("spawnSync", () => {
+      it("should spawn commands synchronously", async () => {
+        // Create a complete mock executor for this test
+        const spawnMockExecutor = {
+          async exec(command: string) {
+            return { stdout: "exec: " + command, stderr: "", code: 0 };
+          },
+          async run(command: string, args: string[] = []) {
+            if (command === "echo") {
+              return { stdout: args.join(" ") + "\n", stderr: "", code: 0 };
+            }
+            if (command === "cat") {
+              return { stdout: "file content", stderr: "", code: 0 };
+            }
+            return { stdout: "", stderr: "command not found: " + command, code: 127 };
+          }
+        };
+
+        proc = new NodeProcess({ commandExecutor: spawnMockExecutor });
+        const result = await proc.run(`
+          const { spawnSync } = require('child_process');
+          const result = spawnSync('echo', ['test']);
+          module.exports = {
+            status: result.status,
+            hasStdout: result.stdout !== undefined,
+            hasStderr: result.stderr !== undefined,
+            stdoutStr: result.stdout.toString ? result.stdout.toString() : result.stdout
+          };
+        `);
+        expect(result.exports).toMatchObject({
+          status: 0,
+          hasStdout: true,
+          hasStderr: true
+        });
+        expect(result.exports.stdoutStr).toContain("test");
+      });
+    });
+  });
 });

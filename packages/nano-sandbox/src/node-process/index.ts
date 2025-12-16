@@ -7,11 +7,19 @@ import {
   generateProcessPolyfill,
   type ProcessConfig,
 } from "./process-polyfill.js";
+import { generateChildProcessPolyfill } from "./child-process-polyfill.js";
+
+// Interface for command executor (like WasixInstance)
+export interface CommandExecutor {
+  exec(command: string): Promise<{ stdout: string; stderr: string; code: number }>;
+  run(command: string, args?: string[]): Promise<{ stdout: string; stderr: string; code: number }>;
+}
 
 export interface NodeProcessOptions {
   memoryLimit?: number; // MB, default 128
   systemBridge?: SystemBridge; // For accessing virtual filesystem
   processConfig?: ProcessConfig; // Process object configuration
+  commandExecutor?: CommandExecutor; // For child_process support (e.g., WasixInstance)
 }
 
 /**
@@ -91,6 +99,7 @@ export class NodeProcess {
   private memoryLimit: number;
   private systemBridge?: SystemBridge;
   private processConfig: ProcessConfig;
+  private commandExecutor?: CommandExecutor;
   // Cache for compiled ESM modules (per isolate)
   private esmModuleCache: Map<string, ivm.Module> = new Map();
 
@@ -99,6 +108,14 @@ export class NodeProcess {
     this.isolate = new ivm.Isolate({ memoryLimit: this.memoryLimit });
     this.systemBridge = options.systemBridge;
     this.processConfig = options.processConfig ?? {};
+    this.commandExecutor = options.commandExecutor;
+  }
+
+  /**
+   * Set the command executor for child_process support
+   */
+  setCommandExecutor(executor: CommandExecutor): void {
+    this.commandExecutor = executor;
   }
 
   /**
@@ -392,6 +409,11 @@ export class NodeProcess {
           return null;
         }
 
+        // child_process is handled specially
+        if (name === "child_process") {
+          return null;
+        }
+
         if (!hasPolyfill(name)) {
           return null;
         }
@@ -504,6 +526,36 @@ export class NodeProcess {
     // Store the fs module code for use in require
     await jail.set("_fsModuleCode", FS_MODULE_CODE);
 
+    // Set up child_process References if we have a CommandExecutor
+    if (this.commandExecutor) {
+      const executor = this.commandExecutor;
+
+      // Reference for exec (shell command) - returns JSON string for transfer
+      const childProcessExecRef = new ivm.Reference(
+        async (command: string): Promise<string> => {
+          const result = await executor.exec(command);
+          return JSON.stringify(result);
+        }
+      );
+
+      // Reference for spawn (command with args) - returns JSON string for transfer
+      // Args are passed as JSON string for transferability
+      const childProcessSpawnRef = new ivm.Reference(
+        async (command: string, argsJson: string): Promise<string> => {
+          const args = JSON.parse(argsJson) as string[];
+          const result = await executor.run(command, args);
+          return JSON.stringify(result);
+        }
+      );
+
+      await jail.set("_childProcessExecRaw", childProcessExecRef);
+      await jail.set("_childProcessSpawnRaw", childProcessSpawnRef);
+
+      // Initialize child_process polyfill
+      const childProcessPolyfillCode = generateChildProcessPolyfill();
+      await context.eval(childProcessPolyfillCode);
+    }
+
     // Set up the require system with dynamic CommonJS resolution
     await context.eval(`
       globalThis._moduleCache = {};
@@ -543,6 +595,16 @@ export class NodeProcess {
           const fsModule = eval(_fsModuleCode);
           _moduleCache['fs'] = fsModule;
           return fsModule;
+        }
+
+        // Special handling for child_process module
+        if (name === 'child_process') {
+          if (_moduleCache['child_process']) return _moduleCache['child_process'];
+          if (typeof _childProcessModule === 'undefined') {
+            throw new Error('child_process module requires CommandExecutor to be configured');
+          }
+          _moduleCache['child_process'] = _childProcessModule;
+          return _childProcessModule;
         }
 
         // Try to load polyfill first (for built-in modules like path, events, etc.)
