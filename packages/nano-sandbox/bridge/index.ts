@@ -1,0 +1,75 @@
+// Bridge module entry point
+// This file is compiled to a single JS bundle that gets injected into the isolate
+//
+// Each module provides polyfills for Node.js built-in modules that need to
+// communicate with the host environment via isolated-vm bridge functions.
+
+// File system module
+import fs from "./fs.js";
+
+// Operating system module
+import os from "./os.js";
+
+// Child process module
+import * as childProcess from "./child-process.js";
+
+// Network modules (fetch, dns, http, https)
+import * as network from "./network.js";
+
+// Process and global polyfills
+import process, {
+  setupGlobals,
+  setTimeout,
+  clearTimeout,
+  setInterval,
+  clearInterval,
+  setImmediate,
+  clearImmediate,
+  URL,
+  URLSearchParams,
+  TextEncoder,
+  TextDecoder,
+  Buffer,
+  cryptoPolyfill,
+  ProcessExitError,
+} from "./process.js";
+
+// Module system (createRequire, Module class)
+import moduleModule, { createRequire, Module, SourceMap } from "./module.js";
+
+// Export all modules
+export {
+  // Core modules
+  fs,
+  os,
+  childProcess,
+  process,
+  moduleModule as module,
+
+  // Network
+  network,
+
+  // Process globals
+  setupGlobals,
+  setTimeout,
+  clearTimeout,
+  setInterval,
+  clearInterval,
+  setImmediate,
+  clearImmediate,
+  URL,
+  URLSearchParams,
+  TextEncoder,
+  TextDecoder,
+  Buffer,
+  cryptoPolyfill,
+  ProcessExitError,
+
+  // Module utilities
+  createRequire,
+  Module,
+  SourceMap,
+};
+
+// Default export is fs for backward compatibility
+export default fs;

@@ -222,13 +222,13 @@ var bridge = (() => {
       var base64 = require_base64_js();
       var ieee754 = require_ieee754();
       var customInspectSymbol = typeof Symbol === "function" && typeof Symbol["for"] === "function" ? Symbol["for"]("nodejs.util.inspect.custom") : null;
-      exports.Buffer = Buffer3;
+      exports.Buffer = Buffer4;
       exports.SlowBuffer = SlowBuffer;
       exports.INSPECT_MAX_BYTES = 50;
       var K_MAX_LENGTH = 2147483647;
       exports.kMaxLength = K_MAX_LENGTH;
-      Buffer3.TYPED_ARRAY_SUPPORT = typedArraySupport();
-      if (!Buffer3.TYPED_ARRAY_SUPPORT && typeof console !== "undefined" && typeof console.error === "function") {
+      Buffer4.TYPED_ARRAY_SUPPORT = typedArraySupport();
+      if (!Buffer4.TYPED_ARRAY_SUPPORT && typeof console !== "undefined" && typeof console.error === "function") {
         console.error(
           "This browser lacks typed array (Uint8Array) support which is required by `buffer` v5.x. Use `buffer` v4.x if you require old browser support."
         );
@@ -246,17 +246,17 @@ var bridge = (() => {
           return false;
         }
       }
-      Object.defineProperty(Buffer3.prototype, "parent", {
+      Object.defineProperty(Buffer4.prototype, "parent", {
         enumerable: true,
         get: function() {
-          if (!Buffer3.isBuffer(this)) return void 0;
+          if (!Buffer4.isBuffer(this)) return void 0;
           return this.buffer;
         }
       });
-      Object.defineProperty(Buffer3.prototype, "offset", {
+      Object.defineProperty(Buffer4.prototype, "offset", {
         enumerable: true,
         get: function() {
-          if (!Buffer3.isBuffer(this)) return void 0;
+          if (!Buffer4.isBuffer(this)) return void 0;
           return this.byteOffset;
         }
       });
@@ -265,10 +265,10 @@ var bridge = (() => {
           throw new RangeError('The value "' + length + '" is invalid for option "size"');
         }
         const buf = new Uint8Array(length);
-        Object.setPrototypeOf(buf, Buffer3.prototype);
+        Object.setPrototypeOf(buf, Buffer4.prototype);
         return buf;
       }
-      function Buffer3(arg, encodingOrOffset, length) {
+      function Buffer4(arg, encodingOrOffset, length) {
         if (typeof arg === "number") {
           if (typeof encodingOrOffset === "string") {
             throw new TypeError(
@@ -279,7 +279,7 @@ var bridge = (() => {
         }
         return from(arg, encodingOrOffset, length);
       }
-      Buffer3.poolSize = 8192;
+      Buffer4.poolSize = 8192;
       function from(value, encodingOrOffset, length) {
         if (typeof value === "string") {
           return fromString(value, encodingOrOffset);
@@ -305,22 +305,22 @@ var bridge = (() => {
         }
         const valueOf = value.valueOf && value.valueOf();
         if (valueOf != null && valueOf !== value) {
-          return Buffer3.from(valueOf, encodingOrOffset, length);
+          return Buffer4.from(valueOf, encodingOrOffset, length);
         }
         const b = fromObject(value);
         if (b) return b;
         if (typeof Symbol !== "undefined" && Symbol.toPrimitive != null && typeof value[Symbol.toPrimitive] === "function") {
-          return Buffer3.from(value[Symbol.toPrimitive]("string"), encodingOrOffset, length);
+          return Buffer4.from(value[Symbol.toPrimitive]("string"), encodingOrOffset, length);
         }
         throw new TypeError(
           "The first argument must be one of type string, Buffer, ArrayBuffer, Array, or Array-like Object. Received type " + typeof value
         );
       }
-      Buffer3.from = function(value, encodingOrOffset, length) {
+      Buffer4.from = function(value, encodingOrOffset, length) {
         return from(value, encodingOrOffset, length);
       };
-      Object.setPrototypeOf(Buffer3.prototype, Uint8Array.prototype);
-      Object.setPrototypeOf(Buffer3, Uint8Array);
+      Object.setPrototypeOf(Buffer4.prototype, Uint8Array.prototype);
+      Object.setPrototypeOf(Buffer4, Uint8Array);
       function assertSize(size) {
         if (typeof size !== "number") {
           throw new TypeError('"size" argument must be of type number');
@@ -338,24 +338,24 @@ var bridge = (() => {
         }
         return createBuffer(size);
       }
-      Buffer3.alloc = function(size, fill, encoding) {
+      Buffer4.alloc = function(size, fill, encoding) {
         return alloc(size, fill, encoding);
       };
       function allocUnsafe(size) {
         assertSize(size);
         return createBuffer(size < 0 ? 0 : checked(size) | 0);
       }
-      Buffer3.allocUnsafe = function(size) {
+      Buffer4.allocUnsafe = function(size) {
         return allocUnsafe(size);
       };
-      Buffer3.allocUnsafeSlow = function(size) {
+      Buffer4.allocUnsafeSlow = function(size) {
         return allocUnsafe(size);
       };
       function fromString(string, encoding) {
         if (typeof encoding !== "string" || encoding === "") {
           encoding = "utf8";
         }
-        if (!Buffer3.isEncoding(encoding)) {
+        if (!Buffer4.isEncoding(encoding)) {
           throw new TypeError("Unknown encoding: " + encoding);
         }
         const length = byteLength(string, encoding) | 0;
@@ -396,11 +396,11 @@ var bridge = (() => {
         } else {
           buf = new Uint8Array(array, byteOffset, length);
         }
-        Object.setPrototypeOf(buf, Buffer3.prototype);
+        Object.setPrototypeOf(buf, Buffer4.prototype);
         return buf;
       }
       function fromObject(obj) {
-        if (Buffer3.isBuffer(obj)) {
+        if (Buffer4.isBuffer(obj)) {
           const len = checked(obj.length) | 0;
           const buf = createBuffer(len);
           if (buf.length === 0) {
@@ -429,15 +429,15 @@ var bridge = (() => {
         if (+length != length) {
           length = 0;
         }
-        return Buffer3.alloc(+length);
+        return Buffer4.alloc(+length);
       }
-      Buffer3.isBuffer = function isBuffer(b) {
-        return b != null && b._isBuffer === true && b !== Buffer3.prototype;
+      Buffer4.isBuffer = function isBuffer(b) {
+        return b != null && b._isBuffer === true && b !== Buffer4.prototype;
       };
-      Buffer3.compare = function compare(a, b) {
-        if (isInstance(a, Uint8Array)) a = Buffer3.from(a, a.offset, a.byteLength);
-        if (isInstance(b, Uint8Array)) b = Buffer3.from(b, b.offset, b.byteLength);
-        if (!Buffer3.isBuffer(a) || !Buffer3.isBuffer(b)) {
+      Buffer4.compare = function compare(a, b) {
+        if (isInstance(a, Uint8Array)) a = Buffer4.from(a, a.offset, a.byteLength);
+        if (isInstance(b, Uint8Array)) b = Buffer4.from(b, b.offset, b.byteLength);
+        if (!Buffer4.isBuffer(a) || !Buffer4.isBuffer(b)) {
           throw new TypeError(
             'The "buf1", "buf2" arguments must be one of type Buffer or Uint8Array'
           );
@@ -456,7 +456,7 @@ var bridge = (() => {
         if (y < x) return 1;
         return 0;
       };
-      Buffer3.isEncoding = function isEncoding(encoding) {
+      Buffer4.isEncoding = function isEncoding(encoding) {
         switch (String(encoding).toLowerCase()) {
           case "hex":
           case "utf8":
@@ -474,12 +474,12 @@ var bridge = (() => {
             return false;
         }
       };
-      Buffer3.concat = function concat(list, length) {
+      Buffer4.concat = function concat(list, length) {
         if (!Array.isArray(list)) {
           throw new TypeError('"list" argument must be an Array of Buffers');
         }
         if (list.length === 0) {
-          return Buffer3.alloc(0);
+          return Buffer4.alloc(0);
         }
         let i;
         if (length === void 0) {
@@ -488,13 +488,13 @@ var bridge = (() => {
             length += list[i].length;
           }
         }
-        const buffer = Buffer3.allocUnsafe(length);
+        const buffer = Buffer4.allocUnsafe(length);
         let pos = 0;
         for (i = 0; i < list.length; ++i) {
           let buf = list[i];
           if (isInstance(buf, Uint8Array)) {
             if (pos + buf.length > buffer.length) {
-              if (!Buffer3.isBuffer(buf)) buf = Buffer3.from(buf);
+              if (!Buffer4.isBuffer(buf)) buf = Buffer4.from(buf);
               buf.copy(buffer, pos);
             } else {
               Uint8Array.prototype.set.call(
@@ -503,7 +503,7 @@ var bridge = (() => {
                 pos
               );
             }
-          } else if (!Buffer3.isBuffer(buf)) {
+          } else if (!Buffer4.isBuffer(buf)) {
             throw new TypeError('"list" argument must be an Array of Buffers');
           } else {
             buf.copy(buffer, pos);
@@ -513,7 +513,7 @@ var bridge = (() => {
         return buffer;
       };
       function byteLength(string, encoding) {
-        if (Buffer3.isBuffer(string)) {
+        if (Buffer4.isBuffer(string)) {
           return string.length;
         }
         if (ArrayBuffer.isView(string) || isInstance(string, ArrayBuffer)) {
@@ -555,7 +555,7 @@ var bridge = (() => {
           }
         }
       }
-      Buffer3.byteLength = byteLength;
+      Buffer4.byteLength = byteLength;
       function slowToString(encoding, start, end) {
         let loweredCase = false;
         if (start === void 0 || start < 0) {
@@ -602,13 +602,13 @@ var bridge = (() => {
           }
         }
       }
-      Buffer3.prototype._isBuffer = true;
+      Buffer4.prototype._isBuffer = true;
       function swap(b, n, m) {
         const i = b[n];
         b[n] = b[m];
         b[m] = i;
       }
-      Buffer3.prototype.swap16 = function swap16() {
+      Buffer4.prototype.swap16 = function swap16() {
         const len = this.length;
         if (len % 2 !== 0) {
           throw new RangeError("Buffer size must be a multiple of 16-bits");
@@ -618,7 +618,7 @@ var bridge = (() => {
         }
         return this;
       };
-      Buffer3.prototype.swap32 = function swap32() {
+      Buffer4.prototype.swap32 = function swap32() {
         const len = this.length;
         if (len % 4 !== 0) {
           throw new RangeError("Buffer size must be a multiple of 32-bits");
@@ -629,7 +629,7 @@ var bridge = (() => {
         }
         return this;
       };
-      Buffer3.prototype.swap64 = function swap64() {
+      Buffer4.prototype.swap64 = function swap64() {
         const len = this.length;
         if (len % 8 !== 0) {
           throw new RangeError("Buffer size must be a multiple of 64-bits");
@@ -642,19 +642,19 @@ var bridge = (() => {
         }
         return this;
       };
-      Buffer3.prototype.toString = function toString() {
+      Buffer4.prototype.toString = function toString() {
         const length = this.length;
         if (length === 0) return "";
         if (arguments.length === 0) return utf8Slice(this, 0, length);
         return slowToString.apply(this, arguments);
       };
-      Buffer3.prototype.toLocaleString = Buffer3.prototype.toString;
-      Buffer3.prototype.equals = function equals(b) {
-        if (!Buffer3.isBuffer(b)) throw new TypeError("Argument must be a Buffer");
+      Buffer4.prototype.toLocaleString = Buffer4.prototype.toString;
+      Buffer4.prototype.equals = function equals(b) {
+        if (!Buffer4.isBuffer(b)) throw new TypeError("Argument must be a Buffer");
         if (this === b) return true;
-        return Buffer3.compare(this, b) === 0;
+        return Buffer4.compare(this, b) === 0;
       };
-      Buffer3.prototype.inspect = function inspect() {
+      Buffer4.prototype.inspect = function inspect() {
         let str = "";
         const max = exports.INSPECT_MAX_BYTES;
         str = this.toString("hex", 0, max).replace(/(.{2})/g, "$1 ").trim();
@@ -662,13 +662,13 @@ var bridge = (() => {
         return "<Buffer " + str + ">";
       };
       if (customInspectSymbol) {
-        Buffer3.prototype[customInspectSymbol] = Buffer3.prototype.inspect;
+        Buffer4.prototype[customInspectSymbol] = Buffer4.prototype.inspect;
       }
-      Buffer3.prototype.compare = function compare(target, start, end, thisStart, thisEnd) {
+      Buffer4.prototype.compare = function compare(target, start, end, thisStart, thisEnd) {
         if (isInstance(target, Uint8Array)) {
-          target = Buffer3.from(target, target.offset, target.byteLength);
+          target = Buffer4.from(target, target.offset, target.byteLength);
         }
-        if (!Buffer3.isBuffer(target)) {
+        if (!Buffer4.isBuffer(target)) {
           throw new TypeError(
             'The "target" argument must be one of type Buffer or Uint8Array. Received type ' + typeof target
           );
@@ -741,9 +741,9 @@ var bridge = (() => {
           else return -1;
         }
         if (typeof val === "string") {
-          val = Buffer3.from(val, encoding);
+          val = Buffer4.from(val, encoding);
         }
-        if (Buffer3.isBuffer(val)) {
+        if (Buffer4.isBuffer(val)) {
           if (val.length === 0) {
             return -1;
           }
@@ -811,13 +811,13 @@ var bridge = (() => {
         }
         return -1;
       }
-      Buffer3.prototype.includes = function includes(val, byteOffset, encoding) {
+      Buffer4.prototype.includes = function includes(val, byteOffset, encoding) {
         return this.indexOf(val, byteOffset, encoding) !== -1;
       };
-      Buffer3.prototype.indexOf = function indexOf(val, byteOffset, encoding) {
+      Buffer4.prototype.indexOf = function indexOf(val, byteOffset, encoding) {
         return bidirectionalIndexOf(this, val, byteOffset, encoding, true);
       };
-      Buffer3.prototype.lastIndexOf = function lastIndexOf(val, byteOffset, encoding) {
+      Buffer4.prototype.lastIndexOf = function lastIndexOf(val, byteOffset, encoding) {
         return bidirectionalIndexOf(this, val, byteOffset, encoding, false);
       };
       function hexWrite(buf, string, offset, length) {
@@ -855,7 +855,7 @@ var bridge = (() => {
       function ucs2Write(buf, string, offset, length) {
         return blitBuffer(utf16leToBytes(string, buf.length - offset), buf, offset, length);
       }
-      Buffer3.prototype.write = function write(string, offset, length, encoding) {
+      Buffer4.prototype.write = function write(string, offset, length, encoding) {
         if (offset === void 0) {
           encoding = "utf8";
           length = this.length;
@@ -910,7 +910,7 @@ var bridge = (() => {
           }
         }
       };
-      Buffer3.prototype.toJSON = function toJSON() {
+      Buffer4.prototype.toJSON = function toJSON() {
         return {
           type: "Buffer",
           data: Array.prototype.slice.call(this._arr || this, 0)
@@ -1033,7 +1033,7 @@ var bridge = (() => {
         }
         return res;
       }
-      Buffer3.prototype.slice = function slice(start, end) {
+      Buffer4.prototype.slice = function slice(start, end) {
         const len = this.length;
         start = ~~start;
         end = end === void 0 ? len : ~~end;
@@ -1051,14 +1051,14 @@ var bridge = (() => {
         }
         if (end < start) end = start;
         const newBuf = this.subarray(start, end);
-        Object.setPrototypeOf(newBuf, Buffer3.prototype);
+        Object.setPrototypeOf(newBuf, Buffer4.prototype);
         return newBuf;
       };
       function checkOffset(offset, ext, length) {
         if (offset % 1 !== 0 || offset < 0) throw new RangeError("offset is not uint");
         if (offset + ext > length) throw new RangeError("Trying to access beyond buffer length");
       }
-      Buffer3.prototype.readUintLE = Buffer3.prototype.readUIntLE = function readUIntLE(offset, byteLength2, noAssert) {
+      Buffer4.prototype.readUintLE = Buffer4.prototype.readUIntLE = function readUIntLE(offset, byteLength2, noAssert) {
         offset = offset >>> 0;
         byteLength2 = byteLength2 >>> 0;
         if (!noAssert) checkOffset(offset, byteLength2, this.length);
@@ -1070,7 +1070,7 @@ var bridge = (() => {
         }
         return val;
       };
-      Buffer3.prototype.readUintBE = Buffer3.prototype.readUIntBE = function readUIntBE(offset, byteLength2, noAssert) {
+      Buffer4.prototype.readUintBE = Buffer4.prototype.readUIntBE = function readUIntBE(offset, byteLength2, noAssert) {
         offset = offset >>> 0;
         byteLength2 = byteLength2 >>> 0;
         if (!noAssert) {
@@ -1083,32 +1083,32 @@ var bridge = (() => {
         }
         return val;
       };
-      Buffer3.prototype.readUint8 = Buffer3.prototype.readUInt8 = function readUInt8(offset, noAssert) {
+      Buffer4.prototype.readUint8 = Buffer4.prototype.readUInt8 = function readUInt8(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 1, this.length);
         return this[offset];
       };
-      Buffer3.prototype.readUint16LE = Buffer3.prototype.readUInt16LE = function readUInt16LE(offset, noAssert) {
+      Buffer4.prototype.readUint16LE = Buffer4.prototype.readUInt16LE = function readUInt16LE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 2, this.length);
         return this[offset] | this[offset + 1] << 8;
       };
-      Buffer3.prototype.readUint16BE = Buffer3.prototype.readUInt16BE = function readUInt16BE(offset, noAssert) {
+      Buffer4.prototype.readUint16BE = Buffer4.prototype.readUInt16BE = function readUInt16BE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 2, this.length);
         return this[offset] << 8 | this[offset + 1];
       };
-      Buffer3.prototype.readUint32LE = Buffer3.prototype.readUInt32LE = function readUInt32LE(offset, noAssert) {
+      Buffer4.prototype.readUint32LE = Buffer4.prototype.readUInt32LE = function readUInt32LE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 4, this.length);
         return (this[offset] | this[offset + 1] << 8 | this[offset + 2] << 16) + this[offset + 3] * 16777216;
       };
-      Buffer3.prototype.readUint32BE = Buffer3.prototype.readUInt32BE = function readUInt32BE(offset, noAssert) {
+      Buffer4.prototype.readUint32BE = Buffer4.prototype.readUInt32BE = function readUInt32BE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 4, this.length);
         return this[offset] * 16777216 + (this[offset + 1] << 16 | this[offset + 2] << 8 | this[offset + 3]);
       };
-      Buffer3.prototype.readBigUInt64LE = defineBigIntMethod(function readBigUInt64LE(offset) {
+      Buffer4.prototype.readBigUInt64LE = defineBigIntMethod(function readBigUInt64LE(offset) {
         offset = offset >>> 0;
         validateNumber(offset, "offset");
         const first = this[offset];
@@ -1120,7 +1120,7 @@ var bridge = (() => {
         const hi = this[++offset] + this[++offset] * 2 ** 8 + this[++offset] * 2 ** 16 + last * 2 ** 24;
         return BigInt(lo) + (BigInt(hi) << BigInt(32));
       });
-      Buffer3.prototype.readBigUInt64BE = defineBigIntMethod(function readBigUInt64BE(offset) {
+      Buffer4.prototype.readBigUInt64BE = defineBigIntMethod(function readBigUInt64BE(offset) {
         offset = offset >>> 0;
         validateNumber(offset, "offset");
         const first = this[offset];
@@ -1132,7 +1132,7 @@ var bridge = (() => {
         const lo = this[++offset] * 2 ** 24 + this[++offset] * 2 ** 16 + this[++offset] * 2 ** 8 + last;
         return (BigInt(hi) << BigInt(32)) + BigInt(lo);
       });
-      Buffer3.prototype.readIntLE = function readIntLE(offset, byteLength2, noAssert) {
+      Buffer4.prototype.readIntLE = function readIntLE(offset, byteLength2, noAssert) {
         offset = offset >>> 0;
         byteLength2 = byteLength2 >>> 0;
         if (!noAssert) checkOffset(offset, byteLength2, this.length);
@@ -1146,7 +1146,7 @@ var bridge = (() => {
         if (val >= mul) val -= Math.pow(2, 8 * byteLength2);
         return val;
       };
-      Buffer3.prototype.readIntBE = function readIntBE(offset, byteLength2, noAssert) {
+      Buffer4.prototype.readIntBE = function readIntBE(offset, byteLength2, noAssert) {
         offset = offset >>> 0;
         byteLength2 = byteLength2 >>> 0;
         if (!noAssert) checkOffset(offset, byteLength2, this.length);
@@ -1160,35 +1160,35 @@ var bridge = (() => {
         if (val >= mul) val -= Math.pow(2, 8 * byteLength2);
         return val;
       };
-      Buffer3.prototype.readInt8 = function readInt8(offset, noAssert) {
+      Buffer4.prototype.readInt8 = function readInt8(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 1, this.length);
         if (!(this[offset] & 128)) return this[offset];
         return (255 - this[offset] + 1) * -1;
       };
-      Buffer3.prototype.readInt16LE = function readInt16LE(offset, noAssert) {
+      Buffer4.prototype.readInt16LE = function readInt16LE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 2, this.length);
         const val = this[offset] | this[offset + 1] << 8;
         return val & 32768 ? val | 4294901760 : val;
       };
-      Buffer3.prototype.readInt16BE = function readInt16BE(offset, noAssert) {
+      Buffer4.prototype.readInt16BE = function readInt16BE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 2, this.length);
         const val = this[offset + 1] | this[offset] << 8;
         return val & 32768 ? val | 4294901760 : val;
       };
-      Buffer3.prototype.readInt32LE = function readInt32LE(offset, noAssert) {
+      Buffer4.prototype.readInt32LE = function readInt32LE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 4, this.length);
         return this[offset] | this[offset + 1] << 8 | this[offset + 2] << 16 | this[offset + 3] << 24;
       };
-      Buffer3.prototype.readInt32BE = function readInt32BE(offset, noAssert) {
+      Buffer4.prototype.readInt32BE = function readInt32BE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 4, this.length);
         return this[offset] << 24 | this[offset + 1] << 16 | this[offset + 2] << 8 | this[offset + 3];
       };
-      Buffer3.prototype.readBigInt64LE = defineBigIntMethod(function readBigInt64LE(offset) {
+      Buffer4.prototype.readBigInt64LE = defineBigIntMethod(function readBigInt64LE(offset) {
         offset = offset >>> 0;
         validateNumber(offset, "offset");
         const first = this[offset];
@@ -1199,7 +1199,7 @@ var bridge = (() => {
         const val = this[offset + 4] + this[offset + 5] * 2 ** 8 + this[offset + 6] * 2 ** 16 + (last << 24);
         return (BigInt(val) << BigInt(32)) + BigInt(first + this[++offset] * 2 ** 8 + this[++offset] * 2 ** 16 + this[++offset] * 2 ** 24);
       });
-      Buffer3.prototype.readBigInt64BE = defineBigIntMethod(function readBigInt64BE(offset) {
+      Buffer4.prototype.readBigInt64BE = defineBigIntMethod(function readBigInt64BE(offset) {
         offset = offset >>> 0;
         validateNumber(offset, "offset");
         const first = this[offset];
@@ -1211,32 +1211,32 @@ var bridge = (() => {
         this[++offset] * 2 ** 16 + this[++offset] * 2 ** 8 + this[++offset];
         return (BigInt(val) << BigInt(32)) + BigInt(this[++offset] * 2 ** 24 + this[++offset] * 2 ** 16 + this[++offset] * 2 ** 8 + last);
       });
-      Buffer3.prototype.readFloatLE = function readFloatLE(offset, noAssert) {
+      Buffer4.prototype.readFloatLE = function readFloatLE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 4, this.length);
         return ieee754.read(this, offset, true, 23, 4);
       };
-      Buffer3.prototype.readFloatBE = function readFloatBE(offset, noAssert) {
+      Buffer4.prototype.readFloatBE = function readFloatBE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 4, this.length);
         return ieee754.read(this, offset, false, 23, 4);
       };
-      Buffer3.prototype.readDoubleLE = function readDoubleLE(offset, noAssert) {
+      Buffer4.prototype.readDoubleLE = function readDoubleLE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 8, this.length);
         return ieee754.read(this, offset, true, 52, 8);
       };
-      Buffer3.prototype.readDoubleBE = function readDoubleBE(offset, noAssert) {
+      Buffer4.prototype.readDoubleBE = function readDoubleBE(offset, noAssert) {
         offset = offset >>> 0;
         if (!noAssert) checkOffset(offset, 8, this.length);
         return ieee754.read(this, offset, false, 52, 8);
       };
       function checkInt(buf, value, offset, ext, max, min) {
-        if (!Buffer3.isBuffer(buf)) throw new TypeError('"buffer" argument must be a Buffer instance');
+        if (!Buffer4.isBuffer(buf)) throw new TypeError('"buffer" argument must be a Buffer instance');
         if (value > max || value < min) throw new RangeError('"value" argument is out of bounds');
         if (offset + ext > buf.length) throw new RangeError("Index out of range");
       }
-      Buffer3.prototype.writeUintLE = Buffer3.prototype.writeUIntLE = function writeUIntLE(value, offset, byteLength2, noAssert) {
+      Buffer4.prototype.writeUintLE = Buffer4.prototype.writeUIntLE = function writeUIntLE(value, offset, byteLength2, noAssert) {
         value = +value;
         offset = offset >>> 0;
         byteLength2 = byteLength2 >>> 0;
@@ -1252,7 +1252,7 @@ var bridge = (() => {
         }
         return offset + byteLength2;
       };
-      Buffer3.prototype.writeUintBE = Buffer3.prototype.writeUIntBE = function writeUIntBE(value, offset, byteLength2, noAssert) {
+      Buffer4.prototype.writeUintBE = Buffer4.prototype.writeUIntBE = function writeUIntBE(value, offset, byteLength2, noAssert) {
         value = +value;
         offset = offset >>> 0;
         byteLength2 = byteLength2 >>> 0;
@@ -1268,14 +1268,14 @@ var bridge = (() => {
         }
         return offset + byteLength2;
       };
-      Buffer3.prototype.writeUint8 = Buffer3.prototype.writeUInt8 = function writeUInt8(value, offset, noAssert) {
+      Buffer4.prototype.writeUint8 = Buffer4.prototype.writeUInt8 = function writeUInt8(value, offset, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) checkInt(this, value, offset, 1, 255, 0);
         this[offset] = value & 255;
         return offset + 1;
       };
-      Buffer3.prototype.writeUint16LE = Buffer3.prototype.writeUInt16LE = function writeUInt16LE(value, offset, noAssert) {
+      Buffer4.prototype.writeUint16LE = Buffer4.prototype.writeUInt16LE = function writeUInt16LE(value, offset, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) checkInt(this, value, offset, 2, 65535, 0);
@@ -1283,7 +1283,7 @@ var bridge = (() => {
         this[offset + 1] = value >>> 8;
         return offset + 2;
       };
-      Buffer3.prototype.writeUint16BE = Buffer3.prototype.writeUInt16BE = function writeUInt16BE(value, offset, noAssert) {
+      Buffer4.prototype.writeUint16BE = Buffer4.prototype.writeUInt16BE = function writeUInt16BE(value, offset, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) checkInt(this, value, offset, 2, 65535, 0);
@@ -1291,7 +1291,7 @@ var bridge = (() => {
         this[offset + 1] = value & 255;
         return offset + 2;
       };
-      Buffer3.prototype.writeUint32LE = Buffer3.prototype.writeUInt32LE = function writeUInt32LE(value, offset, noAssert) {
+      Buffer4.prototype.writeUint32LE = Buffer4.prototype.writeUInt32LE = function writeUInt32LE(value, offset, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) checkInt(this, value, offset, 4, 4294967295, 0);
@@ -1301,7 +1301,7 @@ var bridge = (() => {
         this[offset] = value & 255;
         return offset + 4;
       };
-      Buffer3.prototype.writeUint32BE = Buffer3.prototype.writeUInt32BE = function writeUInt32BE(value, offset, noAssert) {
+      Buffer4.prototype.writeUint32BE = Buffer4.prototype.writeUInt32BE = function writeUInt32BE(value, offset, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) checkInt(this, value, offset, 4, 4294967295, 0);
@@ -1351,13 +1351,13 @@ var bridge = (() => {
         buf[offset] = hi;
         return offset + 8;
       }
-      Buffer3.prototype.writeBigUInt64LE = defineBigIntMethod(function writeBigUInt64LE(value, offset = 0) {
+      Buffer4.prototype.writeBigUInt64LE = defineBigIntMethod(function writeBigUInt64LE(value, offset = 0) {
         return wrtBigUInt64LE(this, value, offset, BigInt(0), BigInt("0xffffffffffffffff"));
       });
-      Buffer3.prototype.writeBigUInt64BE = defineBigIntMethod(function writeBigUInt64BE(value, offset = 0) {
+      Buffer4.prototype.writeBigUInt64BE = defineBigIntMethod(function writeBigUInt64BE(value, offset = 0) {
         return wrtBigUInt64BE(this, value, offset, BigInt(0), BigInt("0xffffffffffffffff"));
       });
-      Buffer3.prototype.writeIntLE = function writeIntLE(value, offset, byteLength2, noAssert) {
+      Buffer4.prototype.writeIntLE = function writeIntLE(value, offset, byteLength2, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) {
@@ -1376,7 +1376,7 @@ var bridge = (() => {
         }
         return offset + byteLength2;
       };
-      Buffer3.prototype.writeIntBE = function writeIntBE(value, offset, byteLength2, noAssert) {
+      Buffer4.prototype.writeIntBE = function writeIntBE(value, offset, byteLength2, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) {
@@ -1395,7 +1395,7 @@ var bridge = (() => {
         }
         return offset + byteLength2;
       };
-      Buffer3.prototype.writeInt8 = function writeInt8(value, offset, noAssert) {
+      Buffer4.prototype.writeInt8 = function writeInt8(value, offset, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) checkInt(this, value, offset, 1, 127, -128);
@@ -1403,7 +1403,7 @@ var bridge = (() => {
         this[offset] = value & 255;
         return offset + 1;
       };
-      Buffer3.prototype.writeInt16LE = function writeInt16LE(value, offset, noAssert) {
+      Buffer4.prototype.writeInt16LE = function writeInt16LE(value, offset, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) checkInt(this, value, offset, 2, 32767, -32768);
@@ -1411,7 +1411,7 @@ var bridge = (() => {
         this[offset + 1] = value >>> 8;
         return offset + 2;
       };
-      Buffer3.prototype.writeInt16BE = function writeInt16BE(value, offset, noAssert) {
+      Buffer4.prototype.writeInt16BE = function writeInt16BE(value, offset, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) checkInt(this, value, offset, 2, 32767, -32768);
@@ -1419,7 +1419,7 @@ var bridge = (() => {
         this[offset + 1] = value & 255;
         return offset + 2;
       };
-      Buffer3.prototype.writeInt32LE = function writeInt32LE(value, offset, noAssert) {
+      Buffer4.prototype.writeInt32LE = function writeInt32LE(value, offset, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) checkInt(this, value, offset, 4, 2147483647, -2147483648);
@@ -1429,7 +1429,7 @@ var bridge = (() => {
         this[offset + 3] = value >>> 24;
         return offset + 4;
       };
-      Buffer3.prototype.writeInt32BE = function writeInt32BE(value, offset, noAssert) {
+      Buffer4.prototype.writeInt32BE = function writeInt32BE(value, offset, noAssert) {
         value = +value;
         offset = offset >>> 0;
         if (!noAssert) checkInt(this, value, offset, 4, 2147483647, -2147483648);
@@ -1440,10 +1440,10 @@ var bridge = (() => {
         this[offset + 3] = value & 255;
         return offset + 4;
       };
-      Buffer3.prototype.writeBigInt64LE = defineBigIntMethod(function writeBigInt64LE(value, offset = 0) {
+      Buffer4.prototype.writeBigInt64LE = defineBigIntMethod(function writeBigInt64LE(value, offset = 0) {
         return wrtBigUInt64LE(this, value, offset, -BigInt("0x8000000000000000"), BigInt("0x7fffffffffffffff"));
       });
-      Buffer3.prototype.writeBigInt64BE = defineBigIntMethod(function writeBigInt64BE(value, offset = 0) {
+      Buffer4.prototype.writeBigInt64BE = defineBigIntMethod(function writeBigInt64BE(value, offset = 0) {
         return wrtBigUInt64BE(this, value, offset, -BigInt("0x8000000000000000"), BigInt("0x7fffffffffffffff"));
       });
       function checkIEEE754(buf, value, offset, ext, max, min) {
@@ -1459,10 +1459,10 @@ var bridge = (() => {
         ieee754.write(buf, value, offset, littleEndian, 23, 4);
         return offset + 4;
       }
-      Buffer3.prototype.writeFloatLE = function writeFloatLE(value, offset, noAssert) {
+      Buffer4.prototype.writeFloatLE = function writeFloatLE(value, offset, noAssert) {
         return writeFloat(this, value, offset, true, noAssert);
       };
-      Buffer3.prototype.writeFloatBE = function writeFloatBE(value, offset, noAssert) {
+      Buffer4.prototype.writeFloatBE = function writeFloatBE(value, offset, noAssert) {
         return writeFloat(this, value, offset, false, noAssert);
       };
       function writeDouble(buf, value, offset, littleEndian, noAssert) {
@@ -1474,14 +1474,14 @@ var bridge = (() => {
         ieee754.write(buf, value, offset, littleEndian, 52, 8);
         return offset + 8;
       }
-      Buffer3.prototype.writeDoubleLE = function writeDoubleLE(value, offset, noAssert) {
+      Buffer4.prototype.writeDoubleLE = function writeDoubleLE(value, offset, noAssert) {
         return writeDouble(this, value, offset, true, noAssert);
       };
-      Buffer3.prototype.writeDoubleBE = function writeDoubleBE(value, offset, noAssert) {
+      Buffer4.prototype.writeDoubleBE = function writeDoubleBE(value, offset, noAssert) {
         return writeDouble(this, value, offset, false, noAssert);
       };
-      Buffer3.prototype.copy = function copy(target, targetStart, start, end) {
-        if (!Buffer3.isBuffer(target)) throw new TypeError("argument should be a Buffer");
+      Buffer4.prototype.copy = function copy(target, targetStart, start, end) {
+        if (!Buffer4.isBuffer(target)) throw new TypeError("argument should be a Buffer");
         if (!start) start = 0;
         if (!end && end !== 0) end = this.length;
         if (targetStart >= target.length) targetStart = target.length;
@@ -1510,7 +1510,7 @@ var bridge = (() => {
         }
         return len;
       };
-      Buffer3.prototype.fill = function fill(val, start, end, encoding) {
+      Buffer4.prototype.fill = function fill(val, start, end, encoding) {
         if (typeof val === "string") {
           if (typeof start === "string") {
             encoding = start;
@@ -1523,7 +1523,7 @@ var bridge = (() => {
           if (encoding !== void 0 && typeof encoding !== "string") {
             throw new TypeError("encoding must be a string");
           }
-          if (typeof encoding === "string" && !Buffer3.isEncoding(encoding)) {
+          if (typeof encoding === "string" && !Buffer4.isEncoding(encoding)) {
             throw new TypeError("Unknown encoding: " + encoding);
           }
           if (val.length === 1) {
@@ -1552,7 +1552,7 @@ var bridge = (() => {
             this[i] = val;
           }
         } else {
-          const bytes = Buffer3.isBuffer(val) ? val : Buffer3.from(val, encoding);
+          const bytes = Buffer4.isBuffer(val) ? val : Buffer4.from(val, encoding);
           const len = bytes.length;
           if (len === 0) {
             throw new TypeError('The value "' + val + '" is invalid for argument "value"');
@@ -1807,14 +1807,36 @@ var bridge = (() => {
     }
   });
 
-  // src/bridge/index.ts
+  // bridge/index.ts
   var index_exports = {};
   __export(index_exports, {
+    Buffer: () => Buffer3,
+    Module: () => Module,
+    ProcessExitError: () => ProcessExitError,
+    SourceMap: () => SourceMap,
+    TextDecoder: () => TextDecoder2,
+    TextEncoder: () => TextEncoder,
+    URL: () => URL2,
+    URLSearchParams: () => URLSearchParams,
+    childProcess: () => child_process_exports,
+    clearImmediate: () => clearImmediate,
+    clearInterval: () => clearInterval,
+    clearTimeout: () => clearTimeout,
+    createRequire: () => createRequire,
+    cryptoPolyfill: () => cryptoPolyfill,
     default: () => index_default,
-    fs: () => fs_default
+    fs: () => fs_default,
+    module: () => module_default,
+    network: () => network_exports,
+    os: () => os_default,
+    process: () => process_default,
+    setImmediate: () => setImmediate,
+    setInterval: () => setInterval,
+    setTimeout: () => setTimeout2,
+    setupGlobals: () => setupGlobals
   });
 
-  // src/bridge/fs.ts
+  // bridge/fs.ts
   var import_buffer = __toESM(require_buffer(), 1);
   var fdTable = /* @__PURE__ */ new Map();
   var nextFd = 3;
@@ -1911,6 +1933,240 @@ var bridge = (() => {
     }
     isSocket() {
       return false;
+    }
+  };
+  var WriteStream = class {
+    // WriteStream-specific properties
+    bytesWritten = 0;
+    path;
+    pending = false;
+    // Writable stream properties
+    writable = true;
+    writableAborted = false;
+    writableEnded = false;
+    writableFinished = false;
+    writableHighWaterMark = 16384;
+    writableLength = 0;
+    writableObjectMode = false;
+    writableCorked = 0;
+    destroyed = false;
+    closed = false;
+    errored = null;
+    writableNeedDrain = false;
+    // Internal state
+    _chunks = [];
+    _listeners = /* @__PURE__ */ new Map();
+    constructor(filePath, _options) {
+      this.path = filePath;
+      console.log("[WriteStream] Created for path:", filePath);
+    }
+    // WriteStream-specific methods
+    close(callback) {
+      if (this.closed) {
+        if (callback) Promise.resolve().then(() => callback(null));
+        return;
+      }
+      this.closed = true;
+      this.writable = false;
+      Promise.resolve().then(() => {
+        this.emit("close");
+        if (callback) callback(null);
+      });
+    }
+    // Writable methods
+    write(chunk, encodingOrCallback, callback) {
+      const chunkLen = chunk && typeof chunk.length === "number" ? chunk.length : 0;
+      console.log("[WriteStream] write() called, chunk length:", chunkLen);
+      if (this.writableEnded || this.destroyed) {
+        const err = new Error("write after end");
+        if (typeof encodingOrCallback === "function") {
+          Promise.resolve().then(() => encodingOrCallback(err));
+        } else if (callback) {
+          Promise.resolve().then(() => callback(err));
+        }
+        return false;
+      }
+      let data;
+      if (typeof chunk === "string") {
+        data = import_buffer.Buffer.from(chunk, typeof encodingOrCallback === "string" ? encodingOrCallback : "utf8");
+      } else if (import_buffer.Buffer.isBuffer(chunk)) {
+        data = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+      } else if (chunk instanceof Uint8Array) {
+        data = chunk;
+      } else {
+        data = import_buffer.Buffer.from(String(chunk));
+      }
+      this._chunks.push(data);
+      this.bytesWritten += data.length;
+      this.writableLength += data.length;
+      const cb = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+      if (cb) Promise.resolve().then(() => cb(null));
+      return true;
+    }
+    end(chunkOrCb, encodingOrCallback, callback) {
+      console.log("[WriteStream] end() called, total chunks:", this._chunks.length, "bytesWritten:", this.bytesWritten);
+      if (this.writableEnded) return this;
+      let cb;
+      if (typeof chunkOrCb === "function") {
+        cb = chunkOrCb;
+      } else if (typeof encodingOrCallback === "function") {
+        cb = encodingOrCallback;
+        if (chunkOrCb !== void 0 && chunkOrCb !== null) {
+          this.write(chunkOrCb);
+        }
+      } else {
+        cb = callback;
+        if (chunkOrCb !== void 0 && chunkOrCb !== null) {
+          this.write(chunkOrCb, encodingOrCallback);
+        }
+      }
+      this.writableEnded = true;
+      const totalLength = this._chunks.reduce((sum, c) => sum + c.length, 0);
+      const result = new Uint8Array(totalLength);
+      let offset = 0;
+      for (const c of this._chunks) {
+        result.set(c, offset);
+        offset += c.length;
+      }
+      const pathStr = typeof this.path === "string" ? this.path : this.path.toString();
+      fs.writeFileSync(pathStr, result);
+      this.writable = false;
+      this.writableFinished = true;
+      this.writableLength = 0;
+      Promise.resolve().then(() => {
+        this.emit("finish");
+        this.emit("close");
+        this.closed = true;
+        if (cb) cb();
+      });
+      return this;
+    }
+    setDefaultEncoding(_encoding) {
+      return this;
+    }
+    cork() {
+      this.writableCorked++;
+    }
+    uncork() {
+      if (this.writableCorked > 0) this.writableCorked--;
+    }
+    destroy(error) {
+      if (this.destroyed) return this;
+      this.destroyed = true;
+      this.writable = false;
+      if (error) {
+        this.errored = error;
+        Promise.resolve().then(() => {
+          this.emit("error", error);
+          this.emit("close");
+          this.closed = true;
+        });
+      } else {
+        Promise.resolve().then(() => {
+          this.emit("close");
+          this.closed = true;
+        });
+      }
+      return this;
+    }
+    // Internal methods (required by Writable interface but not typically called directly)
+    _write(_chunk, _encoding, callback) {
+      callback();
+    }
+    _destroy(_error2, callback) {
+      callback();
+    }
+    _final(callback) {
+      callback();
+    }
+    // EventEmitter methods
+    addListener(event, listener) {
+      return this.on(event, listener);
+    }
+    on(event, listener) {
+      const listeners = this._listeners.get(event) || [];
+      listeners.push(listener);
+      this._listeners.set(event, listeners);
+      return this;
+    }
+    once(event, listener) {
+      const wrapper = (...args) => {
+        this.removeListener(event, wrapper);
+        listener(...args);
+      };
+      return this.on(event, wrapper);
+    }
+    prependListener(event, listener) {
+      const listeners = this._listeners.get(event) || [];
+      listeners.unshift(listener);
+      this._listeners.set(event, listeners);
+      return this;
+    }
+    prependOnceListener(event, listener) {
+      const wrapper = (...args) => {
+        this.removeListener(event, wrapper);
+        listener(...args);
+      };
+      return this.prependListener(event, wrapper);
+    }
+    removeListener(event, listener) {
+      const listeners = this._listeners.get(event);
+      if (listeners) {
+        const idx = listeners.indexOf(listener);
+        if (idx !== -1) listeners.splice(idx, 1);
+      }
+      return this;
+    }
+    off(event, listener) {
+      return this.removeListener(event, listener);
+    }
+    removeAllListeners(event) {
+      if (event !== void 0) {
+        this._listeners.delete(event);
+      } else {
+        this._listeners.clear();
+      }
+      return this;
+    }
+    emit(event, ...args) {
+      const listeners = this._listeners.get(event);
+      if (listeners && listeners.length > 0) {
+        listeners.slice().forEach((l) => l(...args));
+        return true;
+      }
+      return false;
+    }
+    listeners(event) {
+      return [...this._listeners.get(event) || []];
+    }
+    rawListeners(event) {
+      return this.listeners(event);
+    }
+    listenerCount(event) {
+      return (this._listeners.get(event) || []).length;
+    }
+    eventNames() {
+      return [...this._listeners.keys()];
+    }
+    getMaxListeners() {
+      return 10;
+    }
+    setMaxListeners(_n) {
+      return this;
+    }
+    // Pipe methods (minimal implementation)
+    pipe(destination, _options) {
+      return destination;
+    }
+    unpipe(_destination) {
+      return this;
+    }
+    // Additional required methods
+    compose(_stream, _options) {
+      throw new Error("compose not implemented in sandbox");
+    }
+    [Symbol.asyncDispose]() {
+      return Promise.resolve();
     }
   };
   function parseFlags(flags) {
@@ -2087,7 +2343,8 @@ var bridge = (() => {
       _fs.rmdir.applySyncPromise(void 0, [toPathString(path)]);
     },
     existsSync(path) {
-      return _fs.exists.applySyncPromise(void 0, [toPathString(path)]);
+      const pathStr = toPathString(path);
+      return _fs.exists.applySyncPromise(void 0, [pathStr]);
     },
     statSync(path, _options) {
       const pathStr = toPathString(path);
@@ -2411,7 +2668,8 @@ var bridge = (() => {
       }
       if (callback) {
         try {
-          callback(null, fs.openSync(path, flags, mode));
+          const fd = fs.openSync(path, flags, mode);
+          callback(null, fd);
         } catch (e) {
           callback(e);
         }
@@ -2481,6 +2739,32 @@ var bridge = (() => {
           )
         );
       }
+    },
+    // writev - write multiple buffers to a file descriptor
+    writev(fd, buffers, position, callback) {
+      if (typeof position === "function") {
+        callback = position;
+        position = null;
+      }
+      if (callback) {
+        try {
+          const bytesWritten = fs.writevSync(fd, buffers, position);
+          callback(null, bytesWritten, buffers);
+        } catch (e) {
+          callback(e);
+        }
+      }
+    },
+    writevSync(fd, buffers, position) {
+      let totalBytesWritten = 0;
+      for (const buffer of buffers) {
+        const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+        totalBytesWritten += fs.writeSync(fd, bytes, 0, bytes.length, position);
+        if (position !== null && position !== void 0) {
+          position += bytes.length;
+        }
+      }
+      return totalBytesWritten;
     },
     fstat(fd, callback) {
       if (callback) {
@@ -2614,60 +2898,10 @@ var bridge = (() => {
         }
       };
     },
-    createWriteStream(path, _options) {
-      const chunks = [];
-      const listeners = {};
-      const stream = {
-        writable: true,
-        write(chunk) {
-          if (typeof chunk === "string") {
-            chunks.push(import_buffer.Buffer.from(chunk, "utf8"));
-          } else {
-            chunks.push(new Uint8Array(chunk));
-          }
-          return true;
-        },
-        end(chunk) {
-          if (chunk) stream.write(chunk);
-          const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-          const result = new Uint8Array(totalLength);
-          let offset = 0;
-          for (const c of chunks) {
-            result.set(c, offset);
-            offset += c.length;
-          }
-          fs.writeFileSync(path, result);
-          stream.writable = false;
-          Promise.resolve().then(() => {
-            stream.emit("finish");
-            stream.emit("close");
-          });
-        },
-        on(event, handler) {
-          if (!listeners[event]) listeners[event] = [];
-          listeners[event].push(handler);
-          return stream;
-        },
-        once(event, handler) {
-          const wrapper = () => {
-            handler();
-            const idx = listeners[event]?.indexOf(wrapper);
-            if (idx !== void 0 && idx !== -1) {
-              listeners[event].splice(idx, 1);
-            }
-          };
-          return stream.on(event, wrapper);
-        },
-        emit(event) {
-          const handlers = listeners[event];
-          if (handlers) {
-            handlers.forEach((h) => h());
-            return true;
-          }
-          return false;
-        }
-      };
-      return stream;
+    createWriteStream(path, options) {
+      const pathStr = typeof path === "string" ? path : path instanceof import_buffer.Buffer ? path.toString() : String(path);
+      const opts = typeof options === "string" ? { encoding: options } : options;
+      return new WriteStream(pathStr, opts);
     },
     // Watch (no-op)
     watch() {
@@ -2686,7 +2920,2556 @@ var bridge = (() => {
   };
   var fs_default = fs;
 
-  // src/bridge/index.ts
+  // bridge/os.ts
+  var config = {
+    platform: typeof _osConfig !== "undefined" && _osConfig.platform || "linux",
+    arch: typeof _osConfig !== "undefined" && _osConfig.arch || "x64",
+    type: typeof _osConfig !== "undefined" && _osConfig.type || "Linux",
+    release: typeof _osConfig !== "undefined" && _osConfig.release || "5.15.0",
+    version: typeof _osConfig !== "undefined" && _osConfig.version || "#1 SMP",
+    homedir: typeof _osConfig !== "undefined" && _osConfig.homedir || "/root",
+    tmpdir: typeof _osConfig !== "undefined" && _osConfig.tmpdir || "/tmp",
+    hostname: typeof _osConfig !== "undefined" && _osConfig.hostname || "sandbox"
+  };
+  var signals = {
+    SIGHUP: 1,
+    SIGINT: 2,
+    SIGQUIT: 3,
+    SIGILL: 4,
+    SIGTRAP: 5,
+    SIGABRT: 6,
+    SIGIOT: 6,
+    SIGBUS: 7,
+    SIGFPE: 8,
+    SIGKILL: 9,
+    SIGUSR1: 10,
+    SIGSEGV: 11,
+    SIGUSR2: 12,
+    SIGPIPE: 13,
+    SIGALRM: 14,
+    SIGTERM: 15,
+    SIGSTKFLT: 16,
+    SIGCHLD: 17,
+    SIGCONT: 18,
+    SIGSTOP: 19,
+    SIGTSTP: 20,
+    SIGTTIN: 21,
+    SIGTTOU: 22,
+    SIGURG: 23,
+    SIGXCPU: 24,
+    SIGXFSZ: 25,
+    SIGVTALRM: 26,
+    SIGPROF: 27,
+    SIGWINCH: 28,
+    SIGIO: 29,
+    SIGPOLL: 29,
+    SIGPWR: 30,
+    SIGSYS: 31
+  };
+  var errno = {
+    E2BIG: 7,
+    EACCES: 13,
+    EADDRINUSE: 98,
+    EADDRNOTAVAIL: 99,
+    EAFNOSUPPORT: 97,
+    EAGAIN: 11,
+    EALREADY: 114,
+    EBADF: 9,
+    EBADMSG: 74,
+    EBUSY: 16,
+    ECANCELED: 125,
+    ECHILD: 10,
+    ECONNABORTED: 103,
+    ECONNREFUSED: 111,
+    ECONNRESET: 104,
+    EDEADLK: 35,
+    EDESTADDRREQ: 89,
+    EDOM: 33,
+    EDQUOT: 122,
+    EEXIST: 17,
+    EFAULT: 14,
+    EFBIG: 27,
+    EHOSTUNREACH: 113,
+    EIDRM: 43,
+    EILSEQ: 84,
+    EINPROGRESS: 115,
+    EINTR: 4,
+    EINVAL: 22,
+    EIO: 5,
+    EISCONN: 106,
+    EISDIR: 21,
+    ELOOP: 40,
+    EMFILE: 24,
+    EMLINK: 31,
+    EMSGSIZE: 90,
+    EMULTIHOP: 72,
+    ENAMETOOLONG: 36,
+    ENETDOWN: 100,
+    ENETRESET: 102,
+    ENETUNREACH: 101,
+    ENFILE: 23,
+    ENOBUFS: 105,
+    ENODATA: 61,
+    ENODEV: 19,
+    ENOENT: 2,
+    ENOEXEC: 8,
+    ENOLCK: 37,
+    ENOLINK: 67,
+    ENOMEM: 12,
+    ENOMSG: 42,
+    ENOPROTOOPT: 92,
+    ENOSPC: 28,
+    ENOSR: 63,
+    ENOSTR: 60,
+    ENOSYS: 38,
+    ENOTCONN: 107,
+    ENOTDIR: 20,
+    ENOTEMPTY: 39,
+    ENOTSOCK: 88,
+    ENOTSUP: 95,
+    ENOTTY: 25,
+    ENXIO: 6,
+    EOPNOTSUPP: 95,
+    EOVERFLOW: 75,
+    EPERM: 1,
+    EPIPE: 32,
+    EPROTO: 71,
+    EPROTONOSUPPORT: 93,
+    EPROTOTYPE: 91,
+    ERANGE: 34,
+    EROFS: 30,
+    ESPIPE: 29,
+    ESRCH: 3,
+    ESTALE: 116,
+    ETIME: 62,
+    ETIMEDOUT: 110,
+    ETXTBSY: 26,
+    EWOULDBLOCK: 11,
+    EXDEV: 18
+  };
+  var priority = {
+    PRIORITY_LOW: 19,
+    PRIORITY_BELOW_NORMAL: 10,
+    PRIORITY_NORMAL: 0,
+    PRIORITY_ABOVE_NORMAL: -7,
+    PRIORITY_HIGH: -14,
+    PRIORITY_HIGHEST: -20
+  };
+  var os = {
+    // Platform information
+    platform() {
+      return config.platform;
+    },
+    arch() {
+      return config.arch;
+    },
+    type() {
+      return config.type;
+    },
+    release() {
+      return config.release;
+    },
+    version() {
+      return config.version;
+    },
+    // Directory information
+    homedir() {
+      return config.homedir;
+    },
+    tmpdir() {
+      return config.tmpdir;
+    },
+    // System information
+    hostname() {
+      return config.hostname;
+    },
+    // User information
+    userInfo(_options) {
+      return {
+        username: "root",
+        uid: 0,
+        gid: 0,
+        shell: "/bin/bash",
+        homedir: config.homedir
+      };
+    },
+    // CPU information
+    cpus() {
+      return [
+        {
+          model: "Virtual CPU",
+          speed: 2e3,
+          times: {
+            user: 1e5,
+            nice: 0,
+            sys: 5e4,
+            idle: 8e5,
+            irq: 0
+          }
+        }
+      ];
+    },
+    // Memory information
+    totalmem() {
+      return 1073741824;
+    },
+    freemem() {
+      return 536870912;
+    },
+    // System load
+    loadavg() {
+      return [0.1, 0.1, 0.1];
+    },
+    // System uptime
+    uptime() {
+      return 3600;
+    },
+    // Network interfaces (empty - not supported in sandbox)
+    networkInterfaces() {
+      return {};
+    },
+    // System endianness
+    endianness() {
+      return "LE";
+    },
+    // Line endings
+    EOL: "\n",
+    // Dev null path
+    devNull: "/dev/null",
+    // Machine type
+    machine() {
+      return config.arch;
+    },
+    // Constants
+    constants: {
+      signals,
+      errno,
+      priority,
+      dlopen: {
+        RTLD_LAZY: 1,
+        RTLD_NOW: 2,
+        RTLD_GLOBAL: 256,
+        RTLD_LOCAL: 0
+      },
+      UV_UDP_REUSEADDR: 4
+    },
+    // Priority getters/setters (stubs)
+    getPriority(_pid) {
+      return 0;
+    },
+    setPriority(pid, priority2) {
+      void pid;
+      void priority2;
+    },
+    // Parallelism hint
+    availableParallelism() {
+      return 1;
+    }
+  };
+  var os_default = os;
+
+  // bridge/child-process.ts
+  var child_process_exports = {};
+  __export(child_process_exports, {
+    ChildProcess: () => ChildProcess,
+    default: () => child_process_default,
+    exec: () => exec,
+    execFile: () => execFile,
+    execFileSync: () => execFileSync,
+    execSync: () => execSync,
+    fork: () => fork,
+    spawn: () => spawn,
+    spawnSync: () => spawnSync
+  });
+  var ChildProcess = class {
+    _listeners = {};
+    _onceListeners = {};
+    pid = Math.floor(Math.random() * 1e4) + 1e3;
+    killed = false;
+    exitCode = null;
+    signalCode = null;
+    connected = false;
+    spawnfile = "";
+    spawnargs = [];
+    stdin;
+    stdout;
+    stderr;
+    stdio;
+    constructor() {
+      this.stdin = {
+        writable: true,
+        _buffer: [],
+        write(data) {
+          this._buffer.push(data);
+          return true;
+        },
+        end() {
+          this.writable = false;
+        },
+        on() {
+          return this;
+        },
+        once() {
+          return this;
+        },
+        emit() {
+          return false;
+        }
+      };
+      this.stdout = {
+        readable: true,
+        _data: "",
+        _listeners: {},
+        _onceListeners: {},
+        on(event, listener) {
+          if (!this._listeners[event]) this._listeners[event] = [];
+          this._listeners[event].push(listener);
+          return this;
+        },
+        once(event, listener) {
+          if (!this._onceListeners[event]) this._onceListeners[event] = [];
+          this._onceListeners[event].push(listener);
+          return this;
+        },
+        emit(event, ...args) {
+          if (this._listeners[event]) {
+            this._listeners[event].forEach((fn) => fn(...args));
+          }
+          if (this._onceListeners[event]) {
+            this._onceListeners[event].forEach((fn) => fn(...args));
+            this._onceListeners[event] = [];
+          }
+          return true;
+        },
+        read() {
+          return null;
+        },
+        setEncoding() {
+          return this;
+        },
+        pipe(dest) {
+          return dest;
+        }
+      };
+      this.stderr = {
+        readable: true,
+        _data: "",
+        _listeners: {},
+        _onceListeners: {},
+        on(event, listener) {
+          if (!this._listeners[event]) this._listeners[event] = [];
+          this._listeners[event].push(listener);
+          return this;
+        },
+        once(event, listener) {
+          if (!this._onceListeners[event]) this._onceListeners[event] = [];
+          this._onceListeners[event].push(listener);
+          return this;
+        },
+        emit(event, ...args) {
+          if (this._listeners[event]) {
+            this._listeners[event].forEach((fn) => fn(...args));
+          }
+          if (this._onceListeners[event]) {
+            this._onceListeners[event].forEach((fn) => fn(...args));
+            this._onceListeners[event] = [];
+          }
+          return true;
+        },
+        read() {
+          return null;
+        },
+        setEncoding() {
+          return this;
+        },
+        pipe(dest) {
+          return dest;
+        }
+      };
+      this.stdio = [this.stdin, this.stdout, this.stderr];
+    }
+    on(event, listener) {
+      if (!this._listeners[event]) this._listeners[event] = [];
+      this._listeners[event].push(listener);
+      return this;
+    }
+    once(event, listener) {
+      if (!this._onceListeners[event]) this._onceListeners[event] = [];
+      this._onceListeners[event].push(listener);
+      return this;
+    }
+    off(event, listener) {
+      if (this._listeners[event]) {
+        const idx = this._listeners[event].indexOf(listener);
+        if (idx !== -1) this._listeners[event].splice(idx, 1);
+      }
+      return this;
+    }
+    removeListener(event, listener) {
+      return this.off(event, listener);
+    }
+    emit(event, ...args) {
+      let handled = false;
+      if (this._listeners[event]) {
+        this._listeners[event].forEach((fn) => {
+          fn(...args);
+          handled = true;
+        });
+      }
+      if (this._onceListeners[event]) {
+        this._onceListeners[event].forEach((fn) => {
+          fn(...args);
+          handled = true;
+        });
+        this._onceListeners[event] = [];
+      }
+      return handled;
+    }
+    kill(_signal) {
+      this.killed = true;
+      this.signalCode = typeof _signal === "string" ? _signal : "SIGTERM";
+      return true;
+    }
+    ref() {
+      return this;
+    }
+    unref() {
+      return this;
+    }
+    disconnect() {
+      this.connected = false;
+    }
+    _complete(stdout, stderr, code) {
+      this.exitCode = code;
+      if (stdout) {
+        const buf = typeof Buffer !== "undefined" ? Buffer.from(stdout) : stdout;
+        this.stdout.emit("data", buf);
+      }
+      if (stderr) {
+        const buf = typeof Buffer !== "undefined" ? Buffer.from(stderr) : stderr;
+        this.stderr.emit("data", buf);
+      }
+      this.stdout.emit("end");
+      this.stderr.emit("end");
+      this.emit("close", code, this.signalCode);
+      this.emit("exit", code, this.signalCode);
+    }
+  };
+  function exec(command, options, callback) {
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    }
+    const child = new ChildProcess();
+    child.spawnargs = ["bash", "-c", command];
+    child.spawnfile = "bash";
+    (async () => {
+      try {
+        const jsonResult = await _childProcessExecRaw.apply(void 0, [command], {
+          result: { promise: true }
+        });
+        const result = JSON.parse(jsonResult);
+        const stdout = result.stdout || "";
+        const stderr = result.stderr || "";
+        const code = result.code || 0;
+        child._complete(stdout, stderr, code);
+        if (callback) {
+          if (code !== 0) {
+            const err = new Error("Command failed: " + command);
+            err.code = code;
+            err.killed = false;
+            err.signal = null;
+            err.cmd = command;
+            err.stdout = stdout;
+            err.stderr = stderr;
+            callback(err, stdout, stderr);
+          } else {
+            callback(null, stdout, stderr);
+          }
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        child._complete("", errMsg, 1);
+        if (callback) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          error.code = 1;
+          error.stdout = "";
+          error.stderr = errMsg;
+          callback(error, "", error.stderr);
+        }
+      }
+    })();
+    return child;
+  }
+  function execSync(command, options) {
+    const opts = options || {};
+    const jsonResult = _childProcessExecRaw.applySyncPromise(void 0, [command]);
+    const result = JSON.parse(jsonResult);
+    if (result.code !== 0) {
+      const err = new Error("Command failed: " + command);
+      err.status = result.code;
+      err.stdout = result.stdout;
+      err.stderr = result.stderr;
+      err.output = [null, result.stdout, result.stderr];
+      throw err;
+    }
+    if (opts.encoding === "buffer" || !opts.encoding) {
+      return typeof Buffer !== "undefined" ? Buffer.from(result.stdout) : result.stdout;
+    }
+    return result.stdout;
+  }
+  function spawn(command, args, options) {
+    let argsArray = [];
+    let opts = {};
+    if (!Array.isArray(args)) {
+      opts = args || {};
+    } else {
+      argsArray = args;
+      opts = options || {};
+    }
+    const child = new ChildProcess();
+    child.spawnfile = command;
+    child.spawnargs = [command, ...argsArray];
+    const useShell = opts.shell || false;
+    (async () => {
+      try {
+        let jsonResult;
+        if (useShell || command === "bash" || command === "sh") {
+          const fullCmd = [command, ...argsArray].join(" ");
+          jsonResult = await _childProcessExecRaw.apply(void 0, [fullCmd], {
+            result: { promise: true }
+          });
+        } else {
+          jsonResult = await _childProcessSpawnRaw.apply(
+            void 0,
+            [command, JSON.stringify(argsArray)],
+            { result: { promise: true } }
+          );
+        }
+        const result = JSON.parse(jsonResult);
+        child._complete(result.stdout || "", result.stderr || "", result.code || 0);
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        child._complete("", errMsg, 1);
+        child.emit("error", err);
+      }
+    })();
+    return child;
+  }
+  function spawnSync(command, args, options) {
+    let argsArray = [];
+    if (!Array.isArray(args)) {
+    } else {
+      argsArray = args;
+    }
+    try {
+      const jsonResult = _childProcessSpawnRaw.applySyncPromise(void 0, [
+        command,
+        JSON.stringify(argsArray)
+      ]);
+      const result = JSON.parse(jsonResult);
+      const stdoutBuf = typeof Buffer !== "undefined" ? Buffer.from(result.stdout) : result.stdout;
+      const stderrBuf = typeof Buffer !== "undefined" ? Buffer.from(result.stderr) : result.stderr;
+      return {
+        pid: Math.floor(Math.random() * 1e4) + 1e3,
+        output: [null, stdoutBuf, stderrBuf],
+        stdout: stdoutBuf,
+        stderr: stderrBuf,
+        status: result.code,
+        signal: null,
+        error: void 0
+      };
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const stderrBuf = typeof Buffer !== "undefined" ? Buffer.from(errMsg) : errMsg;
+      return {
+        pid: 0,
+        output: [null, "", stderrBuf],
+        stdout: typeof Buffer !== "undefined" ? Buffer.from("") : "",
+        stderr: stderrBuf,
+        status: 1,
+        signal: null,
+        error: err instanceof Error ? err : new Error(String(err))
+      };
+    }
+  }
+  function execFile(file, args, options, callback) {
+    let argsArray = [];
+    let opts = {};
+    let cb;
+    if (typeof args === "function") {
+      cb = args;
+    } else if (typeof options === "function") {
+      argsArray = args.slice();
+      cb = options;
+    } else {
+      argsArray = Array.isArray(args) ? args : [];
+      opts = options || {};
+      cb = callback;
+    }
+    const child = spawn(file, argsArray, opts);
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (data) => {
+      stdout += String(data);
+    });
+    child.stderr.on("data", (data) => {
+      stderr += String(data);
+    });
+    child.on("close", (code) => {
+      if (cb) {
+        if (code !== 0) {
+          const err = new Error("Command failed: " + file);
+          err.code = code;
+          err.stdout = stdout;
+          err.stderr = stderr;
+          cb(err, stdout, stderr);
+        } else {
+          cb(null, stdout, stderr);
+        }
+      }
+    });
+    child.on("error", (err) => {
+      if (cb) {
+        cb(err, stdout, stderr);
+      }
+    });
+    return child;
+  }
+  function execFileSync(file, args, options) {
+    let argsArray = [];
+    let opts = {};
+    if (!Array.isArray(args)) {
+      opts = args || {};
+    } else {
+      argsArray = args;
+      opts = options || {};
+    }
+    const result = spawnSync(file, argsArray, opts);
+    if (result.status !== 0) {
+      const err = new Error("Command failed: " + file);
+      err.status = result.status ?? void 0;
+      err.stdout = String(result.stdout);
+      err.stderr = String(result.stderr);
+      throw err;
+    }
+    if (opts.encoding === "buffer" || !opts.encoding) {
+      return result.stdout;
+    }
+    return typeof result.stdout === "string" ? result.stdout : result.stdout.toString(opts.encoding);
+  }
+  function fork(modulePath, args, options) {
+    let argsArray = [];
+    let opts = {};
+    if (!Array.isArray(args)) {
+      opts = args || {};
+    } else {
+      argsArray = args;
+      opts = options || {};
+    }
+    const child = spawn("node", [modulePath, ...argsArray], {
+      ...opts,
+      stdio: opts.stdio || "pipe"
+    });
+    child.send = function(_message, sendHandle, _options, callback) {
+      if (typeof sendHandle === "function") {
+        callback = sendHandle;
+      }
+      if (callback) callback(null);
+      return true;
+    };
+    child.connected = true;
+    return child;
+  }
+  var childProcess = {
+    ChildProcess,
+    exec,
+    execSync,
+    spawn,
+    spawnSync,
+    execFile,
+    execFileSync,
+    fork
+  };
+  var child_process_default = childProcess;
+
+  // bridge/network.ts
+  var network_exports = {};
+  __export(network_exports, {
+    ClientRequest: () => ClientRequest,
+    Headers: () => Headers,
+    IncomingMessage: () => IncomingMessage,
+    Request: () => Request,
+    Response: () => Response,
+    default: () => network_default,
+    dns: () => dns,
+    fetch: () => fetch,
+    http: () => http,
+    https: () => https
+  });
+  async function fetch(url, options = {}) {
+    const optionsJson = JSON.stringify({
+      method: options.method || "GET",
+      headers: options.headers || {},
+      body: options.body || null
+    });
+    const responseJson = await _networkFetchRaw.apply(void 0, [String(url), optionsJson], {
+      result: { promise: true }
+    });
+    const response = JSON.parse(responseJson);
+    return {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      headers: new Map(Object.entries(response.headers || {})),
+      url: response.url || String(url),
+      redirected: response.redirected || false,
+      type: "basic",
+      async text() {
+        return response.body || "";
+      },
+      async json() {
+        return JSON.parse(response.body || "{}");
+      },
+      async arrayBuffer() {
+        return new ArrayBuffer(0);
+      },
+      async blob() {
+        throw new Error("Blob not supported in sandbox");
+      },
+      clone() {
+        return { ...this };
+      }
+    };
+  }
+  var Headers = class _Headers {
+    _headers = {};
+    constructor(init) {
+      if (init && init !== null) {
+        if (init instanceof _Headers) {
+          this._headers = { ...init._headers };
+        } else if (Array.isArray(init)) {
+          init.forEach(([key, value]) => {
+            this._headers[key.toLowerCase()] = value;
+          });
+        } else if (typeof init === "object") {
+          Object.entries(init).forEach(([key, value]) => {
+            this._headers[key.toLowerCase()] = value;
+          });
+        }
+      }
+    }
+    get(name) {
+      return this._headers[name.toLowerCase()] || null;
+    }
+    set(name, value) {
+      this._headers[name.toLowerCase()] = value;
+    }
+    has(name) {
+      return name.toLowerCase() in this._headers;
+    }
+    delete(name) {
+      delete this._headers[name.toLowerCase()];
+    }
+    entries() {
+      return Object.entries(this._headers)[Symbol.iterator]();
+    }
+    keys() {
+      return Object.keys(this._headers)[Symbol.iterator]();
+    }
+    values() {
+      return Object.values(this._headers)[Symbol.iterator]();
+    }
+    forEach(callback) {
+      Object.entries(this._headers).forEach(([k, v]) => callback(v, k, this));
+    }
+  };
+  var Request = class _Request {
+    url;
+    method;
+    headers;
+    body;
+    mode;
+    credentials;
+    cache;
+    redirect;
+    referrer;
+    integrity;
+    constructor(input, init = {}) {
+      this.url = typeof input === "string" ? input : input.url;
+      this.method = init.method || (typeof input !== "string" ? input.method : void 0) || "GET";
+      this.headers = new Headers(init.headers || (typeof input !== "string" ? input.headers : void 0));
+      this.body = init.body || null;
+      this.mode = init.mode || "cors";
+      this.credentials = init.credentials || "same-origin";
+      this.cache = init.cache || "default";
+      this.redirect = init.redirect || "follow";
+      this.referrer = init.referrer || "about:client";
+      this.integrity = init.integrity || "";
+    }
+    clone() {
+      return new _Request(this.url, this);
+    }
+  };
+  var Response = class _Response {
+    _body;
+    status;
+    statusText;
+    headers;
+    ok;
+    type;
+    url;
+    redirected;
+    constructor(body, init = {}) {
+      this._body = body || null;
+      this.status = init.status || 200;
+      this.statusText = init.statusText || "OK";
+      this.headers = new Headers(init.headers);
+      this.ok = this.status >= 200 && this.status < 300;
+      this.type = "default";
+      this.url = "";
+      this.redirected = false;
+    }
+    async text() {
+      return String(this._body || "");
+    }
+    async json() {
+      return JSON.parse(this._body || "{}");
+    }
+    clone() {
+      return new _Response(this._body, this);
+    }
+    static error() {
+      return new _Response(null, { status: 0, statusText: "" });
+    }
+    static redirect(url, status = 302) {
+      return new _Response(null, { status, headers: { Location: url } });
+    }
+  };
+  var dns = {
+    lookup(hostname, options, callback) {
+      let cb = callback;
+      if (typeof options === "function") {
+        cb = options;
+      }
+      _networkDnsLookupRaw.apply(void 0, [hostname], { result: { promise: true } }).then((resultJson) => {
+        const result = JSON.parse(resultJson);
+        if (result.error) {
+          const err = new Error(result.error);
+          err.code = result.code || "ENOTFOUND";
+          cb?.(err);
+        } else {
+          cb?.(null, result.address, result.family);
+        }
+      }).catch((err) => {
+        cb?.(err);
+      });
+    },
+    resolve(hostname, rrtype, callback) {
+      let cb = callback;
+      if (typeof rrtype === "function") {
+        cb = rrtype;
+      }
+      dns.lookup(hostname, (err, address) => {
+        if (err) {
+          cb?.(err);
+        } else {
+          cb?.(null, address ? [address] : []);
+        }
+      });
+    },
+    resolve4(hostname, callback) {
+      dns.resolve(hostname, "A", callback);
+    },
+    resolve6(hostname, callback) {
+      dns.resolve(hostname, "AAAA", callback);
+    },
+    promises: {
+      lookup(hostname, _options) {
+        return new Promise((resolve, reject) => {
+          dns.lookup(hostname, _options, (err, address, family) => {
+            if (err) reject(err);
+            else resolve({ address: address || "", family: family || 4 });
+          });
+        });
+      },
+      resolve(hostname, rrtype) {
+        return new Promise((resolve, reject) => {
+          dns.resolve(hostname, rrtype || "A", (err, addresses) => {
+            if (err) reject(err);
+            else resolve(addresses || []);
+          });
+        });
+      }
+    }
+  };
+  var IncomingMessage = class {
+    headers;
+    rawHeaders;
+    trailers;
+    rawTrailers;
+    httpVersion;
+    httpVersionMajor;
+    httpVersionMinor;
+    method;
+    url;
+    statusCode;
+    statusMessage;
+    _body;
+    _listeners;
+    complete;
+    aborted;
+    socket;
+    _bodyConsumed;
+    _ended;
+    _flowing;
+    readable;
+    readableEnded;
+    readableFlowing;
+    destroyed;
+    _encoding;
+    constructor(response) {
+      this.headers = response?.headers || {};
+      this.rawHeaders = [];
+      if (this.headers && typeof this.headers === "object") {
+        Object.entries(this.headers).forEach(([k, v]) => {
+          this.rawHeaders.push(k, v);
+        });
+      }
+      this.trailers = {};
+      this.rawTrailers = [];
+      this.httpVersion = "1.1";
+      this.httpVersionMajor = 1;
+      this.httpVersionMinor = 1;
+      this.method = null;
+      this.url = response?.url || "";
+      this.statusCode = response?.status;
+      this.statusMessage = response?.statusText;
+      this._body = response?.body || "";
+      this._listeners = {};
+      this.complete = false;
+      this.aborted = false;
+      this.socket = null;
+      this._bodyConsumed = false;
+      this._ended = false;
+      this._flowing = false;
+      this.readable = true;
+      this.readableEnded = false;
+      this.readableFlowing = null;
+      this.destroyed = false;
+    }
+    on(event, listener) {
+      if (!this._listeners[event]) this._listeners[event] = [];
+      this._listeners[event].push(listener);
+      if (event === "data" && !this._bodyConsumed && this._body) {
+        this._flowing = true;
+        this.readableFlowing = true;
+        Promise.resolve().then(() => {
+          if (!this._bodyConsumed) {
+            this._bodyConsumed = true;
+            const buf = typeof Buffer !== "undefined" ? Buffer.from(this._body) : this._body;
+            this.emit("data", buf);
+            Promise.resolve().then(() => {
+              if (!this._ended) {
+                this._ended = true;
+                this.complete = true;
+                this.readable = false;
+                this.readableEnded = true;
+                this.emit("end");
+              }
+            });
+          }
+        });
+      }
+      if (event === "end" && this._bodyConsumed && !this._ended) {
+        Promise.resolve().then(() => {
+          if (!this._ended) {
+            this._ended = true;
+            this.complete = true;
+            this.readable = false;
+            this.readableEnded = true;
+            listener();
+          }
+        });
+      }
+      return this;
+    }
+    once(event, listener) {
+      const wrapper = (...args) => {
+        this.off(event, wrapper);
+        listener(...args);
+      };
+      wrapper._originalListener = listener;
+      return this.on(event, wrapper);
+    }
+    off(event, listener) {
+      if (this._listeners[event]) {
+        const idx = this._listeners[event].findIndex(
+          (fn) => fn === listener || fn._originalListener === listener
+        );
+        if (idx !== -1) this._listeners[event].splice(idx, 1);
+      }
+      return this;
+    }
+    removeListener(event, listener) {
+      return this.off(event, listener);
+    }
+    removeAllListeners(event) {
+      if (event) {
+        delete this._listeners[event];
+      } else {
+        this._listeners = {};
+      }
+      return this;
+    }
+    emit(event, ...args) {
+      const handlers = this._listeners[event];
+      if (handlers) {
+        handlers.slice().forEach((fn) => fn(...args));
+      }
+      return handlers !== void 0 && handlers.length > 0;
+    }
+    setEncoding(encoding) {
+      this._encoding = encoding;
+      return this;
+    }
+    read(_size) {
+      if (this._bodyConsumed) return null;
+      this._bodyConsumed = true;
+      const buf = typeof Buffer !== "undefined" ? Buffer.from(this._body) : this._body;
+      Promise.resolve().then(() => {
+        if (!this._ended) {
+          this._ended = true;
+          this.complete = true;
+          this.readable = false;
+          this.readableEnded = true;
+          this.emit("end");
+        }
+      });
+      return buf;
+    }
+    pipe(dest) {
+      const buf = typeof Buffer !== "undefined" ? Buffer.from(this._body || "") : this._body || "";
+      if (typeof dest.write === "function" && (typeof buf === "string" ? buf.length : buf.length) > 0) {
+        dest.write(buf);
+      }
+      if (typeof dest.end === "function") {
+        Promise.resolve().then(() => dest.end());
+      }
+      this._bodyConsumed = true;
+      this._ended = true;
+      this.complete = true;
+      this.readable = false;
+      this.readableEnded = true;
+      return dest;
+    }
+    pause() {
+      this._flowing = false;
+      this.readableFlowing = false;
+      return this;
+    }
+    resume() {
+      this._flowing = true;
+      this.readableFlowing = true;
+      if (!this._bodyConsumed && this._body) {
+        Promise.resolve().then(() => {
+          if (!this._bodyConsumed) {
+            this._bodyConsumed = true;
+            const buf = typeof Buffer !== "undefined" ? Buffer.from(this._body) : this._body;
+            this.emit("data", buf);
+            Promise.resolve().then(() => {
+              if (!this._ended) {
+                this._ended = true;
+                this.complete = true;
+                this.readable = false;
+                this.readableEnded = true;
+                this.emit("end");
+              }
+            });
+          }
+        });
+      }
+      return this;
+    }
+    unpipe(_dest) {
+      return this;
+    }
+    destroy(err) {
+      this.destroyed = true;
+      this.readable = false;
+      if (err) this.emit("error", err);
+      this.emit("close");
+      return this;
+    }
+    [Symbol.asyncIterator]() {
+      const self = this;
+      let dataEmitted = false;
+      let ended = false;
+      return {
+        async next() {
+          if (ended || self._ended) {
+            return { done: true, value: void 0 };
+          }
+          if (!dataEmitted && !self._bodyConsumed) {
+            dataEmitted = true;
+            self._bodyConsumed = true;
+            const buf = typeof Buffer !== "undefined" ? Buffer.from(self._body || "") : self._body || "";
+            return { done: false, value: buf };
+          }
+          ended = true;
+          self._ended = true;
+          self.complete = true;
+          self.readable = false;
+          self.readableEnded = true;
+          return { done: true, value: void 0 };
+        },
+        return() {
+          ended = true;
+          return Promise.resolve({ done: true, value: void 0 });
+        },
+        throw(err) {
+          ended = true;
+          self.emit("error", err);
+          return Promise.resolve({ done: true, value: void 0 });
+        }
+      };
+    }
+  };
+  var ClientRequest = class {
+    _options;
+    _callback;
+    _listeners = {};
+    _body = "";
+    _ended = false;
+    socket = null;
+    finished = false;
+    aborted = false;
+    constructor(options, callback) {
+      this._options = options;
+      this._callback = callback;
+      Promise.resolve().then(() => this._execute());
+    }
+    async _execute() {
+      try {
+        const url = this._buildUrl();
+        const optionsJson = JSON.stringify({
+          method: this._options.method || "GET",
+          headers: this._options.headers || {},
+          body: this._body || null
+        });
+        const responseJson = await _networkHttpRequestRaw.apply(void 0, [url, optionsJson], {
+          result: { promise: true }
+        });
+        const response = JSON.parse(responseJson);
+        const res = new IncomingMessage(response);
+        this.finished = true;
+        if (this._callback) {
+          this._callback(res);
+        }
+        this._emit("response", res);
+      } catch (err) {
+        this._emit("error", err);
+      }
+    }
+    _buildUrl() {
+      const opts = this._options;
+      const protocol = opts.protocol || (opts.port === 443 ? "https:" : "http:");
+      const host = opts.hostname || opts.host || "localhost";
+      const port = opts.port ? ":" + opts.port : "";
+      const path = opts.path || "/";
+      return protocol + "//" + host + port + path;
+    }
+    on(event, listener) {
+      if (!this._listeners[event]) this._listeners[event] = [];
+      this._listeners[event].push(listener);
+      return this;
+    }
+    once(event, listener) {
+      const wrapper = (...args) => {
+        this.off(event, wrapper);
+        listener(...args);
+      };
+      return this.on(event, wrapper);
+    }
+    off(event, listener) {
+      if (this._listeners[event]) {
+        const idx = this._listeners[event].indexOf(listener);
+        if (idx !== -1) this._listeners[event].splice(idx, 1);
+      }
+      return this;
+    }
+    _emit(event, ...args) {
+      if (this._listeners[event]) {
+        this._listeners[event].forEach((fn) => fn(...args));
+      }
+    }
+    write(data) {
+      this._body += data;
+      return true;
+    }
+    end(data) {
+      if (data) this._body += data;
+      this._ended = true;
+      return this;
+    }
+    abort() {
+      this.aborted = true;
+    }
+    setTimeout(_timeout) {
+      return this;
+    }
+    setNoDelay() {
+      return this;
+    }
+    setSocketKeepAlive() {
+      return this;
+    }
+    flushHeaders() {
+    }
+  };
+  var Agent = class {
+    constructor() {
+    }
+  };
+  function createHttpModule(_protocol) {
+    return {
+      request(options, callback) {
+        let opts;
+        if (typeof options === "string") {
+          const url = new URL(options);
+          opts = {
+            protocol: url.protocol,
+            hostname: url.hostname,
+            port: url.port,
+            path: url.pathname + url.search
+          };
+        } else if (options instanceof URL) {
+          opts = {
+            protocol: options.protocol,
+            hostname: options.hostname,
+            port: options.port,
+            path: options.pathname + options.search
+          };
+        } else {
+          opts = options;
+        }
+        return new ClientRequest(opts, callback);
+      },
+      get(options, callback) {
+        let opts;
+        if (typeof options === "string") {
+          const url = new URL(options);
+          opts = {
+            protocol: url.protocol,
+            hostname: url.hostname,
+            port: url.port,
+            path: url.pathname + url.search,
+            method: "GET"
+          };
+        } else if (options instanceof URL) {
+          opts = {
+            protocol: options.protocol,
+            hostname: options.hostname,
+            port: options.port,
+            path: options.pathname + options.search,
+            method: "GET"
+          };
+        } else {
+          opts = { ...options, method: "GET" };
+        }
+        const req = new ClientRequest(opts, callback);
+        req.end();
+        return req;
+      },
+      createServer() {
+        throw new Error("http.createServer is not supported in sandbox");
+      },
+      Agent,
+      globalAgent: {},
+      IncomingMessage,
+      ClientRequest,
+      METHODS: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+      STATUS_CODES: {
+        200: "OK",
+        201: "Created",
+        204: "No Content",
+        301: "Moved Permanently",
+        302: "Found",
+        304: "Not Modified",
+        400: "Bad Request",
+        401: "Unauthorized",
+        403: "Forbidden",
+        404: "Not Found",
+        500: "Internal Server Error"
+      }
+    };
+  }
+  var http = createHttpModule("http");
+  var https = createHttpModule("https");
+  var network_default = {
+    fetch,
+    Headers,
+    Request,
+    Response,
+    dns,
+    http,
+    https,
+    IncomingMessage,
+    ClientRequest
+  };
+
+  // bridge/process.ts
+  var config2 = {
+    platform: typeof _processConfig !== "undefined" && _processConfig.platform || "linux",
+    arch: typeof _processConfig !== "undefined" && _processConfig.arch || "x64",
+    version: typeof _processConfig !== "undefined" && _processConfig.version || "v22.0.0",
+    cwd: typeof _processConfig !== "undefined" && _processConfig.cwd || "/",
+    env: typeof _processConfig !== "undefined" && _processConfig.env || {},
+    argv: typeof _processConfig !== "undefined" && _processConfig.argv || [
+      "node",
+      "script.js"
+    ],
+    execPath: typeof _processConfig !== "undefined" && _processConfig.execPath || "/usr/bin/node"
+  };
+  var _processStartTime = Date.now();
+  var _exitCode = 0;
+  var _exited = false;
+  var ProcessExitError = class extends Error {
+    code;
+    constructor(code) {
+      super("process.exit(" + code + ")");
+      this.name = "ProcessExitError";
+      this.code = code;
+    }
+  };
+  globalThis.ProcessExitError = ProcessExitError;
+  var _processListeners = {};
+  var _processOnceListeners = {};
+  function _addListener(event, listener, once = false) {
+    const target = once ? _processOnceListeners : _processListeners;
+    if (!target[event]) {
+      target[event] = [];
+    }
+    target[event].push(listener);
+    return process;
+  }
+  function _removeListener(event, listener) {
+    if (_processListeners[event]) {
+      const idx = _processListeners[event].indexOf(listener);
+      if (idx !== -1) _processListeners[event].splice(idx, 1);
+    }
+    if (_processOnceListeners[event]) {
+      const idx = _processOnceListeners[event].indexOf(listener);
+      if (idx !== -1) _processOnceListeners[event].splice(idx, 1);
+    }
+    return process;
+  }
+  function _emit(event, ...args) {
+    let handled = false;
+    if (_processListeners[event]) {
+      for (const listener of _processListeners[event]) {
+        listener(...args);
+        handled = true;
+      }
+    }
+    if (_processOnceListeners[event]) {
+      const listeners = _processOnceListeners[event].slice();
+      _processOnceListeners[event] = [];
+      for (const listener of listeners) {
+        listener(...args);
+        handled = true;
+      }
+    }
+    return handled;
+  }
+  var _stdout = {
+    write(data) {
+      if (typeof _log !== "undefined") {
+        _log.applySync(void 0, [String(data).replace(/\n$/, "")]);
+      }
+      return true;
+    },
+    end() {
+      return this;
+    },
+    on() {
+      return this;
+    },
+    once() {
+      return this;
+    },
+    emit() {
+      return false;
+    },
+    writable: true,
+    isTTY: false,
+    columns: 80,
+    rows: 24
+  };
+  var _stderr = {
+    write(data) {
+      if (typeof _error !== "undefined") {
+        _error.applySync(void 0, [String(data).replace(/\n$/, "")]);
+      }
+      return true;
+    },
+    end() {
+      return this;
+    },
+    on() {
+      return this;
+    },
+    once() {
+      return this;
+    },
+    emit() {
+      return false;
+    },
+    writable: true,
+    isTTY: false,
+    columns: 80,
+    rows: 24
+  };
+  var _stdin = {
+    readable: true,
+    paused: true,
+    encoding: null,
+    read() {
+      return null;
+    },
+    on() {
+      return this;
+    },
+    once() {
+      return this;
+    },
+    emit() {
+      return false;
+    },
+    pause() {
+      this.paused = true;
+      return this;
+    },
+    resume() {
+      this.paused = false;
+      return this;
+    },
+    setEncoding(enc) {
+      this.encoding = enc;
+      return this;
+    },
+    isTTY: false
+  };
+  function hrtime(prev) {
+    const now = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    const seconds = Math.floor(now / 1e3);
+    const nanoseconds = Math.floor(now % 1e3 * 1e6);
+    if (prev) {
+      let diffSec = seconds - prev[0];
+      let diffNano = nanoseconds - prev[1];
+      if (diffNano < 0) {
+        diffSec -= 1;
+        diffNano += 1e9;
+      }
+      return [diffSec, diffNano];
+    }
+    return [seconds, nanoseconds];
+  }
+  hrtime.bigint = function() {
+    const now = typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
+    return BigInt(Math.floor(now * 1e6));
+  };
+  var _cwd = config2.cwd;
+  var _umask = 18;
+  var process = {
+    // Static properties
+    platform: config2.platform,
+    arch: config2.arch,
+    version: config2.version,
+    versions: {
+      node: config2.version.replace(/^v/, ""),
+      v8: "11.3.244.8",
+      uv: "1.44.2",
+      zlib: "1.2.13",
+      brotli: "1.0.9",
+      ares: "1.19.0",
+      modules: "108",
+      nghttp2: "1.52.0",
+      napi: "8",
+      llhttp: "8.1.0",
+      openssl: "3.0.8",
+      cldr: "42.0",
+      icu: "72.1",
+      tz: "2022g",
+      unicode: "15.0"
+    },
+    pid: 1,
+    ppid: 0,
+    execPath: config2.execPath,
+    execArgv: [],
+    argv: config2.argv,
+    argv0: config2.argv[0] || "node",
+    title: "node",
+    env: config2.env,
+    // Config stubs
+    config: {
+      target_defaults: {
+        cflags: [],
+        default_configuration: "Release",
+        defines: [],
+        include_dirs: [],
+        libraries: []
+      },
+      variables: {
+        node_prefix: "/usr",
+        node_shared_libuv: false
+      }
+    },
+    release: {
+      name: "node",
+      sourceUrl: "https://nodejs.org/download/release/v20.0.0/node-v20.0.0.tar.gz",
+      headersUrl: "https://nodejs.org/download/release/v20.0.0/node-v20.0.0-headers.tar.gz"
+    },
+    // Feature flags
+    features: {
+      inspector: false,
+      debug: false,
+      uv: true,
+      ipv6: true,
+      tls_alpn: true,
+      tls_sni: true,
+      tls_ocsp: true,
+      tls: true
+    },
+    // Methods
+    cwd() {
+      return _cwd;
+    },
+    chdir(dir) {
+      _cwd = dir;
+    },
+    get exitCode() {
+      return _exitCode;
+    },
+    set exitCode(code) {
+      _exitCode = code ?? 0;
+    },
+    exit(code) {
+      const exitCode = code !== void 0 ? code : _exitCode;
+      _exitCode = exitCode;
+      _exited = true;
+      try {
+        _emit("exit", exitCode);
+      } catch (_e) {
+      }
+      throw new ProcessExitError(exitCode);
+    },
+    abort() {
+      return process.exit(1);
+    },
+    nextTick(callback, ...args) {
+      if (typeof queueMicrotask === "function") {
+        queueMicrotask(() => callback(...args));
+      } else {
+        Promise.resolve().then(() => callback(...args));
+      }
+    },
+    hrtime,
+    getuid() {
+      return 0;
+    },
+    getgid() {
+      return 0;
+    },
+    geteuid() {
+      return 0;
+    },
+    getegid() {
+      return 0;
+    },
+    getgroups() {
+      return [0];
+    },
+    setuid() {
+    },
+    setgid() {
+    },
+    seteuid() {
+    },
+    setegid() {
+    },
+    setgroups() {
+    },
+    umask(mask) {
+      const oldMask = _umask;
+      if (mask !== void 0) {
+        _umask = mask;
+      }
+      return oldMask;
+    },
+    uptime() {
+      return (Date.now() - _processStartTime) / 1e3;
+    },
+    memoryUsage() {
+      return {
+        rss: 50 * 1024 * 1024,
+        heapTotal: 20 * 1024 * 1024,
+        heapUsed: 10 * 1024 * 1024,
+        external: 1 * 1024 * 1024,
+        arrayBuffers: 500 * 1024
+      };
+    },
+    cpuUsage(prev) {
+      const usage = {
+        user: 1e6,
+        system: 5e5
+      };
+      if (prev) {
+        return {
+          user: usage.user - prev.user,
+          system: usage.system - prev.system
+        };
+      }
+      return usage;
+    },
+    resourceUsage() {
+      return {
+        userCPUTime: 1e6,
+        systemCPUTime: 5e5,
+        maxRSS: 50 * 1024,
+        sharedMemorySize: 0,
+        unsharedDataSize: 0,
+        unsharedStackSize: 0,
+        minorPageFault: 0,
+        majorPageFault: 0,
+        swappedOut: 0,
+        fsRead: 0,
+        fsWrite: 0,
+        ipcSent: 0,
+        ipcReceived: 0,
+        signalsCount: 0,
+        voluntaryContextSwitches: 0,
+        involuntaryContextSwitches: 0
+      };
+    },
+    kill(pid, signal) {
+      if (pid !== process.pid) {
+        const err = new Error("Operation not permitted");
+        err.code = "EPERM";
+        err.errno = -1;
+        err.syscall = "kill";
+        throw err;
+      }
+      if (!signal || signal === "SIGTERM" || signal === 15) {
+        process.exit(143);
+      }
+      return true;
+    },
+    // EventEmitter methods
+    on(event, listener) {
+      return _addListener(event, listener);
+    },
+    once(event, listener) {
+      return _addListener(event, listener, true);
+    },
+    off(event, listener) {
+      return _removeListener(event, listener);
+    },
+    removeListener(event, listener) {
+      return _removeListener(event, listener);
+    },
+    removeAllListeners(event) {
+      if (event) {
+        delete _processListeners[event];
+        delete _processOnceListeners[event];
+      } else {
+        Object.keys(_processListeners).forEach((k) => delete _processListeners[k]);
+        Object.keys(_processOnceListeners).forEach(
+          (k) => delete _processOnceListeners[k]
+        );
+      }
+      return process;
+    },
+    addListener(event, listener) {
+      return _addListener(event, listener);
+    },
+    emit(event, ...args) {
+      return _emit(event, ...args);
+    },
+    listeners(event) {
+      return [
+        ..._processListeners[event] || [],
+        ..._processOnceListeners[event] || []
+      ];
+    },
+    listenerCount(event) {
+      return (_processListeners[event] || []).length + (_processOnceListeners[event] || []).length;
+    },
+    prependListener(event, listener) {
+      if (!_processListeners[event]) {
+        _processListeners[event] = [];
+      }
+      _processListeners[event].unshift(listener);
+      return process;
+    },
+    prependOnceListener(event, listener) {
+      if (!_processOnceListeners[event]) {
+        _processOnceListeners[event] = [];
+      }
+      _processOnceListeners[event].unshift(listener);
+      return process;
+    },
+    eventNames() {
+      return [
+        .../* @__PURE__ */ new Set([
+          ...Object.keys(_processListeners),
+          ...Object.keys(_processOnceListeners)
+        ])
+      ];
+    },
+    setMaxListeners() {
+      return process;
+    },
+    getMaxListeners() {
+      return 10;
+    },
+    rawListeners(event) {
+      return process.listeners(event);
+    },
+    // Stdio streams
+    stdout: _stdout,
+    stderr: _stderr,
+    stdin: _stdin,
+    // Process state
+    connected: false,
+    // Module info (will be set by createRequire)
+    mainModule: void 0,
+    // No-op methods for compatibility
+    emitWarning(warning) {
+      const msg = typeof warning === "string" ? warning : warning.message;
+      _emit("warning", { message: msg, name: "Warning" });
+    },
+    binding(name) {
+      const stubs = {
+        fs: {},
+        buffer: { Buffer: globalThis.Buffer },
+        process_wrap: {},
+        natives: {},
+        config: {},
+        uv: { UV_UDP_REUSEADDR: 4 },
+        constants: {},
+        crypto: {},
+        string_decoder: {},
+        os: {}
+      };
+      return stubs[name] || {};
+    },
+    _linkedBinding(name) {
+      return process.binding(name);
+    },
+    dlopen() {
+      throw new Error("process.dlopen is not supported");
+    },
+    hasUncaughtExceptionCaptureCallback() {
+      return false;
+    },
+    setUncaughtExceptionCaptureCallback() {
+    },
+    // Send for IPC (no-op)
+    send() {
+      return false;
+    },
+    disconnect() {
+    },
+    // Report
+    report: {
+      directory: "",
+      filename: "",
+      compact: false,
+      signal: "SIGUSR2",
+      reportOnFatalError: false,
+      reportOnSignal: false,
+      reportOnUncaughtException: false,
+      getReport() {
+        return {};
+      },
+      writeReport() {
+        return "";
+      }
+    },
+    // Debug port
+    debugPort: 9229,
+    // Internal state
+    _cwd: config2.cwd,
+    _umask: 18
+  };
+  process.memoryUsage.rss = function() {
+    return 50 * 1024 * 1024;
+  };
+  var process_default = process;
+  var _timerId = 0;
+  var _timers = /* @__PURE__ */ new Map();
+  var _intervals = /* @__PURE__ */ new Map();
+  var _queueMicrotask = typeof queueMicrotask === "function" ? queueMicrotask : function(fn) {
+    Promise.resolve().then(fn);
+  };
+  var TimerHandle = class {
+    _id;
+    _destroyed;
+    constructor(id) {
+      this._id = id;
+      this._destroyed = false;
+    }
+    ref() {
+      return this;
+    }
+    unref() {
+      return this;
+    }
+    hasRef() {
+      return true;
+    }
+    refresh() {
+      return this;
+    }
+    [Symbol.toPrimitive]() {
+      return this._id;
+    }
+  };
+  function setTimeout2(callback, _delay, ...args) {
+    const id = ++_timerId;
+    const handle = new TimerHandle(id);
+    _queueMicrotask(() => {
+      if (_timers.has(id)) {
+        _timers.delete(id);
+        try {
+          callback(...args);
+        } catch (_e) {
+        }
+      }
+    });
+    _timers.set(id, handle);
+    return handle;
+  }
+  function clearTimeout(timer) {
+    const id = timer && typeof timer === "object" && timer._id !== void 0 ? timer._id : timer;
+    _timers.delete(id);
+  }
+  function setInterval(callback, _delay, ...args) {
+    const id = ++_timerId;
+    const handle = new TimerHandle(id);
+    _intervals.set(id, handle);
+    _queueMicrotask(() => {
+      if (_intervals.has(id)) {
+        try {
+          callback(...args);
+        } catch (_e) {
+        }
+      }
+    });
+    return handle;
+  }
+  function clearInterval(timer) {
+    const id = timer && typeof timer === "object" && timer._id !== void 0 ? timer._id : timer;
+    _intervals.delete(id);
+  }
+  function setImmediate(callback, ...args) {
+    return setTimeout2(callback, 0, ...args);
+  }
+  function clearImmediate(id) {
+    clearTimeout(id);
+  }
+  var URL2 = class _URL {
+    href;
+    protocol;
+    host;
+    hostname;
+    port;
+    pathname;
+    search;
+    hash;
+    origin;
+    searchParams;
+    constructor(url, base) {
+      let urlStr = typeof url === "object" && url !== null && typeof url.toString === "function" ? url.toString() : String(url);
+      let fullUrl = urlStr;
+      if (base) {
+        const baseStr = typeof base === "object" && base !== null && typeof base.toString === "function" ? base.toString() : String(base);
+        let isAbsolute = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(urlStr);
+        if (urlStr.startsWith("file:") && !urlStr.startsWith("file://")) {
+          isAbsolute = false;
+          urlStr = urlStr.slice(5);
+        }
+        if (!isAbsolute) {
+          if (baseStr.startsWith("file://")) {
+            let basePath = baseStr.slice(7);
+            let resolvedPath;
+            if (urlStr.startsWith("/")) {
+              resolvedPath = urlStr;
+            } else {
+              let baseDir = basePath;
+              if (!baseDir.endsWith("/")) {
+                const lastSlash = baseDir.lastIndexOf("/");
+                baseDir = lastSlash >= 0 ? baseDir.slice(0, lastSlash + 1) : "/";
+              }
+              const combined = baseDir + urlStr;
+              const parts = combined.split("/");
+              const normalized = [];
+              for (const part of parts) {
+                if (part === "..") {
+                  normalized.pop();
+                } else if (part !== "." && part !== "") {
+                  normalized.push(part);
+                }
+              }
+              resolvedPath = "/" + normalized.join("/");
+            }
+            fullUrl = "file://" + resolvedPath;
+          } else {
+            const baseUrl = new _URL(baseStr);
+            if (urlStr.startsWith("/")) {
+              fullUrl = baseUrl.origin + urlStr;
+            } else {
+              fullUrl = baseStr.replace(/[^/]*$/, "") + urlStr;
+            }
+          }
+        }
+      }
+      let match = fullUrl.match(
+        /^(https?:)\/\/([^/:]+)(?::(\d+))?(\/[^?#]*)?(\?[^#]*)?(#.*)?$/
+      );
+      if (!match) {
+        const fileMatch = fullUrl.match(/^file:\/\/(\/?[^?#]*)?(\?[^#]*)?(#.*)?$/);
+        if (fileMatch) {
+          this.protocol = "file:";
+          this.host = "";
+          this.hostname = "";
+          this.port = "";
+          this.pathname = fileMatch[1] || "/";
+          this.search = fileMatch[2] || "";
+          this.hash = fileMatch[3] || "";
+          this.origin = "null";
+          this.href = "file://" + this.pathname + this.search + this.hash;
+          this.searchParams = new URLSearchParams(this.search);
+          return;
+        }
+        const bareFileMatch = fullUrl.match(/^file:(\/?[^?#]*)?(\?[^#]*)?(#.*)?$/);
+        if (bareFileMatch) {
+          this.protocol = "file:";
+          this.host = "";
+          this.hostname = "";
+          this.port = "";
+          this.pathname = bareFileMatch[1] || "/";
+          this.search = bareFileMatch[2] || "";
+          this.hash = bareFileMatch[3] || "";
+          this.origin = "null";
+          this.href = "file://" + this.pathname + this.search + this.hash;
+          this.searchParams = new URLSearchParams(this.search);
+          return;
+        }
+        throw new TypeError("Invalid URL: " + urlStr);
+      }
+      this.href = fullUrl;
+      this.protocol = match[1] || "";
+      this.host = match[2] + (match[3] ? ":" + match[3] : "");
+      this.hostname = match[2] || "";
+      this.port = match[3] || "";
+      this.pathname = match[4] || "/";
+      this.search = match[5] || "";
+      this.hash = match[6] || "";
+      this.origin = this.protocol + "//" + this.host;
+      this.searchParams = new URLSearchParams(this.search);
+    }
+    toString() {
+      return this.href;
+    }
+    toJSON() {
+      return this.href;
+    }
+  };
+  var URLSearchParams = class _URLSearchParams {
+    _params;
+    constructor(init) {
+      this._params = /* @__PURE__ */ new Map();
+      if (typeof init === "string") {
+        const params = init.startsWith("?") ? init.slice(1) : init;
+        for (const pair of params.split("&")) {
+          const [key, value] = pair.split("=").map(decodeURIComponent);
+          if (key) this._params.set(key, value || "");
+        }
+      } else if (init && typeof init === "object") {
+        if (init instanceof _URLSearchParams) {
+          for (const [key, value] of init.entries()) {
+            this._params.set(key, value);
+          }
+        } else {
+          for (const [key, value] of Object.entries(init)) {
+            this._params.set(key, value);
+          }
+        }
+      }
+    }
+    get(key) {
+      return this._params.get(key) || null;
+    }
+    set(key, value) {
+      this._params.set(key, value);
+    }
+    has(key) {
+      return this._params.has(key);
+    }
+    delete(key) {
+      this._params.delete(key);
+    }
+    append(key, value) {
+      this._params.set(key, value);
+    }
+    toString() {
+      return Array.from(this._params.entries()).map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
+    }
+    *entries() {
+      yield* this._params.entries();
+    }
+    *keys() {
+      yield* this._params.keys();
+    }
+    *values() {
+      yield* this._params.values();
+    }
+    forEach(cb) {
+      this._params.forEach((value, key) => cb(value, key, this));
+    }
+    [Symbol.iterator]() {
+      return this._params[Symbol.iterator]();
+    }
+  };
+  var TextEncoder = class {
+    encoding = "utf-8";
+    encode(str) {
+      const utf8 = [];
+      for (let i = 0; i < str.length; i++) {
+        let charCode = str.charCodeAt(i);
+        if (charCode < 128) {
+          utf8.push(charCode);
+        } else if (charCode < 2048) {
+          utf8.push(192 | charCode >> 6, 128 | charCode & 63);
+        } else if (charCode < 55296 || charCode >= 57344) {
+          utf8.push(
+            224 | charCode >> 12,
+            128 | charCode >> 6 & 63,
+            128 | charCode & 63
+          );
+        } else {
+          i++;
+          charCode = 65536 + ((charCode & 1023) << 10 | str.charCodeAt(i) & 1023);
+          utf8.push(
+            240 | charCode >> 18,
+            128 | charCode >> 12 & 63,
+            128 | charCode >> 6 & 63,
+            128 | charCode & 63
+          );
+        }
+      }
+      return new Uint8Array(utf8);
+    }
+    encodeInto(str, dest) {
+      const encoded = this.encode(str);
+      const len = Math.min(encoded.length, dest.length);
+      dest.set(encoded.subarray(0, len));
+      return { read: str.length, written: len };
+    }
+  };
+  var TextDecoder2 = class {
+    _encoding;
+    constructor(encoding) {
+      this._encoding = encoding || "utf-8";
+    }
+    get encoding() {
+      return this._encoding;
+    }
+    decode(input) {
+      if (!input) return "";
+      const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+      let result = "";
+      let i = 0;
+      while (i < bytes.length) {
+        const byte = bytes[i];
+        if (byte < 128) {
+          result += String.fromCharCode(byte);
+          i++;
+        } else if ((byte & 224) === 192) {
+          result += String.fromCharCode(
+            (byte & 31) << 6 | bytes[i + 1] & 63
+          );
+          i += 2;
+        } else if ((byte & 240) === 224) {
+          result += String.fromCharCode(
+            (byte & 15) << 12 | (bytes[i + 1] & 63) << 6 | bytes[i + 2] & 63
+          );
+          i += 3;
+        } else if ((byte & 248) === 240) {
+          const codePoint = (byte & 7) << 18 | (bytes[i + 1] & 63) << 12 | (bytes[i + 2] & 63) << 6 | bytes[i + 3] & 63;
+          const offset = codePoint - 65536;
+          result += String.fromCharCode(
+            55296 + (offset >> 10),
+            56320 + (offset & 1023)
+          );
+          i += 4;
+        } else {
+          result += "?";
+          i++;
+        }
+      }
+      return result;
+    }
+  };
+  var Buffer3 = class _Buffer extends Uint8Array {
+    static isBuffer(obj) {
+      return obj instanceof _Buffer || obj instanceof Uint8Array;
+    }
+    static from(value, _encodingOrOffset, _length) {
+      if (typeof value === "string") {
+        const encoder = new TextEncoder();
+        const arr = encoder.encode(value);
+        return new _Buffer(arr);
+      }
+      if (ArrayBuffer.isView(value)) {
+        return new _Buffer(value.buffer, value.byteOffset, value.byteLength);
+      }
+      if (value instanceof ArrayBuffer) {
+        return new _Buffer(value);
+      }
+      if (Array.isArray(value)) {
+        return new _Buffer(value);
+      }
+      return new _Buffer(0);
+    }
+    static alloc(size, fill, _encoding) {
+      const buf = new _Buffer(size);
+      if (fill !== void 0) {
+        buf.fill(typeof fill === "number" ? fill : 0);
+      }
+      return buf;
+    }
+    static allocUnsafe(size) {
+      return new _Buffer(size);
+    }
+    static concat(list, totalLength) {
+      if (totalLength === void 0) {
+        totalLength = list.reduce((acc, buf) => acc + buf.length, 0);
+      }
+      const result = new _Buffer(totalLength);
+      let offset = 0;
+      for (const buf of list) {
+        result.set(buf, offset);
+        offset += buf.length;
+      }
+      return result;
+    }
+    static byteLength(string, _encoding) {
+      if (typeof string !== "string") {
+        return string.length;
+      }
+      const encoder = new TextEncoder();
+      return encoder.encode(string).length;
+    }
+    toString(encoding, start, end) {
+      const decoder = new TextDecoder2(
+        encoding === "utf8" || encoding === "utf-8" ? "utf-8" : "utf-8"
+      );
+      const slice = start !== void 0 || end !== void 0 ? this.subarray(start || 0, end) : this;
+      return decoder.decode(slice);
+    }
+    write(string, offset, length, _encoding) {
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(string);
+      const writeLen = Math.min(
+        bytes.length,
+        length !== void 0 ? length : this.length - (offset || 0)
+      );
+      this.set(bytes.subarray(0, writeLen), offset || 0);
+      return writeLen;
+    }
+    copy(target, targetStart, sourceStart, sourceEnd) {
+      targetStart = targetStart || 0;
+      sourceStart = sourceStart || 0;
+      sourceEnd = sourceEnd || this.length;
+      const bytes = this.subarray(sourceStart, sourceEnd);
+      target.set(bytes, targetStart);
+      return bytes.length;
+    }
+    slice(start, end) {
+      return new _Buffer(
+        this.buffer,
+        this.byteOffset + (start || 0),
+        (end !== void 0 ? end : this.length) - (start || 0)
+      );
+    }
+    equals(other) {
+      if (this.length !== other.length) return false;
+      for (let i = 0; i < this.length; i++) {
+        if (this[i] !== other[i]) return false;
+      }
+      return true;
+    }
+    compare(other) {
+      const len = Math.min(this.length, other.length);
+      for (let i = 0; i < len; i++) {
+        if (this[i] < other[i]) return -1;
+        if (this[i] > other[i]) return 1;
+      }
+      if (this.length < other.length) return -1;
+      if (this.length > other.length) return 1;
+      return 0;
+    }
+    fill(value, start, end, _encoding) {
+      start = start || 0;
+      end = end !== void 0 ? end : this.length;
+      const fillValue = typeof value === "number" ? value : 0;
+      for (let i = start; i < end; i++) {
+        this[i] = fillValue;
+      }
+      return this;
+    }
+  };
+  var cryptoPolyfill = {
+    getRandomValues(array) {
+      const bytes = new Uint8Array(
+        array.buffer,
+        array.byteOffset,
+        array.byteLength
+      );
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = Math.floor(Math.random() * 256);
+      }
+      return array;
+    },
+    randomUUID() {
+      const bytes = new Uint8Array(16);
+      cryptoPolyfill.getRandomValues(bytes);
+      bytes[6] = bytes[6] & 15 | 64;
+      bytes[8] = bytes[8] & 63 | 128;
+      const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+      return hex.slice(0, 8) + "-" + hex.slice(8, 12) + "-" + hex.slice(12, 16) + "-" + hex.slice(16, 20) + "-" + hex.slice(20);
+    },
+    subtle: {
+      digest() {
+        throw new Error("crypto.subtle.digest not supported in sandbox");
+      },
+      encrypt() {
+        throw new Error("crypto.subtle.encrypt not supported in sandbox");
+      },
+      decrypt() {
+        throw new Error("crypto.subtle.decrypt not supported in sandbox");
+      }
+    }
+  };
+  function setupGlobals() {
+    const g = globalThis;
+    g.process = process;
+    g.setTimeout = setTimeout2;
+    g.clearTimeout = clearTimeout;
+    g.setInterval = setInterval;
+    g.clearInterval = clearInterval;
+    g.setImmediate = setImmediate;
+    g.clearImmediate = clearImmediate;
+    if (typeof g.queueMicrotask === "undefined") {
+      g.queueMicrotask = _queueMicrotask;
+    }
+    if (typeof g.URL === "undefined") {
+      g.URL = URL2;
+    }
+    if (typeof g.URLSearchParams === "undefined") {
+      g.URLSearchParams = URLSearchParams;
+    }
+    if (typeof g.TextEncoder === "undefined") {
+      g.TextEncoder = TextEncoder;
+    }
+    if (typeof g.TextDecoder === "undefined") {
+      g.TextDecoder = TextDecoder2;
+    }
+    if (typeof g.Buffer === "undefined") {
+      g.Buffer = Buffer3;
+    }
+    if (typeof g.crypto === "undefined") {
+      g.crypto = cryptoPolyfill;
+    } else if (typeof g.crypto.getRandomValues === "undefined") {
+      g.crypto.getRandomValues = cryptoPolyfill.getRandomValues;
+      g.crypto.randomUUID = cryptoPolyfill.randomUUID;
+    }
+  }
+
+  // bridge/module.ts
+  function _pathDirname(p) {
+    const lastSlash = p.lastIndexOf("/");
+    if (lastSlash === -1) return ".";
+    if (lastSlash === 0) return "/";
+    return p.slice(0, lastSlash);
+  }
+  function _parseFileUrl(url) {
+    if (url.startsWith("file://")) {
+      let path = url.slice(7);
+      if (path.startsWith("/")) {
+        return path;
+      }
+      return "/" + path;
+    }
+    return url;
+  }
+  function createRequire(filename) {
+    if (typeof filename !== "string" && !(filename instanceof URL)) {
+      throw new TypeError("filename must be a string or URL");
+    }
+    const filepath = _parseFileUrl(String(filename));
+    const dirname = _pathDirname(filepath);
+    const builtins = [
+      "fs",
+      "path",
+      "os",
+      "events",
+      "util",
+      "http",
+      "https",
+      "dns",
+      "child_process",
+      "stream",
+      "buffer",
+      "url",
+      "querystring",
+      "crypto",
+      "zlib",
+      "assert",
+      "tty",
+      "net",
+      "tls"
+    ];
+    const resolvePaths = function(request) {
+      if (builtins.includes(request) || request.startsWith("node:")) {
+        return null;
+      }
+      if (request.startsWith("./") || request.startsWith("../") || request.startsWith("/")) {
+        return [dirname];
+      }
+      const paths = [];
+      let current = dirname;
+      while (current !== "/") {
+        paths.push(current + "/node_modules");
+        current = _pathDirname(current);
+      }
+      paths.push("/node_modules");
+      return paths;
+    };
+    const resolve = function(request, _options) {
+      const resolved = _resolveModule.applySyncPromise(void 0, [
+        request,
+        dirname
+      ]);
+      if (resolved === null) {
+        const err = new Error("Cannot find module '" + request + "'");
+        err.code = "MODULE_NOT_FOUND";
+        throw err;
+      }
+      return resolved;
+    };
+    resolve.paths = resolvePaths;
+    const requireFn = function(request) {
+      return _requireFrom(request, dirname);
+    };
+    requireFn.resolve = resolve;
+    requireFn.cache = _moduleCache;
+    requireFn.main = void 0;
+    requireFn.extensions = {
+      ".js": function(_module, _filename) {
+      },
+      ".json": function(_module, _filename) {
+      },
+      ".node": function(_module, _filename) {
+        throw new Error(".node extensions are not supported in sandbox");
+      }
+    };
+    return requireFn;
+  }
+  var Module = class _Module {
+    id;
+    path;
+    exports;
+    filename;
+    loaded;
+    children;
+    paths;
+    parent;
+    isPreloading;
+    constructor(id, parent) {
+      this.id = id;
+      this.path = _pathDirname(id);
+      this.exports = {};
+      this.filename = id;
+      this.loaded = false;
+      this.children = [];
+      this.paths = [];
+      this.parent = parent;
+      this.isPreloading = false;
+      let current = this.path;
+      while (current !== "/") {
+        this.paths.push(current + "/node_modules");
+        current = _pathDirname(current);
+      }
+      this.paths.push("/node_modules");
+    }
+    require(request) {
+      return _requireFrom(request, this.path);
+    }
+    _compile(content, filename) {
+      const wrapper = new Function(
+        "exports",
+        "require",
+        "module",
+        "__filename",
+        "__dirname",
+        content
+      );
+      const moduleRequire = (request) => _requireFrom(request, this.path);
+      moduleRequire.resolve = (request) => {
+        const resolved = _resolveModule.applySyncPromise(void 0, [
+          request,
+          this.path
+        ]);
+        if (resolved === null) {
+          const err = new Error("Cannot find module '" + request + "'");
+          err.code = "MODULE_NOT_FOUND";
+          throw err;
+        }
+        return resolved;
+      };
+      wrapper(this.exports, moduleRequire, this, filename, this.path);
+      this.loaded = true;
+      return this.exports;
+    }
+    static _extensions = {
+      ".js": function(module, filename) {
+        const fs2 = _requireFrom("fs", "/");
+        const content = fs2.readFileSync(filename, "utf8");
+        module._compile(content, filename);
+      },
+      ".json": function(module, filename) {
+        const fs2 = _requireFrom("fs", "/");
+        const content = fs2.readFileSync(filename, "utf8");
+        module.exports = JSON.parse(content);
+      },
+      ".node": function() {
+        throw new Error(".node extensions are not supported in sandbox");
+      }
+    };
+    static _cache = typeof _moduleCache !== "undefined" ? _moduleCache : {};
+    static _resolveFilename(request, parent, _isMain, _options) {
+      const parentDir = parent && parent.path ? parent.path : "/";
+      const resolved = _resolveModule.applySyncPromise(void 0, [
+        request,
+        parentDir
+      ]);
+      if (resolved === null) {
+        const err = new Error("Cannot find module '" + request + "'");
+        err.code = "MODULE_NOT_FOUND";
+        throw err;
+      }
+      return resolved;
+    }
+    static wrap(content) {
+      return "(function (exports, require, module, __filename, __dirname) { " + content + "\n});";
+    }
+    static builtinModules = [
+      "assert",
+      "buffer",
+      "child_process",
+      "crypto",
+      "dns",
+      "events",
+      "fs",
+      "http",
+      "https",
+      "net",
+      "os",
+      "path",
+      "querystring",
+      "stream",
+      "string_decoder",
+      "timers",
+      "tls",
+      "tty",
+      "url",
+      "util",
+      "zlib",
+      "vm",
+      "module"
+    ];
+    static isBuiltin(moduleName) {
+      const name = moduleName.replace(/^node:/, "");
+      return _Module.builtinModules.includes(name);
+    }
+    static createRequire = createRequire;
+    static syncBuiltinESMExports() {
+    }
+    static findSourceMap(_path) {
+      return void 0;
+    }
+    static _nodeModulePaths(from) {
+      const paths = [];
+      let current = from;
+      while (current !== "/") {
+        paths.push(current + "/node_modules");
+        current = _pathDirname(current);
+        if (current === ".") break;
+      }
+      paths.push("/node_modules");
+      return paths;
+    }
+    static _load(request, parent, _isMain) {
+      const parentDir = parent && parent.path ? parent.path : "/";
+      return _requireFrom(request, parentDir);
+    }
+    static runMain() {
+    }
+  };
+  var SourceMap = class {
+    _payload;
+    constructor(payload) {
+      this._payload = payload;
+    }
+    get payload() {
+      return this._payload;
+    }
+    set payload(value) {
+      this._payload = value;
+    }
+    findEntry(_line, _column) {
+      return {};
+    }
+  };
+  var moduleModule = {
+    Module,
+    createRequire,
+    // Module._extensions (deprecated alias)
+    _extensions: Module._extensions,
+    // Module._cache reference
+    _cache: Module._cache,
+    // Built-in module list
+    builtinModules: Module.builtinModules,
+    // isBuiltin check
+    isBuiltin: Module.isBuiltin,
+    // Module._resolveFilename (internal but sometimes used)
+    _resolveFilename: Module._resolveFilename,
+    // wrap function
+    wrap: Module.wrap,
+    // syncBuiltinESMExports (stub for ESM interop)
+    syncBuiltinESMExports: Module.syncBuiltinESMExports,
+    // findSourceMap (stub)
+    findSourceMap: Module.findSourceMap,
+    // SourceMap class (stub)
+    SourceMap
+  };
+  var module_default = moduleModule;
+
+  // bridge/index.ts
   var index_default = fs_default;
   return __toCommonJS(index_exports);
 })();
