@@ -8,6 +8,7 @@ import {
   type ProcessConfig,
 } from "./process-polyfill.js";
 import { generateChildProcessPolyfill } from "./child-process-polyfill.js";
+import { generateNetworkPolyfill } from "./network-polyfill.js";
 
 // Interface for command executor (like WasixInstance)
 export interface CommandExecutor {
@@ -15,11 +16,44 @@ export interface CommandExecutor {
   run(command: string, args?: string[]): Promise<{ stdout: string; stderr: string; code: number }>;
 }
 
+// Interface for network adapter (fetch, http, dns)
+export interface NetworkAdapter {
+  fetch(url: string, options: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string | null;
+  }): Promise<{
+    ok: boolean;
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    body: string;
+    url: string;
+    redirected: boolean;
+  }>;
+  dnsLookup(hostname: string): Promise<{
+    address: string;
+    family: number;
+  } | { error: string; code: string }>;
+  httpRequest(url: string, options: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string | null;
+  }): Promise<{
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    body: string;
+    url: string;
+  }>;
+}
+
 export interface NodeProcessOptions {
   memoryLimit?: number; // MB, default 128
   systemBridge?: SystemBridge; // For accessing virtual filesystem
   processConfig?: ProcessConfig; // Process object configuration
   commandExecutor?: CommandExecutor; // For child_process support (e.g., WasixInstance)
+  networkAdapter?: NetworkAdapter; // For network support (fetch, http, https, dns)
 }
 
 /**
@@ -100,6 +134,7 @@ export class NodeProcess {
   private systemBridge?: SystemBridge;
   private processConfig: ProcessConfig;
   private commandExecutor?: CommandExecutor;
+  private networkAdapter?: NetworkAdapter;
   // Cache for compiled ESM modules (per isolate)
   private esmModuleCache: Map<string, ivm.Module> = new Map();
 
@@ -109,6 +144,7 @@ export class NodeProcess {
     this.systemBridge = options.systemBridge;
     this.processConfig = options.processConfig ?? {};
     this.commandExecutor = options.commandExecutor;
+    this.networkAdapter = options.networkAdapter;
   }
 
   /**
@@ -116,6 +152,13 @@ export class NodeProcess {
    */
   setCommandExecutor(executor: CommandExecutor): void {
     this.commandExecutor = executor;
+  }
+
+  /**
+   * Set the network adapter for fetch/http/https/dns support
+   */
+  setNetworkAdapter(adapter: NetworkAdapter): void {
+    this.networkAdapter = adapter;
   }
 
   /**
@@ -414,6 +457,11 @@ export class NodeProcess {
           return null;
         }
 
+        // Network modules are handled specially
+        if (name === "http" || name === "https" || name === "dns") {
+          return null;
+        }
+
         if (!hasPolyfill(name)) {
           return null;
         }
@@ -556,6 +604,45 @@ export class NodeProcess {
       await context.eval(childProcessPolyfillCode);
     }
 
+    // Set up network References if we have a NetworkAdapter
+    if (this.networkAdapter) {
+      const adapter = this.networkAdapter;
+
+      // Reference for fetch - returns JSON string for transfer
+      const networkFetchRef = new ivm.Reference(
+        async (url: string, optionsJson: string): Promise<string> => {
+          const options = JSON.parse(optionsJson);
+          const result = await adapter.fetch(url, options);
+          return JSON.stringify(result);
+        }
+      );
+
+      // Reference for DNS lookup - returns JSON string for transfer
+      const networkDnsLookupRef = new ivm.Reference(
+        async (hostname: string): Promise<string> => {
+          const result = await adapter.dnsLookup(hostname);
+          return JSON.stringify(result);
+        }
+      );
+
+      // Reference for HTTP request - returns JSON string for transfer
+      const networkHttpRequestRef = new ivm.Reference(
+        async (url: string, optionsJson: string): Promise<string> => {
+          const options = JSON.parse(optionsJson);
+          const result = await adapter.httpRequest(url, options);
+          return JSON.stringify(result);
+        }
+      );
+
+      await jail.set("_networkFetchRaw", networkFetchRef);
+      await jail.set("_networkDnsLookupRaw", networkDnsLookupRef);
+      await jail.set("_networkHttpRequestRaw", networkHttpRequestRef);
+
+      // Initialize network polyfill
+      const networkPolyfillCode = generateNetworkPolyfill();
+      await context.eval(networkPolyfillCode);
+    }
+
     // Set up the require system with dynamic CommonJS resolution
     await context.eval(`
       globalThis._moduleCache = {};
@@ -605,6 +692,36 @@ export class NodeProcess {
           }
           _moduleCache['child_process'] = _childProcessModule;
           return _childProcessModule;
+        }
+
+        // Special handling for http module
+        if (name === 'http') {
+          if (_moduleCache['http']) return _moduleCache['http'];
+          if (typeof _httpModule === 'undefined') {
+            throw new Error('http module requires NetworkAdapter to be configured');
+          }
+          _moduleCache['http'] = _httpModule;
+          return _httpModule;
+        }
+
+        // Special handling for https module
+        if (name === 'https') {
+          if (_moduleCache['https']) return _moduleCache['https'];
+          if (typeof _httpsModule === 'undefined') {
+            throw new Error('https module requires NetworkAdapter to be configured');
+          }
+          _moduleCache['https'] = _httpsModule;
+          return _httpsModule;
+        }
+
+        // Special handling for dns module
+        if (name === 'dns') {
+          if (_moduleCache['dns']) return _moduleCache['dns'];
+          if (typeof _dnsModule === 'undefined') {
+            throw new Error('dns module requires NetworkAdapter to be configured');
+          }
+          _moduleCache['dns'] = _dnsModule;
+          return _dnsModule;
         }
 
         // Try to load polyfill first (for built-in modules like path, events, etc.)

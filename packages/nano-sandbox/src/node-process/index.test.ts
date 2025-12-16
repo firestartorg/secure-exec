@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import { init, Directory } from "@wasmer/sdk/node";
-import { NodeProcess } from "./index";
+import { NodeProcess, type NetworkAdapter } from "./index";
 import { SystemBridge } from "../system-bridge/index";
 
 describe("NodeProcess", () => {
@@ -1196,7 +1196,460 @@ describe("NodeProcess", () => {
           hasStdout: true,
           hasStderr: true
         });
-        expect(result.exports.stdoutStr).toContain("test");
+        expect((result.exports as { stdoutStr: string }).stdoutStr).toContain("test");
+      });
+    });
+  });
+
+  describe("Phase 4: Networking via Host Bridge", () => {
+    // Mock network adapter for testing
+    const mockNetworkAdapter: NetworkAdapter = {
+      async fetch(url, options) {
+        // Simple mock fetch implementation
+        if (url === "https://example.com/api/test") {
+          return {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            headers: { "content-type": "application/json" } as Record<string, string>,
+            body: JSON.stringify({ message: "Hello from mock!" }),
+            url,
+            redirected: false
+          };
+        }
+        if (url === "https://example.com/api/post") {
+          return {
+            ok: true,
+            status: 201,
+            statusText: "Created",
+            headers: { "content-type": "application/json" } as Record<string, string>,
+            body: JSON.stringify({ received: options.body }),
+            url,
+            redirected: false
+          };
+        }
+        return {
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          headers: {} as Record<string, string>,
+          body: "Not Found",
+          url,
+          redirected: false
+        };
+      },
+      async dnsLookup(hostname) {
+        if (hostname === "example.com") {
+          return { address: "93.184.216.34", family: 4 };
+        }
+        if (hostname === "localhost") {
+          return { address: "127.0.0.1", family: 4 };
+        }
+        return { error: "ENOTFOUND", code: "ENOTFOUND" };
+      },
+      async httpRequest(url, _options) {
+        // Simple mock http request implementation
+        if (url.includes("example.com")) {
+          return {
+            status: 200,
+            statusText: "OK",
+            headers: { "content-type": "text/html" } as Record<string, string>,
+            body: "<html><body>Hello from mock http!</body></html>",
+            url
+          };
+        }
+        return {
+          status: 404,
+          statusText: "Not Found",
+          headers: {} as Record<string, string>,
+          body: "Not Found",
+          url
+        };
+      }
+    };
+
+    describe("require network modules", () => {
+      it("should load http module when NetworkAdapter is provided", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const http = require('http');
+          module.exports = {
+            hasRequest: typeof http.request === 'function',
+            hasGet: typeof http.get === 'function',
+            hasMethods: Array.isArray(http.METHODS)
+          };
+        `);
+        expect(result.exports).toEqual({
+          hasRequest: true,
+          hasGet: true,
+          hasMethods: true
+        });
+      });
+
+      it("should load https module when NetworkAdapter is provided", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const https = require('https');
+          module.exports = {
+            hasRequest: typeof https.request === 'function',
+            hasGet: typeof https.get === 'function'
+          };
+        `);
+        expect(result.exports).toEqual({
+          hasRequest: true,
+          hasGet: true
+        });
+      });
+
+      it("should load dns module when NetworkAdapter is provided", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const dns = require('dns');
+          module.exports = {
+            hasLookup: typeof dns.lookup === 'function',
+            hasResolve: typeof dns.resolve === 'function',
+            hasPromises: typeof dns.promises === 'object'
+          };
+        `);
+        expect(result.exports).toEqual({
+          hasLookup: true,
+          hasResolve: true,
+          hasPromises: true
+        });
+      });
+
+      it("should throw when http is required without NetworkAdapter", async () => {
+        proc = new NodeProcess({});
+        const result = await proc.run(`
+          try {
+            const http = require('http');
+            module.exports = { error: false };
+          } catch (e) {
+            module.exports = { error: true, message: e.message };
+          }
+        `);
+        expect(result.exports).toMatchObject({ error: true });
+        expect((result.exports as { message: string }).message).toContain("NetworkAdapter");
+      });
+
+      it("should throw when https is required without NetworkAdapter", async () => {
+        proc = new NodeProcess({});
+        const result = await proc.run(`
+          try {
+            const https = require('https');
+            module.exports = { error: false };
+          } catch (e) {
+            module.exports = { error: true, message: e.message };
+          }
+        `);
+        expect(result.exports).toMatchObject({ error: true });
+        expect((result.exports as { message: string }).message).toContain("NetworkAdapter");
+      });
+
+      it("should throw when dns is required without NetworkAdapter", async () => {
+        proc = new NodeProcess({});
+        const result = await proc.run(`
+          try {
+            const dns = require('dns');
+            module.exports = { error: false };
+          } catch (e) {
+            module.exports = { error: true, message: e.message };
+          }
+        `);
+        expect(result.exports).toMatchObject({ error: true });
+        expect((result.exports as { message: string }).message).toContain("NetworkAdapter");
+      });
+    });
+
+    describe("fetch", () => {
+      it("should provide global fetch function", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          (async () => {
+            const response = await fetch('https://example.com/api/test');
+            const data = await response.json();
+            module.exports = {
+              ok: response.ok,
+              status: response.status,
+              data
+            };
+          })();
+        `);
+        expect(result.exports).toMatchObject({
+          ok: true,
+          status: 200,
+          data: { message: "Hello from mock!" }
+        });
+      });
+
+      it("should support fetch with options", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          (async () => {
+            const response = await fetch('https://example.com/api/post', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ test: 'data' })
+            });
+            const data = await response.json();
+            module.exports = {
+              ok: response.ok,
+              status: response.status,
+              data
+            };
+          })();
+        `);
+        expect(result.exports).toMatchObject({
+          ok: true,
+          status: 201
+        });
+      });
+
+      it("should handle fetch errors", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          (async () => {
+            const response = await fetch('https://example.com/api/notfound');
+            module.exports = {
+              ok: response.ok,
+              status: response.status
+            };
+          })();
+        `);
+        expect(result.exports).toMatchObject({
+          ok: false,
+          status: 404
+        });
+      });
+    });
+
+    describe("dns", () => {
+      it("should resolve hostname with dns.lookup callback", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const dns = require('dns');
+          (async () => {
+            await new Promise((resolve, reject) => {
+              dns.lookup('example.com', (err, address, family) => {
+                if (err) {
+                  module.exports = { error: err.message };
+                  reject(err);
+                } else {
+                  module.exports = { address, family };
+                  resolve();
+                }
+              });
+            });
+          })();
+        `);
+        expect(result.exports).toEqual({
+          address: "93.184.216.34",
+          family: 4
+        });
+      });
+
+      it("should resolve hostname with dns.promises.lookup", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const dns = require('dns');
+          (async () => {
+            const result = await dns.promises.lookup('localhost');
+            module.exports = result;
+          })();
+        `);
+        expect(result.exports).toEqual({
+          address: "127.0.0.1",
+          family: 4
+        });
+      });
+
+      it("should handle dns lookup errors", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const dns = require('dns');
+          (async () => {
+            await new Promise((resolve) => {
+              dns.lookup('nonexistent.invalid', (err, address) => {
+                if (err) {
+                  module.exports = { error: true, code: err.code };
+                } else {
+                  module.exports = { error: false, address };
+                }
+                resolve();
+              });
+            });
+          })();
+        `);
+        expect(result.exports).toMatchObject({
+          error: true,
+          code: "ENOTFOUND"
+        });
+      });
+    });
+
+    describe("http", () => {
+      it("should make http.get requests", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const http = require('http');
+          (async () => {
+            await new Promise((resolve) => {
+              http.get({
+                hostname: 'example.com',
+                port: 80,
+                path: '/',
+                method: 'GET'
+              }, (res) => {
+                let body = '';
+                res.on('data', (chunk) => { body += chunk.toString(); });
+                res.on('end', () => {
+                  module.exports = {
+                    status: res.statusCode,
+                    hasBody: body.length > 0
+                  };
+                  resolve();
+                });
+              });
+            });
+          })();
+        `);
+        expect(result.exports).toMatchObject({
+          status: 200,
+          hasBody: true
+        });
+      });
+
+      it("should support http.request with options", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const http = require('http');
+          (async () => {
+            await new Promise((resolve) => {
+              const req = http.request({
+                hostname: 'example.com',
+                port: 80,
+                path: '/',
+                method: 'GET'
+              }, (res) => {
+                let body = '';
+                res.on('data', (chunk) => { body += chunk.toString(); });
+                res.on('end', () => {
+                  module.exports = {
+                    status: res.statusCode,
+                    statusMessage: res.statusMessage,
+                    hasHeaders: res.headers !== undefined
+                  };
+                  resolve();
+                });
+              });
+              req.end();
+            });
+          })();
+        `);
+        expect(result.exports).toMatchObject({
+          status: 200,
+          statusMessage: "OK",
+          hasHeaders: true
+        });
+      });
+    });
+
+    describe("https", () => {
+      it("should make https.get requests", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const https = require('https');
+          (async () => {
+            await new Promise((resolve) => {
+              https.get({
+                hostname: 'example.com',
+                port: 443,
+                path: '/',
+                method: 'GET'
+              }, (res) => {
+                let body = '';
+                res.on('data', (chunk) => { body += chunk.toString(); });
+                res.on('end', () => {
+                  module.exports = {
+                    status: res.statusCode,
+                    hasBody: body.length > 0
+                  };
+                  resolve();
+                });
+              });
+            });
+          })();
+        `);
+        expect(result.exports).toMatchObject({
+          status: 200,
+          hasBody: true
+        });
+      });
+    });
+
+    describe("Headers, Request, Response classes", () => {
+      it("should provide Headers class", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const headers = new Headers({ 'Content-Type': 'application/json' });
+          headers.set('X-Custom', 'test');
+          module.exports = {
+            hasGet: typeof headers.get === 'function',
+            contentType: headers.get('content-type'),
+            custom: headers.get('x-custom')
+          };
+        `);
+        expect(result.exports).toEqual({
+          hasGet: true,
+          contentType: "application/json",
+          custom: "test"
+        });
+      });
+
+      it("should provide Request class", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          const request = new Request('https://example.com/api', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          module.exports = {
+            url: request.url,
+            method: request.method,
+            hasHeaders: request.headers instanceof Headers
+          };
+        `);
+        expect(result.exports).toEqual({
+          url: "https://example.com/api",
+          method: "POST",
+          hasHeaders: true
+        });
+      });
+
+      it("should provide Response class", async () => {
+        proc = new NodeProcess({ networkAdapter: mockNetworkAdapter });
+        const result = await proc.run(`
+          (async () => {
+            const response = new Response('{"test": "data"}', {
+              status: 201,
+              statusText: 'Created',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            const json = await response.json();
+            module.exports = {
+              ok: response.ok,
+              status: response.status,
+              statusText: response.statusText,
+              json
+            };
+          })();
+        `);
+        expect(result.exports).toEqual({
+          ok: true,
+          status: 201,
+          statusText: "Created",
+          json: { test: "data" }
+        });
       });
     });
   });
