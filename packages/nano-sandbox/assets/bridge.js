@@ -4106,8 +4106,19 @@ var bridge = (() => {
     }
   };
   var Agent = class {
-    constructor() {
-      throw new Error("http.Agent is not implemented in sandbox (connection pooling not supported)");
+    maxSockets;
+    maxFreeSockets;
+    keepAlive;
+    keepAliveMsecs;
+    timeout;
+    constructor(options) {
+      this.keepAlive = options?.keepAlive ?? false;
+      this.keepAliveMsecs = options?.keepAliveMsecs ?? 1e3;
+      this.maxSockets = options?.maxSockets ?? Infinity;
+      this.maxFreeSockets = options?.maxFreeSockets ?? 256;
+      this.timeout = options?.timeout ?? -1;
+    }
+    destroy() {
     }
   };
   function createHttpModule(_protocol) {
@@ -4164,7 +4175,7 @@ var bridge = (() => {
         throw new Error("http.createServer is not supported in sandbox");
       },
       Agent,
-      globalAgent: {},
+      globalAgent: new Agent({ keepAlive: false }),
       IncomingMessage,
       ClientRequest,
       METHODS: ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],

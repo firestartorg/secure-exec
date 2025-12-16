@@ -11,7 +11,6 @@
 ## Node.js polyfills
 - worker_threads - not available
 - crypto.subtle (Web Crypto API) - requires native crypto, not available in isolated-vm
-- http.Agent / https.Agent - connection pooling not supported (currently throws "not implemented")
 - module.SourceMap - source map parsing not implemented (currently throws "not implemented")
 - child_process streams - stdin/stdout/stderr are simplified stubs (buffer everything, emit on completion)
 - read Node.js API docs (https://nodejs.org/api/all.json) and write a script to verify import/exports match official Node.js modules (could use TypeScript types)

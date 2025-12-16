@@ -694,10 +694,31 @@ export class ClientRequest {
   }
 }
 
-// Agent class - not implemented (connection pooling not supported in sandbox)
+// Agent class - no-op stub (connection pooling not applicable with fetch-based implementation)
 class Agent {
-  constructor() {
-    throw new Error("http.Agent is not implemented in sandbox (connection pooling not supported)");
+  maxSockets: number;
+  maxFreeSockets: number;
+  keepAlive: boolean;
+  keepAliveMsecs: number;
+  timeout: number;
+
+  constructor(options?: {
+    keepAlive?: boolean;
+    keepAliveMsecs?: number;
+    maxSockets?: number;
+    maxFreeSockets?: number;
+    timeout?: number;
+  }) {
+    // Accept options but ignore them - our fetch-based implementation doesn't use connection pooling
+    this.keepAlive = options?.keepAlive ?? false;
+    this.keepAliveMsecs = options?.keepAliveMsecs ?? 1000;
+    this.maxSockets = options?.maxSockets ?? Infinity;
+    this.maxFreeSockets = options?.maxFreeSockets ?? 256;
+    this.timeout = options?.timeout ?? -1;
+  }
+
+  destroy(): void {
+    // no-op
   }
 }
 
@@ -759,7 +780,7 @@ function createHttpModule(_protocol: string): Partial<typeof nodeHttp> {
     },
 
     Agent,
-    globalAgent: {},
+    globalAgent: new Agent({ keepAlive: false }),
     IncomingMessage: IncomingMessage as unknown as typeof nodeHttp.IncomingMessage,
     ClientRequest: ClientRequest as unknown as typeof nodeHttp.ClientRequest,
 
