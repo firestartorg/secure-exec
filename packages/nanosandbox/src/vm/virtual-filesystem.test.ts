@@ -391,7 +391,7 @@ describe("VirtualFileSystem", () => {
 			);
 
 			// This tests the truncation bug workaround in writeFile
-			// See: https://github.com/wasmerio/wasmer/issues/3326
+			// Bug: wasmer-js Directory.writeFile missing truncate(true)
 			vfs.writeFile("/overwrite.txt", "short");
 			expect(await vfs.readTextFile("/overwrite.txt")).toBe("short");
 		});

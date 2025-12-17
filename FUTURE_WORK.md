@@ -24,6 +24,7 @@
 ## WASM/bash
 - batch commands hang - `bash -c "echo hello"` never returns from instance.wait() in WASI/WASIX bash. interactive mode works fine
 - WASM memory limits - memoryLimit is plumbed through but not yet enforced on WASM side
+- wasmer-js Directory.writeFile missing truncate(true) - overwriting a file with shorter content leaves old bytes at the end. Bug is in wasmer-js src/fs/directory.rs: open_options uses .write(true).create(true) but not .truncate(true). Workaround: delete file before writing. See virtual-filesystem.ts
 
 ## other
 - get claude code cli working in this emulator
