@@ -7,10 +7,30 @@
  * In WASM, the Directory is mounted at /data, so:
  * - Files written to Directory at /foo.txt appear at /data/foo.txt in WASM
  * - This VirtualFileSystem accepts both paths and normalizes them
+ *
+ * For paths NOT in /data (e.g., /usr/bin from webc), it falls back to
+ * shell commands (cat, ls) via the runShellCommand callback.
  */
 import type { Directory } from "@wasmer/sdk/node";
 import type { VirtualFileSystem } from "sandboxed-node";
 import { DATA_MOUNT_PATH } from "../wasix/index.js";
+
+/**
+ * Result from running a shell command
+ */
+export interface ShellResult {
+	stdout: string;
+	stderr: string;
+	code: number;
+}
+
+/**
+ * Check if a path is in the Directory mount (starts with /data or is a direct path)
+ * Paths NOT starting with /data that also don't exist in Directory need shell fallback
+ */
+function isDataPath(path: string): boolean {
+	return path.startsWith(DATA_MOUNT_PATH + "/") || path === DATA_MOUNT_PATH;
+}
 
 /**
  * Normalize a filesystem path for Directory access.
@@ -20,7 +40,7 @@ import { DATA_MOUNT_PATH } from "../wasix/index.js";
  *
  * This function strips the /data prefix when accessing the Directory.
  */
-function normalizePathForDirectory(path: string): string {
+export function normalizePathForDirectory(path: string): string {
 	if (path.startsWith(DATA_MOUNT_PATH + "/")) {
 		return path.slice(DATA_MOUNT_PATH.length);
 	}
@@ -34,31 +54,109 @@ function normalizePathForDirectory(path: string): string {
  * Create a VirtualFileSystem that wraps a wasmer Directory.
  *
  * @param directory - The wasmer Directory instance
+ * @param runShellCommand - Callback to run shell commands for fallback reads.
+ *                          Used when paths don't exist in Directory (e.g., /usr/bin from webc).
  * @returns A VirtualFileSystem implementation
  */
 export function createVirtualFileSystem(
 	directory: Directory,
+	runShellCommand: (
+		command: string,
+		args: string[],
+	) => Promise<ShellResult>,
 ): VirtualFileSystem {
-	return {
-		readFile: async (path: string): Promise<Uint8Array> => {
-			const normalizedPath = normalizePathForDirectory(path);
-			return directory.readFile(normalizedPath);
-		},
+	/**
+	 * Try to read a file from Directory, falling back to shell if not found
+	 */
+	async function readFileWithFallback(
+		path: string,
+		binary: boolean,
+	): Promise<Uint8Array | string> {
+		const normalizedPath = normalizePathForDirectory(path);
 
-		readTextFile: async (path: string): Promise<string> => {
-			const normalizedPath = normalizePathForDirectory(path);
-			return directory.readTextFile(normalizedPath);
-		},
+		// First, try to read from Directory
+		try {
+			if (binary) {
+				return await directory.readFile(normalizedPath);
+			}
+			return await directory.readTextFile(normalizedPath);
+		} catch (directoryError) {
+			// If path is explicitly a /data path, don't fall back
+			if (isDataPath(path)) {
+				throw directoryError;
+			}
 
-		readDir: async (path: string): Promise<string[]> => {
-			const normalizedPath = normalizePathForDirectory(path);
+			// Try shell fallback for non-/data paths
+			try {
+				// Use cat to read the file via shell
+				const result = await runShellCommand("cat", [path]);
+				if (result.code === 0) {
+					if (binary) {
+						// Convert stdout string to Uint8Array
+						return new TextEncoder().encode(result.stdout);
+					}
+					return result.stdout;
+				}
+			} catch {
+				// Shell fallback failed, throw original error
+			}
+
+			// Shell failed - throw original error
+			throw directoryError;
+		}
+	}
+
+	/**
+	 * Try to read directory from Directory, falling back to shell if not found
+	 */
+	async function readDirWithFallback(path: string): Promise<string[]> {
+		const normalizedPath = normalizePathForDirectory(path);
+
+		// First, try to read from Directory
+		try {
 			const entries = await directory.readDir(normalizedPath);
-			// Convert DirEntry[] to string[] (extract names)
 			return entries.map((entry) =>
 				typeof entry === "string"
 					? entry
 					: (entry as { name: string }).name,
 			);
+		} catch (directoryError) {
+			// If path is explicitly a /data path, don't fall back
+			if (isDataPath(path)) {
+				throw directoryError;
+			}
+
+			// Try shell fallback for non-/data paths
+			try {
+				// Use ls to list directory via shell
+				const result = await runShellCommand("ls", ["-1", path]);
+				if (result.code === 0) {
+					return result.stdout
+						.split("\n")
+						.filter((line) => line.trim() !== "");
+				}
+			} catch {
+				// Shell fallback failed, throw original error
+			}
+
+			// Shell failed - throw original error
+			throw directoryError;
+		}
+	}
+
+	return {
+		readFile: async (path: string): Promise<Uint8Array> => {
+			const result = await readFileWithFallback(path, true);
+			return result as Uint8Array;
+		},
+
+		readTextFile: async (path: string): Promise<string> => {
+			const result = await readFileWithFallback(path, false);
+			return result as string;
+		},
+
+		readDir: async (path: string): Promise<string[]> => {
+			return readDirWithFallback(path);
 		},
 
 		writeFile: (path: string, content: string | Uint8Array): void => {

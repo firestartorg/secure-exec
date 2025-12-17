@@ -57,10 +57,15 @@ export class VirtualMachine {
 			await this.loadNpm();
 		}
 
+		// Create virtual filesystem wrapper with shell fallback for non-Directory paths.
+		// The shell callback captures `this` via closure, so it can access wasixInstance
+		// even though it's created after this call.
+		const virtualFileSystem = this.createVirtualFileSystem();
+
 		// Create NodeProcess with access to virtual filesystem
 		this.nodeProcess = new NodeProcess({
 			memoryLimit: this.options.memoryLimit,
-			filesystem: createVirtualFileSystem(this.bridge.getDirectory()),
+			filesystem: virtualFileSystem,
 		});
 
 		// Create WasixInstance sharing the same filesystem
@@ -71,6 +76,32 @@ export class VirtualMachine {
 		});
 
 		this.initialized = true;
+	}
+
+	/**
+	 * Create a VirtualFileSystem that wraps the Directory with shell fallback.
+	 *
+	 * The VirtualFileSystem handles:
+	 * - Path normalization for /data mount path
+	 * - Fallback to shell commands (cat, ls) for paths not in Directory
+	 *   (e.g., /usr/bin from webc)
+	 *
+	 * @returns A VirtualFileSystem implementation
+	 */
+	createVirtualFileSystem(): VirtualFileSystem {
+		if (!this.bridge) {
+			throw new Error("VirtualMachine not initialized. Call init() first.");
+		}
+
+		return createVirtualFileSystem(
+			this.bridge.getDirectory(),
+			async (command: string, args: string[]) => {
+				if (!this.wasixInstance) {
+					throw new Error("WasixInstance not initialized");
+				}
+				return this.wasixInstance.runWithIpc(command, args);
+			},
+		);
 	}
 
 	/**
