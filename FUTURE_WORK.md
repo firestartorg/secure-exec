@@ -1,5 +1,9 @@
 # future work
 
+## short term
+
+- remove use of runCOmmand, make it all run with ipc
+
 ## fs-polyfill
 - inline compiled code at build time instead of runtime fs.readFileSync()
 - add dedicated test suite for the package

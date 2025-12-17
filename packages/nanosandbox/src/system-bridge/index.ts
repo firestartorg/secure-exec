@@ -40,10 +40,10 @@ export class SystemBridge {
 	}
 
 	/**
-	 * Write a file to the virtual filesystem (sync - writes to in-memory storage)
+	 * Write a file to the virtual filesystem
 	 */
-	writeFile(path: string, content: string | Uint8Array): void {
-		this.directory.writeFile(path, content);
+	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+		await this.directory.writeFile(path, content);
 	}
 
 	/**
@@ -87,7 +87,7 @@ export class SystemBridge {
 	/**
 	 * Create a directory (recursively creates parent directories)
 	 */
-	mkdir(path: string): void {
+	async mkdir(path: string): Promise<void> {
 		// Normalize path
 		const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 		const parts = normalizedPath.split("/").filter(Boolean);
@@ -97,13 +97,7 @@ export class SystemBridge {
 		for (const part of parts) {
 			currentPath += `/${part}`;
 			try {
-				// createDir may return a promise - catch any rejections
-				const result = this.directory.createDir(currentPath);
-				if (result && typeof result.catch === "function") {
-					result.catch(() => {
-						// Directory might already exist, ignore error
-					});
-				}
+				await this.directory.createDir(currentPath);
 			} catch {
 				// Directory might already exist, ignore error
 			}

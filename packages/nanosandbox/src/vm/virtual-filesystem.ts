@@ -159,22 +159,23 @@ export function createVirtualFileSystem(
 			return readDirWithFallback(path);
 		},
 
-		writeFile: (path: string, content: string | Uint8Array): void => {
+		writeFile: async (path: string, content: string | Uint8Array): Promise<void> => {
 			const normalizedPath = normalizePathForDirectory(path);
 			// HACK: Workaround for wasmer-js Directory.writeFile missing truncate(true)
 			// Bug: wasmer-js src/fs/directory.rs uses .write(true).create(true) but not .truncate(true)
 			// Result: overwriting a file with shorter content leaves old bytes at the end
-			// Fix: delete file before writing. Fire-and-forget works because Directory
-			// operations are in-memory and complete synchronously.
-			directory.removeFile(normalizedPath).catch(() => {
+			// Fix: delete file before writing.
+			try {
+				await directory.removeFile(normalizedPath);
+			} catch {
 				// Ignore errors - file may not exist
-			});
-			directory.writeFile(normalizedPath, content);
+			}
+			await directory.writeFile(normalizedPath, content);
 		},
 
-		createDir: (path: string): void => {
+		createDir: async (path: string): Promise<void> => {
 			const normalizedPath = normalizePathForDirectory(path);
-			directory.createDir(normalizedPath);
+			await directory.createDir(normalizedPath);
 		},
 
 		removeFile: async (path: string): Promise<void> => {

@@ -14,7 +14,7 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.writeFile("/test.txt", "hello from data");
+			await vm.writeFile("/test.txt", "hello from data");
 			const vfs = vm.createVirtualFileSystem();
 
 			const content = await vfs.readTextFile(`${DATA_MOUNT_PATH}/test.txt`);
@@ -26,7 +26,7 @@ describe("VirtualFileSystem", () => {
 			await vm.init();
 
 			const binaryData = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-			vm.writeFile("/image.png", binaryData);
+			await vm.writeFile("/image.png", binaryData);
 
 			const vfs = vm.createVirtualFileSystem();
 			const result = await vfs.readFile(`${DATA_MOUNT_PATH}/image.png`);
@@ -39,7 +39,7 @@ describe("VirtualFileSystem", () => {
 			await vm.init();
 
 			const vfs = vm.createVirtualFileSystem();
-			vfs.writeFile(`${DATA_MOUNT_PATH}/written.txt`, "data write");
+			await vfs.writeFile(`${DATA_MOUNT_PATH}/written.txt`, "data write");
 
 			const content = await vm.readFile("/written.txt");
 			expect(content).toBe("data write");
@@ -51,7 +51,7 @@ describe("VirtualFileSystem", () => {
 
 			const vfs = vm.createVirtualFileSystem();
 			const binaryData = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-			vfs.writeFile(`${DATA_MOUNT_PATH}/binary.bin`, binaryData);
+			await vfs.writeFile(`${DATA_MOUNT_PATH}/binary.bin`, binaryData);
 
 			const result = await vm.readFileBinary("/binary.bin");
 			expect(result).toEqual(binaryData);
@@ -61,9 +61,9 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.mkdir("/mydir");
-			vm.writeFile("/mydir/a.txt", "a");
-			vm.writeFile("/mydir/b.txt", "b");
+			await vm.mkdir("/mydir");
+			await vm.writeFile("/mydir/a.txt", "a");
+			await vm.writeFile("/mydir/b.txt", "b");
 
 			const vfs = vm.createVirtualFileSystem();
 			const entries = await vfs.readDir(`${DATA_MOUNT_PATH}/mydir`);
@@ -77,8 +77,8 @@ describe("VirtualFileSystem", () => {
 			await vm.init();
 
 			const vfs = vm.createVirtualFileSystem();
-			vfs.createDir(`${DATA_MOUNT_PATH}/newdir`);
-			vfs.writeFile(`${DATA_MOUNT_PATH}/newdir/file.txt`, "test");
+			await vfs.createDir(`${DATA_MOUNT_PATH}/newdir`);
+			await vfs.writeFile(`${DATA_MOUNT_PATH}/newdir/file.txt`, "test");
 
 			const entries = await vm.readDir("/newdir");
 			expect(entries).toContain("file.txt");
@@ -88,7 +88,7 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.writeFile("/to-remove.txt", "delete me");
+			await vm.writeFile("/to-remove.txt", "delete me");
 			expect(await vm.exists("/to-remove.txt")).toBe(true);
 
 			const vfs = vm.createVirtualFileSystem();
@@ -101,7 +101,7 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.mkdir("/empty-dir");
+			await vm.mkdir("/empty-dir");
 			expect(await vm.exists("/empty-dir")).toBe(true);
 
 			const vfs = vm.createVirtualFileSystem();
@@ -114,7 +114,7 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.writeFile("/root-file.txt", "at root");
+			await vm.writeFile("/root-file.txt", "at root");
 
 			const vfs = vm.createVirtualFileSystem();
 			const entries = await vfs.readDir(DATA_MOUNT_PATH);
@@ -150,7 +150,7 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.writeFile("/test.txt", "hello world");
+			await vm.writeFile("/test.txt", "hello world");
 			const vfs = vm.createVirtualFileSystem();
 
 			const content = await vfs.readTextFile("/test.txt");
@@ -162,7 +162,7 @@ describe("VirtualFileSystem", () => {
 			await vm.init();
 
 			const binaryData = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
-			vm.writeFile("/image.png", binaryData);
+			await vm.writeFile("/image.png", binaryData);
 
 			const vfs = vm.createVirtualFileSystem();
 			const result = await vfs.readFile("/image.png");
@@ -175,7 +175,7 @@ describe("VirtualFileSystem", () => {
 			await vm.init();
 
 			const vfs = vm.createVirtualFileSystem();
-			vfs.writeFile("/written.txt", "direct write");
+			await vfs.writeFile("/written.txt", "direct write");
 
 			const content = await vm.readFile("/written.txt");
 			expect(content).toBe("direct write");
@@ -187,7 +187,7 @@ describe("VirtualFileSystem", () => {
 
 			const vfs = vm.createVirtualFileSystem();
 			const binaryData = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-			vfs.writeFile("/binary.bin", binaryData);
+			await vfs.writeFile("/binary.bin", binaryData);
 
 			const result = await vm.readFileBinary("/binary.bin");
 			expect(result).toEqual(binaryData);
@@ -197,9 +197,9 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.mkdir("/mydir");
-			vm.writeFile("/mydir/file1.txt", "a");
-			vm.writeFile("/mydir/file2.txt", "b");
+			await vm.mkdir("/mydir");
+			await vm.writeFile("/mydir/file1.txt", "a");
+			await vm.writeFile("/mydir/file2.txt", "b");
 
 			const vfs = vm.createVirtualFileSystem();
 			const entries = await vfs.readDir("/mydir");
@@ -213,8 +213,8 @@ describe("VirtualFileSystem", () => {
 			await vm.init();
 
 			const vfs = vm.createVirtualFileSystem();
-			vfs.createDir("/newdir");
-			vfs.writeFile("/newdir/file.txt", "test");
+			await vfs.createDir("/newdir");
+			await vfs.writeFile("/newdir/file.txt", "test");
 
 			const entries = await vm.readDir("/newdir");
 			expect(entries).toContain("file.txt");
@@ -224,7 +224,7 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.writeFile("/to-remove.txt", "delete me");
+			await vm.writeFile("/to-remove.txt", "delete me");
 			expect(await vm.exists("/to-remove.txt")).toBe(true);
 
 			const vfs = vm.createVirtualFileSystem();
@@ -237,7 +237,7 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.mkdir("/empty-dir");
+			await vm.mkdir("/empty-dir");
 			expect(await vm.exists("/empty-dir")).toBe(true);
 
 			const vfs = vm.createVirtualFileSystem();
@@ -261,8 +261,8 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.mkdir("/etc");
-			vm.writeFile("/etc/config.json", '{"key": "value"}');
+			await vm.mkdir("/etc");
+			await vm.writeFile("/etc/config.json", '{"key": "value"}');
 
 			const vfs = vm.createVirtualFileSystem();
 			const content = await vfs.readTextFile("/etc/config.json");
@@ -273,9 +273,9 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.mkdir("/node_modules");
-			vm.mkdir("/node_modules/my-pkg");
-			vm.writeFile(
+			await vm.mkdir("/node_modules");
+			await vm.mkdir("/node_modules/my-pkg");
+			await vm.writeFile(
 				"/node_modules/my-pkg/package.json",
 				'{"name": "my-pkg", "version": "1.0.0"}',
 			);
@@ -307,8 +307,8 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.writeFile("/root-file.txt", "at root");
-			vm.mkdir("/subdir");
+			await vm.writeFile("/root-file.txt", "at root");
+			await vm.mkdir("/subdir");
 
 			const vfs = vm.createVirtualFileSystem();
 			const entries = await vfs.readDir("/");
@@ -321,11 +321,11 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.mkdir("/a");
-			vm.mkdir("/a/b");
-			vm.mkdir("/a/b/c");
-			vm.mkdir("/a/b/c/d");
-			vm.writeFile("/a/b/c/d/deep.txt", "deep content");
+			await vm.mkdir("/a");
+			await vm.mkdir("/a/b");
+			await vm.mkdir("/a/b/c");
+			await vm.mkdir("/a/b/c/d");
+			await vm.writeFile("/a/b/c/d/deep.txt", "deep content");
 
 			const vfs = vm.createVirtualFileSystem();
 
@@ -350,11 +350,11 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.writeFile("/config.json", '{"level": "root"}');
-			vm.mkdir("/app");
-			vm.writeFile("/app/config.json", '{"level": "app"}');
-			vm.mkdir("/app/sub");
-			vm.writeFile("/app/sub/config.json", '{"level": "sub"}');
+			await vm.writeFile("/config.json", '{"level": "root"}');
+			await vm.mkdir("/app");
+			await vm.writeFile("/app/config.json", '{"level": "app"}');
+			await vm.mkdir("/app/sub");
+			await vm.writeFile("/app/sub/config.json", '{"level": "sub"}');
 
 			const vfs = vm.createVirtualFileSystem();
 
@@ -371,7 +371,7 @@ describe("VirtualFileSystem", () => {
 			vm = new VirtualMachine({ loadNpm: false });
 			await vm.init();
 
-			vm.mkdir("/empty");
+			await vm.mkdir("/empty");
 
 			const vfs = vm.createVirtualFileSystem();
 			const entries = await vfs.readDir("/empty");
@@ -385,10 +385,10 @@ describe("VirtualFileSystem", () => {
 
 			const vfs = vm.createVirtualFileSystem();
 
-			vfs.writeFile("/overwrite.txt", "original");
+			await vfs.writeFile("/overwrite.txt", "original");
 			expect(await vfs.readTextFile("/overwrite.txt")).toBe("original");
 
-			vfs.writeFile("/overwrite.txt", "updated!");
+			await vfs.writeFile("/overwrite.txt", "updated!");
 			expect(await vfs.readTextFile("/overwrite.txt")).toBe("updated!");
 		});
 
@@ -399,10 +399,10 @@ describe("VirtualFileSystem", () => {
 
 			const vfs = vm.createVirtualFileSystem();
 
-			vfs.writeFile("/file.txt", "this is long content");
+			await vfs.writeFile("/file.txt", "this is long content");
 			expect(await vfs.readTextFile("/file.txt")).toBe("this is long content");
 
-			vfs.writeFile("/file.txt", "short");
+			await vfs.writeFile("/file.txt", "short");
 			expect(await vfs.readTextFile("/file.txt")).toBe("short");
 		});
 
@@ -413,13 +413,13 @@ describe("VirtualFileSystem", () => {
 			const vfs = vm.createVirtualFileSystem();
 
 			// Write via /data prefix
-			vfs.writeFile(`${DATA_MOUNT_PATH}/mixed.txt`, "written via data");
+			await vfs.writeFile(`${DATA_MOUNT_PATH}/mixed.txt`, "written via data");
 
 			// Read via direct path
 			expect(await vfs.readTextFile("/mixed.txt")).toBe("written via data");
 
 			// Overwrite via direct path
-			vfs.writeFile("/mixed.txt", "written directly");
+			await vfs.writeFile("/mixed.txt", "written directly");
 
 			// Read via /data prefix
 			expect(await vfs.readTextFile(`${DATA_MOUNT_PATH}/mixed.txt`)).toBe(
@@ -434,11 +434,11 @@ describe("VirtualFileSystem", () => {
 			const vfs = vm.createVirtualFileSystem();
 
 			// Spaces and dashes
-			vfs.writeFile("/my-file name.txt", "content");
+			await vfs.writeFile("/my-file name.txt", "content");
 			expect(await vfs.readTextFile("/my-file name.txt")).toBe("content");
 
 			// Dots
-			vfs.writeFile("/file.test.backup.txt", "backup");
+			await vfs.writeFile("/file.test.backup.txt", "backup");
 			expect(await vfs.readTextFile("/file.test.backup.txt")).toBe("backup");
 		});
 
@@ -449,7 +449,7 @@ describe("VirtualFileSystem", () => {
 			const vfs = vm.createVirtualFileSystem();
 
 			const unicodeContent = "Hello 世界 🌍 émojis";
-			vfs.writeFile("/unicode.txt", unicodeContent);
+			await vfs.writeFile("/unicode.txt", unicodeContent);
 
 			expect(await vfs.readTextFile("/unicode.txt")).toBe(unicodeContent);
 		});
@@ -460,7 +460,7 @@ describe("VirtualFileSystem", () => {
 
 			const vfs = vm.createVirtualFileSystem();
 
-			vfs.writeFile("/empty.txt", "");
+			await vfs.writeFile("/empty.txt", "");
 			expect(await vfs.readTextFile("/empty.txt")).toBe("");
 		});
 
@@ -472,7 +472,7 @@ describe("VirtualFileSystem", () => {
 
 			// Create a ~100KB string
 			const largeContent = "x".repeat(100 * 1024);
-			vfs.writeFile("/large.txt", largeContent);
+			await vfs.writeFile("/large.txt", largeContent);
 
 			expect(await vfs.readTextFile("/large.txt")).toBe(largeContent);
 		});
@@ -535,7 +535,7 @@ describe("VirtualFileSystem", () => {
 			await vm.init();
 
 			// Write file to Directory
-			vm.writeFile("/myfile.txt", "from directory");
+			await vm.writeFile("/myfile.txt", "from directory");
 
 			const vfs = vm.createVirtualFileSystem();
 
@@ -549,8 +549,8 @@ describe("VirtualFileSystem", () => {
 			await vm.init();
 
 			// Create /bin in Directory (shadows WASM /bin)
-			vm.mkdir("/bin");
-			vm.writeFile("/bin/mytest", "from directory");
+			await vm.mkdir("/bin");
+			await vm.writeFile("/bin/mytest", "from directory");
 
 			const vfs = vm.createVirtualFileSystem();
 

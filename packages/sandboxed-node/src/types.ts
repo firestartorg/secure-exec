@@ -28,13 +28,13 @@ export interface VirtualFileSystem {
 	 * @param path - Absolute path to the file
 	 * @param content - String or binary content
 	 */
-	writeFile(path: string, content: string | Uint8Array): void;
+	writeFile(path: string, content: string | Uint8Array): Promise<void>;
 
 	/**
 	 * Create a directory (creates parent directories as needed)
 	 * Should not throw if directory already exists
 	 */
-	createDir(path: string): void;
+	createDir(path: string): Promise<void>;
 
 	/**
 	 * Remove a file

@@ -100,6 +100,22 @@ Measuring: idle memory, idle CPU
 - Next.js build
 - Vite build
 
+## Security
+
+### TL;DR
+
+This is based on the same technology (V8 isolates & WASM) that provides secure code execution to Chromium browsers and to Cloudflare Workers. By default, V8 isolates and WASM modules cannot execute any dangerous functionality outside of their respective sandboxes. This maeks auditing them simple: you can see the extensions that NanoSandbox provides here (TODO).
+
+### Thread Model
+
+TODO
+
+### Comparison to Cloudflare Workers
+
+Cloudflare Workers is the gold standard of using V8 isolates for isolated code execution at scale, so it helps to compare to them as a baseline.
+
+TODO
+
 ## Limitations
 
 - Linux tools must be complied to WASIX (see other repo TODO)

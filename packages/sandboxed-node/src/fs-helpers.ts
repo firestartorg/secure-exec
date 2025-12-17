@@ -88,7 +88,7 @@ export async function rename(
 	newPath: string,
 ): Promise<void> {
 	const content = await fs.readFile(oldPath);
-	fs.writeFile(newPath, content);
+	await fs.writeFile(newPath, content);
 	await fs.removeFile(oldPath);
 }
 
@@ -124,7 +124,7 @@ export async function readDirWithTypes(
 /**
  * Create a directory (recursively creates parent directories)
  */
-export function mkdir(fs: VirtualFileSystem, path: string): void {
+export async function mkdir(fs: VirtualFileSystem, path: string): Promise<void> {
 	const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 	const parts = normalizedPath.split("/").filter(Boolean);
 
@@ -132,7 +132,7 @@ export function mkdir(fs: VirtualFileSystem, path: string): void {
 	for (const part of parts) {
 		currentPath += `/${part}`;
 		try {
-			fs.createDir(currentPath);
+			await fs.createDir(currentPath);
 		} catch {
 			// Directory might already exist, ignore error
 		}

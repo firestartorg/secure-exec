@@ -768,8 +768,8 @@ export class NodeProcess {
 				return fs.readTextFile(path);
 			});
 			const writeFileRef = new ivm.Reference(
-				(path: string, content: string) => {
-					fs.writeFile(path, content);
+				async (path: string, content: string) => {
+					await fs.writeFile(path, content);
 				},
 			);
 			// Binary file operations using base64 encoding
@@ -779,10 +779,10 @@ export class NodeProcess {
 				return Buffer.from(data).toString("base64");
 			});
 			const writeFileBinaryRef = new ivm.Reference(
-				(path: string, base64Content: string) => {
+				async (path: string, base64Content: string) => {
 					// Decode base64 and write as binary
 					const data = Buffer.from(base64Content, "base64");
-					fs.writeFile(path, data);
+					await fs.writeFile(path, data);
 				},
 			);
 			const readDirRef = new ivm.Reference(async (path: string) => {
@@ -790,8 +790,8 @@ export class NodeProcess {
 				// Return as JSON string for transfer
 				return JSON.stringify(entries);
 			});
-			const mkdirRef = new ivm.Reference((path: string) => {
-				mkdir(fs, path);
+			const mkdirRef = new ivm.Reference(async (path: string) => {
+				await mkdir(fs, path);
 			});
 			const rmdirRef = new ivm.Reference(async (path: string) => {
 				await fs.removeDir(path);
@@ -1533,8 +1533,8 @@ export class NodeProcess {
 				return fs.readTextFile(path);
 			});
 			const writeFileRef = new ivm.Reference(
-				(path: string, content: string) => {
-					fs.writeFile(path, content);
+				async (path: string, content: string) => {
+					await fs.writeFile(path, content);
 				},
 			);
 			// Binary file operations using base64 encoding
@@ -1543,17 +1543,17 @@ export class NodeProcess {
 				return Buffer.from(data).toString("base64");
 			});
 			const writeFileBinaryRef = new ivm.Reference(
-				(path: string, base64Content: string) => {
+				async (path: string, base64Content: string) => {
 					const data = Buffer.from(base64Content, "base64");
-					fs.writeFile(path, data);
+					await fs.writeFile(path, data);
 				},
 			);
 			const readDirRef = new ivm.Reference(async (path: string) => {
 				const entries = await readDirWithTypes(fs, path);
 				return JSON.stringify(entries);
 			});
-			const mkdirRef = new ivm.Reference((path: string) => {
-				mkdir(fs, path);
+			const mkdirRef = new ivm.Reference(async (path: string) => {
+				await mkdir(fs, path);
 			});
 			const rmdirRef = new ivm.Reference(async (path: string) => {
 				await fs.removeDir(path);

@@ -130,8 +130,8 @@ export class VirtualMachine {
 
 		// Create default /etc/npmrc
 		// Note: mkdir is needed even if /etc exists - it signals the fs layer
-		this.bridge.mkdir("/etc");
-		this.bridge.writeFile(
+		await this.bridge.mkdir("/etc");
+		await this.bridge.writeFile(
 			"/etc/npmrc",
 			`; Default npm configuration
 prefix=/usr/local
@@ -145,14 +145,14 @@ cache=/tmp/.npm
 		// so npm must be invoked via explicit path or node spawn.
 
 		// Create simple wrapper scripts in /bin for convenience
-		this.bridge.mkdir("/bin");
-		this.bridge.writeFile(
+		await this.bridge.mkdir("/bin");
+		await this.bridge.writeFile(
 			"/bin/npm",
 			`#!/bin/bash
 node /opt/npm/bin/npm-cli.js "$@"
 `,
 		);
-		this.bridge.writeFile(
+		await this.bridge.writeFile(
 			"/bin/npx",
 			`#!/bin/bash
 node /opt/npm/bin/npx-cli.js "$@"
@@ -213,8 +213,8 @@ node /opt/npm/bin/npx-cli.js "$@"
 	/**
 	 * Write a file to the virtual filesystem
 	 */
-	writeFile(path: string, content: string | Uint8Array): void {
-		this.ensureInitialized().writeFile(path, content);
+	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+		await this.ensureInitialized().writeFile(path, content);
 	}
 
 	/**
@@ -248,8 +248,8 @@ node /opt/npm/bin/npx-cli.js "$@"
 	/**
 	 * Create a directory
 	 */
-	mkdir(path: string): void {
-		this.ensureInitialized().mkdir(path);
+	async mkdir(path: string): Promise<void> {
+		await this.ensureInitialized().mkdir(path);
 	}
 
 	/**

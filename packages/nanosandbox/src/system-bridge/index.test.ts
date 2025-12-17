@@ -12,7 +12,7 @@ describe("SystemBridge", () => {
 			const dir = new Directory();
 			const bridge = new SystemBridge(dir);
 
-			bridge.writeFile("/direct.txt", "hello");
+			await bridge.writeFile("/direct.txt", "hello");
 			expect(await bridge.readFile("/direct.txt")).toBe("hello");
 		});
 
@@ -21,7 +21,7 @@ describe("SystemBridge", () => {
 			const bridge = new SystemBridge(dir);
 
 			const data = new Uint8Array([1, 2, 3, 4, 5]);
-			bridge.writeFile("/binary.bin", data);
+			await bridge.writeFile("/binary.bin", data);
 
 			const result = await bridge.readFileBinary("/binary.bin");
 			expect(result).toEqual(data);
@@ -31,8 +31,8 @@ describe("SystemBridge", () => {
 			const dir = new Directory();
 			const bridge = new SystemBridge(dir);
 
-			bridge.mkdir("/subdir");
-			bridge.writeFile("/subdir/file.txt", "content");
+			await bridge.mkdir("/subdir");
+			await bridge.writeFile("/subdir/file.txt", "content");
 
 			const entries = await bridge.readDir("/subdir");
 			expect(entries).toContain("file.txt");
@@ -42,7 +42,7 @@ describe("SystemBridge", () => {
 			const dir = new Directory();
 			const bridge = new SystemBridge(dir);
 
-			bridge.writeFile("/exists.txt", "yes");
+			await bridge.writeFile("/exists.txt", "yes");
 
 			expect(await bridge.exists("/exists.txt")).toBe(true);
 			expect(await bridge.exists("/notexists.txt")).toBe(false);
@@ -52,7 +52,7 @@ describe("SystemBridge", () => {
 			const dir = new Directory();
 			const bridge = new SystemBridge(dir);
 
-			bridge.writeFile("/toremove.txt", "delete me");
+			await bridge.writeFile("/toremove.txt", "delete me");
 			expect(await bridge.exists("/toremove.txt")).toBe(true);
 
 			await bridge.remove("/toremove.txt");
@@ -65,8 +65,8 @@ describe("SystemBridge", () => {
 
 			// Note: wasmer Directory doesn't support nested mkdir
 			// So we create single level directories
-			bridge.mkdir("/mydir");
-			bridge.writeFile("/mydir/file.txt", "content");
+			await bridge.mkdir("/mydir");
+			await bridge.writeFile("/mydir/file.txt", "content");
 
 			expect(await bridge.readFile("/mydir/file.txt")).toBe("content");
 		});
@@ -74,7 +74,7 @@ describe("SystemBridge", () => {
 		it("should create Directory internally if not provided", async () => {
 			const bridge = new SystemBridge();
 
-			bridge.writeFile("/test.txt", "works");
+			await bridge.writeFile("/test.txt", "works");
 			expect(await bridge.readFile("/test.txt")).toBe("works");
 		});
 
