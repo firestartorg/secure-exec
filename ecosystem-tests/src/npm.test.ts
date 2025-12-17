@@ -193,6 +193,9 @@ describe("NPM CLI Integration", () => {
 		);
 	});
 
+	// SKIPPED: npm init hangs in the sandbox because it internally spawns
+	// child processes (via npm-init) that the sandboxed environment cannot handle.
+	// This is a limitation of the sandbox, not a bug in the npm integration.
 	describe.skip("Step 4: npm init -y", () => {
 		it(
 			"should run npm init -y and create package.json",
@@ -200,12 +203,9 @@ describe("NPM CLI Integration", () => {
 				vm = new VirtualMachine();
 				await vm.init();
 
-				// Create app directory (without package.json)
-				await vm.mkdir("/data/app");
-				await vm.mkdir("/data/app/.npm");
-				await vm.writeFile("/data/app/.npmrc", "");
+				await setupNpmEnvironment(vm);
 
-				const result = await runNpm(vm, ["init", "-y"]);
+				const result = await runNpm(vm, ["init", "-y", "--prefix", "/data/app"]);
 
 				console.log("stdout:", result.stdout);
 				console.log("stderr:", result.stderr);
@@ -251,7 +251,7 @@ describe("NPM CLI Integration", () => {
 		);
 	});
 
-	describe.skip("Step 6: npm view", () => {
+	describe("Step 6: npm view", () => {
 		it(
 			"should run npm view <package> and display package info",
 			async () => {
@@ -272,6 +272,9 @@ describe("NPM CLI Integration", () => {
 
 				// npm view runs without fatal error (network request succeeds)
 				expect(result.code).toBe(0);
+				// Should contain lodash package info
+				expect(result.stdout).toContain("lodash");
+				expect(result.stdout).toContain('"name":');
 			},
 			{ timeout: 60000 },
 		);
@@ -321,7 +324,7 @@ describe("NPM CLI Integration", () => {
 		);
 	});
 
-	describe.skip("Step 8: npm install", () => {
+	describe("Step 8: npm install", () => {
 		it(
 			"should run npm install and fetch packages from registry",
 			async () => {
@@ -355,18 +358,21 @@ describe("NPM CLI Integration", () => {
 				// Check if node_modules was created
 				const nodeModulesExists = await vm.exists("/data/app/node_modules");
 				console.log("node_modules exists:", nodeModulesExists);
+				expect(nodeModulesExists).toBe(true);
 
 				// Check if package was installed
 				const isNumberExists = await vm.exists(
 					"/data/app/node_modules/is-number",
 				);
 				console.log("is-number exists:", isNumberExists);
+				expect(isNumberExists).toBe(true);
 
 				// Check if package-lock.json was created
 				const lockfileExists = await vm.exists("/data/app/package-lock.json");
 				console.log("package-lock.json exists:", lockfileExists);
+				expect(lockfileExists).toBe(true);
 
-				// npm install starts and makes network requests
+				// npm install completes successfully
 				expect(result.code).toBe(0);
 			},
 			{ timeout: 60000 },
