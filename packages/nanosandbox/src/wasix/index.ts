@@ -38,10 +38,6 @@ const POLL_INTERVAL_MS = 20;
 
 /**
  * Mount path for the user's Directory in the WASM filesystem.
- * Using a subpath avoids a wasmer-sdk bug where files in directories
- * created via createDir() aren't accessible when mounted at "/".
- *
- * Files written to the Directory at "/foo.txt" will be accessible at "/data/foo.txt"
  */
 export const DATA_MOUNT_PATH = "/data";
 
@@ -53,6 +49,34 @@ export const IPC_MOUNT_PATH = "/ipc";
 
 let wasmerInitialized = false;
 let wasixRuntime: Awaited<ReturnType<typeof Wasmer.fromFile>> | null = null;
+
+/**
+ * Ensure wasmer SDK is initialized. Safe to call multiple times.
+ */
+export async function ensureWasmerInitialized(): Promise<void> {
+	if (!wasmerInitialized) {
+		// SDK v0.10 expects an options object
+		await init({ log: "warn" });
+		wasmerInitialized = true;
+	}
+}
+
+/**
+ * Get the shared WASIX runtime package. Loads it if not already loaded.
+ * This ensures only one runtime is loaded across the entire application.
+ */
+export async function getWasixRuntime(): Promise<Awaited<ReturnType<typeof Wasmer.fromFile>>> {
+	await ensureWasmerInitialized();
+
+	if (!wasixRuntime) {
+		const currentDir = path.dirname(fileURLToPath(import.meta.url));
+		const webcPath = path.resolve(currentDir, "../../dist/runtime.webc");
+		const webcBytes = await fs.readFile(webcPath);
+		wasixRuntime = await Wasmer.fromFile(webcBytes);
+	}
+
+	return wasixRuntime;
+}
 
 export class WasixInstance {
 	private directory: Directory;
@@ -72,19 +96,8 @@ export class WasixInstance {
 	async init(): Promise<void> {
 		if (this.initialized) return;
 
-		if (!wasmerInitialized) {
-			// SDK v0.10 expects an options object
-			await init({ log: "warn" });
-			wasmerInitialized = true;
-		}
-
-		// Load runtime package (includes bash + node-shim for IPC)
-		if (!wasixRuntime) {
-			const currentDir = path.dirname(fileURLToPath(import.meta.url));
-			const webcPath = path.resolve(currentDir, "../../dist/runtime.webc");
-			const webcBytes = await fs.readFile(webcPath);
-			wasixRuntime = await Wasmer.fromFile(webcBytes);
-		}
+		// Use shared runtime loading
+		await getWasixRuntime();
 
 		this.initialized = true;
 	}
@@ -174,7 +187,9 @@ export class WasixInstance {
 				mount: { [DATA_MOUNT_PATH]: this.directory },
 			});
 
-			const result = await instance.wait();
+			// Use withEventLoopActive to prevent Node.js from exiting
+			// before the wasmer worker completes
+			const result = await withEventLoopActive(instance.wait());
 
 			return {
 				stdout: result.stdout || "",
@@ -278,7 +293,9 @@ export class WasixInstance {
 				cwd,
 			});
 
-			const result = await instance.wait();
+			// Use withEventLoopActive to prevent Node.js from exiting
+			// before the wasmer worker completes
+			const result = await withEventLoopActive(instance.wait());
 
 			pollActive = false;
 			await poller;
@@ -373,7 +390,9 @@ export class WasixInstance {
 		return {
 			instance,
 			async wait(): Promise<number> {
-				const result = await instance.wait();
+				// Use withEventLoopActive to prevent Node.js from exiting
+				// before the wasmer worker completes
+				const result = await withEventLoopActive(instance.wait());
 				pollActive = false;
 				await poller;
 				return result.code ?? 0;
@@ -475,6 +494,20 @@ export class WasixInstance {
 
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Execute a promise while keeping the Node.js event loop alive.
+ * This is necessary because wasmer-js workers don't properly keep the event loop
+ * alive in Node.js, causing the process to exit before promises resolve.
+ */
+async function withEventLoopActive<T>(promise: Promise<T>): Promise<T> {
+	const keepAlive = setInterval(() => {}, 1000);
+	try {
+		return await promise;
+	} finally {
+		clearInterval(keepAlive);
+	}
 }
 
 export { Directory };
