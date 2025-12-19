@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll } from "vitest";
-import { Runtime } from "../src/runtime/index.js";
+import { Runtime, Process } from "../src/runtime/index.js";
 
 describe("VirtualMachine", () => {
 	let runtime: Runtime;
@@ -88,27 +88,15 @@ describe("VirtualMachine", () => {
 				args: ["-c", "while read line; do echo \"OUT:$line\"; done"],
 			});
 
-			// Helper to poll stdout until we get the expected exact output
-			const pollForOutput = async (expected: string, timeoutMs = 5000): Promise<void> => {
-				const startTime = Date.now();
-				while (Date.now() - startTime < timeoutMs) {
-					const output = await proc.readStdout();
-					if (output === expected) return;
-					if (output !== "") throw new Error(`Expected "${expected}", got "${output}"`);
-					await new Promise(r => setTimeout(r, 50));
-				}
-				throw new Error(`Timeout waiting for "${expected}"`);
-			};
-
 			// Streaming test: write stdin, poll for TTY echo, repeat
 			await proc.writeStdin("ping1\n");
-			await pollForOutput("ping1\n");
+			await pollForOutput(proc, "ping1\n");
 
 			await proc.writeStdin("ping2\n");
-			await pollForOutput("ping2\n");
+			await pollForOutput(proc, "ping2\n");
 
 			await proc.writeStdin("ping3\n");
-			await pollForOutput("ping3\n");
+			await pollForOutput(proc, "ping3\n");
 
 			await proc.closeStdin();
 			await proc.wait();
@@ -154,3 +142,15 @@ describe("VirtualMachine", () => {
 		});
 	});
 });
+
+/** Poll stdout until we get the expected exact output */
+async function pollForOutput(proc: Process, expected: string, timeoutMs = 5000): Promise<void> {
+	const startTime = Date.now();
+	while (Date.now() - startTime < timeoutMs) {
+		const output = await proc.readStdout();
+		if (output === expected) return;
+		if (output !== "") throw new Error(`Expected "${expected}", got "${output}"`);
+		await new Promise(r => setTimeout(r, 50));
+	}
+	throw new Error(`Timeout waiting for "${expected}"`);
+}
