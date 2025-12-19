@@ -1,8 +1,8 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Directory, Wasmer, Runtime } from "@wasmer/sdk/node";
+import { NodeProcess } from "sandboxed-node";
 
 export interface VirtualMachineOptions {
 	args?: string[];
@@ -45,97 +45,187 @@ let wasmerRuntime: Runtime | null = null;
 
 /**
  * Handle host_exec syscalls from WASM.
- * Executes the requested command and returns the exit code.
+ *
+ * For "node" commands, uses sandboxed-node's NodeProcess (V8 isolate) instead
+ * of spawning a real process. This is faster and more secure.
+ *
  * Streams stdout/stderr via the onStdout/onStderr callbacks.
  */
-// Signal number to name mapping for Node.js child.kill()
-const SIGNAL_NAMES: Record<number, string> = {
-	1: "SIGHUP",
-	2: "SIGINT",
-	3: "SIGQUIT",
-	9: "SIGKILL",
-	15: "SIGTERM",
-	18: "SIGCONT",
-	19: "SIGSTOP",
-};
+
+// Counter for generating unique PIDs for sandboxed processes
+let nextPid = 1000;
+
+/**
+ * Parse node command line arguments to extract code/file and options.
+ */
+function parseNodeArgs(args: string[]): {
+	code: string | null;
+	file: string | null;
+	evalCode: boolean;
+	printResult: boolean;
+	nodeArgs: string[];
+} {
+	let code: string | null = null;
+	let file: string | null = null;
+	let evalCode = false;
+	let printResult = false;
+	const nodeArgs: string[] = [];
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+
+		if (arg === "-e" || arg === "--eval") {
+			evalCode = true;
+			code = args[++i] || "";
+		} else if (arg === "-p" || arg === "--print") {
+			evalCode = true;
+			printResult = true;
+			code = args[++i] || "";
+		} else if (arg === "-c" || arg === "--check") {
+			// Syntax check only - we'll just parse it
+			code = args[++i] || "";
+		} else if (arg === "-r" || arg === "--require") {
+			// Skip require for now
+			i++;
+		} else if (arg === "--input-type" || arg === "--experimental-loader") {
+			// Skip these flags
+			i++;
+		} else if (arg.startsWith("-")) {
+			// Skip other flags
+		} else if (!file && !evalCode) {
+			// First non-flag argument is the script file
+			file = arg;
+			// Remaining args are passed to the script
+			nodeArgs.push(...args.slice(i + 1));
+			break;
+		}
+	}
+
+	return { code, file, evalCode, printResult, nodeArgs };
+}
 
 async function hostExecHandler(ctx: HostExecContext): Promise<number> {
 	console.error(`[host_exec] command=${ctx.command} args=${JSON.stringify(ctx.args)}`);
 
-	return new Promise((resolve) => {
-		// Merge WASM environment with parent process environment
-		// Parent env provides PATH and other system variables
-		const mergedEnv = { ...process.env, ...ctx.env };
+	// Check if this is a node command - use sandboxed-node for V8 acceleration
+	const isNodeCommand = ctx.command === "node" || ctx.command.endsWith("/node");
 
-		// Apply terminal options if present
-		if (ctx.terminal) {
-			mergedEnv.TERM = ctx.terminal.term || "xterm-256color";
-			mergedEnv.COLUMNS = String(ctx.terminal.cols || 80);
-			mergedEnv.LINES = String(ctx.terminal.rows || 24);
-		}
+	if (isNodeCommand) {
+		return handleNodeCommand(ctx);
+	}
 
-		const child = spawn(ctx.command, ctx.args, {
-			env: mergedEnv,
-			cwd: ctx.cwd !== "/" ? ctx.cwd : undefined,
-			stdio: ["pipe", "pipe", "pipe"],
-		});
+	// For non-node commands, return error (not supported in sandbox)
+	console.error(`[host_exec] unsupported command: ${ctx.command}`);
+	const errorMsg = `Error: Command '${ctx.command}' is not supported in sandbox. Only 'node' is available.\n`;
+	if (ctx.onStderr) {
+		ctx.onStderr(new TextEncoder().encode(errorMsg));
+	}
+	return 1;
+}
 
-		// Register kill function if setKillFunction is available
-		if (ctx.setKillFunction) {
-			ctx.setKillFunction((signal: number) => {
-				const signalName = SIGNAL_NAMES[signal] || "SIGTERM";
-				console.error(`[host_exec] sending signal ${signalName} (${signal}) to process`);
-				child.kill(signalName);
-			});
-		}
+/**
+ * Handle node commands using sandboxed-node's NodeProcess (V8 isolate).
+ */
+async function handleNodeCommand(ctx: HostExecContext): Promise<number> {
+	const { code, file, evalCode, printResult, nodeArgs } = parseNodeArgs(ctx.args);
 
-		// Register stdin writer if setStdinWriter is available
-		if (ctx.setStdinWriter && child.stdin) {
-			const childStdin = child.stdin;
-			ctx.setStdinWriter(
-				// Writer function
-				(data: Uint8Array) => {
-					childStdin.write(Buffer.from(data));
-				},
-				// Closer function
-				() => {
-					childStdin.end();
-				}
-			);
-		}
+	// Generate a unique PID for this sandboxed process
+	const pid = nextPid++;
 
-		// Stream stdout via callback
-		child.stdout?.on("data", (data: Buffer) => {
-			if (ctx.onStdout) {
-				ctx.onStdout(new Uint8Array(data));
-			}
-		});
+	// Build argv for the sandboxed process
+	const argv = ["node"];
+	if (file) {
+		argv.push(file, ...nodeArgs);
+	} else if (evalCode) {
+		argv.push("-e", code || "");
+	}
 
-		// Stream stderr via callback
-		child.stderr?.on("data", (data: Buffer) => {
-			if (ctx.onStderr) {
-				ctx.onStderr(new Uint8Array(data));
-			}
-		});
-
-		child.on("close", (code, signal) => {
-			// If killed by signal, return 128 + signal number (Unix convention)
-			if (signal) {
-				const sigNum = Object.entries(SIGNAL_NAMES).find(([_, name]) => name === signal)?.[0];
-				const exitCode = sigNum ? 128 + parseInt(sigNum) : 128;
-				console.error(`[host_exec] process killed by signal ${signal}, exit code ${exitCode}`);
-				resolve(exitCode);
-			} else {
-				console.error(`[host_exec] process exited with code: ${code}`);
-				resolve(code ?? 0);
-			}
-		});
-
-		child.on("error", (err) => {
-			console.error(`[host_exec] spawn error: ${err.message}`);
-			resolve(1);
-		});
+	// Create NodeProcess with context from host_exec
+	const nodeProcess = new NodeProcess({
+		memoryLimit: 128,
+		processConfig: {
+			pid,
+			ppid: 1, // WASM shell is parent
+			cwd: ctx.cwd || "/",
+			env: ctx.env || {},
+			argv,
+			platform: "linux",
+			arch: "x64",
+		},
+		// TODO: Add filesystem when VFS is passed through HostExecContext
 	});
+
+	// Register kill function - disposes the isolate
+	if (ctx.setKillFunction) {
+		ctx.setKillFunction((_signal: number) => {
+			console.error(`[host_exec] killing NodeProcess pid=${pid}`);
+			nodeProcess.dispose();
+		});
+	}
+
+	// TODO: stdin support - NodeProcess doesn't support streaming stdin yet
+	// For now, just close stdin immediately
+	if (ctx.setStdinWriter) {
+		ctx.setStdinWriter(
+			(_data: Uint8Array) => {
+				// Stdin not supported yet
+			},
+			() => {
+				// Close - no-op
+			}
+		);
+	}
+
+	try {
+		let result: { stdout: string; stderr: string; code: number };
+
+		if (evalCode && code) {
+			// Execute inline code with -e flag
+			let codeToRun = code;
+			if (printResult) {
+				// -p flag: wrap code to print the result
+				codeToRun = `console.log(${code})`;
+			}
+			result = await nodeProcess.exec(codeToRun);
+		} else if (file) {
+			// TODO: Execute script file - needs VFS access
+			// For now, return error
+			const errorMsg = `Error: File execution not yet supported. Use 'node -e "code"' instead.\n`;
+			if (ctx.onStderr) {
+				ctx.onStderr(new TextEncoder().encode(errorMsg));
+			}
+			nodeProcess.dispose();
+			return 1;
+		} else {
+			// No code or file specified
+			const errorMsg = "Error: No script or code provided to node\n";
+			if (ctx.onStderr) {
+				ctx.onStderr(new TextEncoder().encode(errorMsg));
+			}
+			nodeProcess.dispose();
+			return 1;
+		}
+
+		// Stream stdout/stderr back to WASM
+		if (result.stdout && ctx.onStdout) {
+			ctx.onStdout(new TextEncoder().encode(result.stdout));
+		}
+		if (result.stderr && ctx.onStderr) {
+			ctx.onStderr(new TextEncoder().encode(result.stderr));
+		}
+
+		console.error(`[host_exec] NodeProcess pid=${pid} exited with code=${result.code}`);
+
+		nodeProcess.dispose();
+		return result.code;
+	} catch (err) {
+		const errorMsg = `Error: ${err instanceof Error ? err.message : String(err)}\n`;
+		if (ctx.onStderr) {
+			ctx.onStderr(new TextEncoder().encode(errorMsg));
+		}
+		nodeProcess.dispose();
+		return 1;
+	}
 }
 
 async function loadRuntimePackage(): Promise<Awaited<ReturnType<typeof Wasmer.fromFile>>> {
