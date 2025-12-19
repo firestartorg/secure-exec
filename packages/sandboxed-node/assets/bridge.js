@@ -8640,7 +8640,11 @@ var bridge = (() => {
       "node",
       "script.js"
     ],
-    execPath: typeof _processConfig !== "undefined" && _processConfig.execPath || "/usr/bin/node"
+    execPath: typeof _processConfig !== "undefined" && _processConfig.execPath || "/usr/bin/node",
+    pid: typeof _processConfig !== "undefined" && _processConfig.pid || 1,
+    ppid: typeof _processConfig !== "undefined" && _processConfig.ppid || 0,
+    uid: typeof _processConfig !== "undefined" && _processConfig.uid || 0,
+    gid: typeof _processConfig !== "undefined" && _processConfig.gid || 0
   };
   var _processStartTime = Date.now();
   var _exitCode = 0;
@@ -8814,8 +8818,8 @@ var bridge = (() => {
       tz: "2022g",
       unicode: "15.0"
     },
-    pid: 1,
-    ppid: 0,
+    pid: config2.pid,
+    ppid: config2.ppid,
     execPath: config2.execPath,
     execArgv: [],
     argv: config2.argv,
@@ -8887,19 +8891,19 @@ var bridge = (() => {
     },
     hrtime,
     getuid() {
-      return 0;
+      return config2.uid;
     },
     getgid() {
-      return 0;
+      return config2.gid;
     },
     geteuid() {
-      return 0;
+      return config2.uid;
     },
     getegid() {
-      return 0;
+      return config2.gid;
     },
     getgroups() {
-      return [0];
+      return [config2.gid];
     },
     setuid() {
     },

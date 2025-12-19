@@ -22,6 +22,10 @@ export interface ProcessConfig {
   env?: Record<string, string>;
   argv?: string[];
   execPath?: string;
+  pid?: number;
+  ppid?: number;
+  uid?: number;
+  gid?: number;
 }
 
 // Declare config and host bridge globals
@@ -61,6 +65,14 @@ const config = {
   execPath:
     (typeof _processConfig !== "undefined" && _processConfig.execPath) ||
     "/usr/bin/node",
+  pid:
+    (typeof _processConfig !== "undefined" && _processConfig.pid) || 1,
+  ppid:
+    (typeof _processConfig !== "undefined" && _processConfig.ppid) || 0,
+  uid:
+    (typeof _processConfig !== "undefined" && _processConfig.uid) || 0,
+  gid:
+    (typeof _processConfig !== "undefined" && _processConfig.gid) || 0,
 };
 
 // Start time for uptime calculation
@@ -287,8 +299,8 @@ const process: Partial<typeof nodeProcess> & {
     tz: "2022g",
     unicode: "15.0",
   },
-  pid: 1,
-  ppid: 0,
+  pid: config.pid,
+  ppid: config.ppid,
   execPath: config.execPath,
   execArgv: [],
   argv: config.argv,
@@ -379,19 +391,19 @@ const process: Partial<typeof nodeProcess> & {
   hrtime: hrtime as typeof nodeProcess.hrtime,
 
   getuid(): number {
-    return 0;
+    return config.uid;
   },
   getgid(): number {
-    return 0;
+    return config.gid;
   },
   geteuid(): number {
-    return 0;
+    return config.uid;
   },
   getegid(): number {
-    return 0;
+    return config.gid;
   },
   getgroups(): number[] {
-    return [0];
+    return [config.gid];
   },
 
   setuid(): void {},
