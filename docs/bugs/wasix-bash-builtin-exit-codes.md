@@ -35,11 +35,27 @@ In WASIX errno definitions, 45 = `ENOEXEC` ("Executable file format error").
 
 See: https://wasmerio.github.io/wasmer/crates/doc/wasmer_wasix_types/wasi/bindings/enum.Errno.html
 
-## Root Cause
+## Root Cause (Hypothesis)
 
-Unknown. The bug is in the WASIX bash package, not in our code. The command output is correct (stdout/stderr work), but the exit code propagation is broken for builtins when using `-c` flag.
+Likely related to the WASIX libc `posix_spawn` PATH issue. WASIX libc's posix_spawn doesn't search PATH - commands must be resolved to absolute paths first. See `wasix-runtime/src/main.rs` where we use the `which` crate to work around this.
 
-Note: Interactive bash (via stdin) works correctly - exit codes are proper.
+When bash runs `-c "echo hello"`:
+1. Bash may try to look up `echo` as an external command first via posix_spawn
+2. posix_spawn fails with ENOEXEC (45) because it can't find `echo` without PATH resolution
+3. Bash falls back to the builtin `echo` and executes it correctly (stdout works)
+4. But bash incorrectly propagates the ENOEXEC (45) from step 2 as the final exit code
+
+This explains why:
+- External commands with absolute paths work (no PATH lookup needed)
+- `ls /` works (likely found in /bin via some lookup)
+- All builtins fail with 45 (ENOEXEC from the failed external command lookup)
+
+The fix would likely be in wasix-org/bash to either:
+1. Not attempt external command lookup for known builtins
+2. Not propagate posix_spawn errors when falling back to builtins
+3. Ensure PATH is properly set/searched before attempting posix_spawn
+
+Note: Interactive bash (via stdin) works correctly - exit codes are proper. This suggests the `-c` flag code path has a different command resolution order.
 
 ## Impact on nanosandbox
 
