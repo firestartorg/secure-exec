@@ -108,6 +108,21 @@ Example fix:
 }
 ```
 
+## Verified Fix
+
+We built a patched version of uutils pwd in `/home/nathan/misc/wasix-builds/builds/coreutils/`:
+
+1. Cloned uutils/coreutils
+2. Patched `src/uu/pwd/src/pwd.rs` to add `target_os = "wasi"` to cfg conditions
+3. Built with `cargo wasix build --release -p uu_pwd`
+4. Tested successfully: `wasmer run output/pwd.wasm` returns `/`
+
+The patched binary works correctly. However, integrating it into nanosandbox would require either:
+- Creating a custom webc package to replace wasmer/coreutils
+- Bundling the wasm files directly
+
+For now, the bash builtin workaround remains the practical solution.
+
 ## Affected Components
 
 - wasmer/coreutils package (version 1.0.19)
