@@ -457,8 +457,69 @@ export class NodeProcess {
 		}
 	}
 
-	// Cache for pre-compiled dynamic import modules (namespace references)
+	// Cache for evaluated dynamic import module namespaces
 	private dynamicImportCache = new Map<string, ivm.Reference<unknown>>();
+	// Track in-flight dynamic import evaluations per resolved module path
+	private dynamicImportPending = new Map<string, Promise<ivm.Reference<unknown>>>();
+
+	/**
+	 * Get a cached namespace or evaluate the module on first dynamic import.
+	 */
+	private async resolveDynamicImportNamespace(
+		specifier: string,
+		context: ivm.Context,
+		referrerPath: string,
+	): Promise<ivm.Reference<unknown> | null> {
+		// Get directly cached namespaces first.
+		const cached = this.dynamicImportCache.get(specifier);
+		if (cached) {
+			return cached;
+		}
+
+		// Resolve before compile/evaluate.
+		const resolved = await this.resolveESMPath(specifier, referrerPath);
+		if (!resolved) {
+			return null;
+		}
+
+		// Get resolved-path cache entry.
+		const resolvedCached = this.dynamicImportCache.get(resolved);
+		if (resolvedCached) {
+			this.dynamicImportCache.set(specifier, resolvedCached);
+			return resolvedCached;
+		}
+
+		// Wait for an existing evaluation in progress.
+		const pending = this.dynamicImportPending.get(resolved);
+		if (pending) {
+			const namespace = await pending;
+			this.dynamicImportCache.set(specifier, namespace);
+			return namespace;
+		}
+
+		// Evaluate once, then cache by both resolved path and original specifier.
+		const evaluateModule = (async (): Promise<ivm.Reference<unknown>> => {
+			const module = await this.compileESMModule(resolved, context);
+			try {
+				await module.instantiate(context, this.createESMResolver(context));
+			} catch {
+				// Already instantiated.
+			}
+			await module.evaluate({ promise: true });
+			return module.namespace;
+		})();
+
+		this.dynamicImportPending.set(resolved, evaluateModule);
+
+		try {
+			const namespace = await evaluateModule;
+			this.dynamicImportCache.set(resolved, namespace);
+			this.dynamicImportCache.set(specifier, namespace);
+			return namespace;
+		} finally {
+			this.dynamicImportPending.delete(resolved);
+		}
+	}
 
 	/**
 	 * Pre-compile all static dynamic import specifiers found in the code
@@ -478,30 +539,11 @@ export class NodeProcess {
 				continue; // Skip unresolvable modules, error will be thrown at runtime
 			}
 
-			// Check if already compiled
-			if (this.dynamicImportCache.has(resolved)) {
-				continue;
-			}
-
-			// Compile the module
-			const module = await this.compileESMModule(resolved, context);
-
-			// Instantiate
+			// Compile only to warm module cache without triggering side effects.
 			try {
-				await module.instantiate(context, this.createESMResolver(context));
+				await this.compileESMModule(resolved, context);
 			} catch {
-				// Already instantiated
-			}
-
-			// Evaluate
-			await module.evaluate();
-
-			// Cache the namespace reference
-			this.dynamicImportCache.set(resolved, module.namespace);
-
-			// Also cache by original specifier for direct lookup
-			if (resolved !== specifier) {
-				this.dynamicImportCache.set(specifier, module.namespace);
+				// Skip unresolved/invalid modules so runtime import() rejects on demand.
 			}
 		}
 	}
@@ -514,16 +556,19 @@ export class NodeProcess {
 	private async setupDynamicImport(
 		context: ivm.Context,
 		jail: ivm.Reference<Record<string, unknown>>,
+		referrerPath: string = "/",
 	): Promise<void> {
-		// Create a SYNCHRONOUS reference for dynamic imports (returns from cache or null if not found)
-		const dynamicImportRef = new ivm.Reference((specifier: string) => {
-			// Check the cache - look up both by specifier and resolved path
-			const ns = this.dynamicImportCache.get(specifier);
-			if (!ns) {
-				// Return null to signal fallback to require()
+		// Set up async module resolution/evaluation for first dynamic import.
+		const dynamicImportRef = new ivm.Reference(async (specifier: string) => {
+			const namespace = await this.resolveDynamicImportNamespace(
+				specifier,
+				context,
+				referrerPath,
+			);
+			if (!namespace) {
 				return null;
 			}
-			return ns.derefInto();
+			return namespace.derefInto();
 		});
 
 		await jail.set("_dynamicImport", dynamicImportRef);
@@ -531,21 +576,38 @@ export class NodeProcess {
 		// Create the __dynamicImport function in the isolate
 		// First tries ESM cache, then falls back to require()
 		await context.eval(`
-      globalThis.__dynamicImport = function(specifier) {
-        // Try the ESM cache first
-        const cached = _dynamicImport.applySync(undefined, [specifier]);
-        if (cached !== null) {
-          return Promise.resolve(cached);
+      globalThis.__dynamicImport = async function(specifier) {
+        const formatError = (error) => {
+          return error && typeof error.message === 'string'
+            ? error.message
+            : String(error);
+        };
+
+        let namespace;
+        try {
+          namespace = await _dynamicImport.apply(
+            undefined,
+            [specifier],
+            { result: { promise: true } }
+          );
+        } catch (error) {
+          throw new Error(
+            'Cannot dynamically import \\'' + specifier + '\\': ' + formatError(error)
+          );
         }
-        // Fall back to require() for CommonJS modules
+
+        if (namespace !== null) {
+          return namespace;
+        }
+
+        // Fall back to require() for CommonJS modules.
         try {
           const mod = require(specifier);
-          // Wrap in ESM-like namespace object with default export
-          return Promise.resolve({ default: mod, ...mod });
-        } catch (e) {
-          return Promise.reject(new Error(
-            'Cannot dynamically import \\'' + specifier + '\\': ' + e.message
-          ));
+          return { default: mod, ...mod };
+        } catch (error) {
+          throw new Error(
+            'Cannot dynamically import \\'' + specifier + '\\': ' + formatError(error)
+          );
         }
       };
     `);
@@ -1140,6 +1202,7 @@ export class NodeProcess {
 		// Clear caches for fresh run
 		this.esmModuleCache.clear();
 		this.dynamicImportCache.clear();
+		this.dynamicImportPending.clear();
 		this.activeHttpServerIds.clear();
 
 		const context = await this.isolate.createContext();
@@ -1155,6 +1218,7 @@ export class NodeProcess {
 
 			let exports: T | undefined;
 			const transformedCode = transformDynamicImport(options.code);
+			const entryReferrerPath = options.filePath ?? "/";
 
 			// Detect ESM vs CJS and run the mode-specific path.
 			if (isESM(options.code, options.filePath)) {
@@ -1169,8 +1233,12 @@ export class NodeProcess {
 					);
 				}
 
-				await this.precompileDynamicImports(transformedCode, context);
-				await this.setupDynamicImport(context, jail);
+				await this.precompileDynamicImports(
+					transformedCode,
+					context,
+					entryReferrerPath,
+				);
+				await this.setupDynamicImport(context, jail, entryReferrerPath);
 
 				const esmResult = await this.runESM(
 					transformedCode,
@@ -1197,8 +1265,12 @@ export class NodeProcess {
 					}
 				}
 
-				await this.precompileDynamicImports(transformedCode, context);
-				await this.setupDynamicImport(context, jail);
+				await this.precompileDynamicImports(
+					transformedCode,
+					context,
+					entryReferrerPath,
+				);
+				await this.setupDynamicImport(context, jail, entryReferrerPath);
 
 				if (options.mode === "exec") {
 					// Capture eval() result and await it if script returns a Promise.

@@ -219,6 +219,115 @@ describe("NodeProcess", () => {
 		expect(esmResult.stdout).toContain("esm-entry:esm-feature");
 	});
 
+	it("evaluates dynamic imports only when import() is reached", async () => {
+		const fs = createFs();
+		await fs.mkdir("/app");
+		await fs.writeFile(
+			"/app/side-effect.mjs",
+			`
+      console.log("side-effect");
+      export const value = 1;
+    `,
+		);
+
+		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const result = await proc.exec(
+			`
+      (async () => {
+        console.log("before");
+        await import("./side-effect.mjs");
+        console.log("after");
+      })();
+    `,
+			{ filePath: "/app/entry.js" },
+		);
+
+		expect(result.code).toBe(0);
+		expect(result.stdout).toBe("before\nside-effect\nafter\n");
+	});
+
+	it("does not evaluate dynamic imports in untaken branches", async () => {
+		const fs = createFs();
+		await fs.mkdir("/app");
+		await fs.writeFile(
+			"/app/unused.mjs",
+			`
+      console.log("loaded");
+      export const value = 1;
+    `,
+		);
+
+		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const result = await proc.exec(
+			`
+      (async () => {
+        if (false) {
+          await import("./unused.mjs");
+        }
+        console.log("done");
+      })();
+    `,
+			{ filePath: "/app/entry.js" },
+		);
+
+		expect(result.code).toBe(0);
+		expect(result.stdout).toBe("done\n");
+		expect(result.stdout).not.toContain("loaded");
+	});
+
+	it("returns cached namespace for repeated dynamic imports", async () => {
+		const fs = createFs();
+		await fs.mkdir("/app");
+		await fs.writeFile(
+			"/app/reused.mjs",
+			`
+      globalThis.__dynamicImportCount = (globalThis.__dynamicImportCount || 0) + 1;
+      export const value = 42;
+    `,
+		);
+
+		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const result = await proc.exec(
+			`
+      (async () => {
+        const first = await import("./reused.mjs");
+        const second = await import("./reused.mjs");
+
+        if (first !== second) {
+          throw new Error("namespace mismatch");
+        }
+        if (globalThis.__dynamicImportCount !== 1) {
+          throw new Error("module evaluated multiple times");
+        }
+
+        console.log("ok");
+      })();
+    `,
+			{ filePath: "/app/entry.js" },
+		);
+
+		expect(result.code).toBe(0);
+		expect(result.stdout).toBe("ok\n");
+	});
+
+	it("rejects dynamic import for missing modules with descriptive error", async () => {
+		const fs = createFs();
+		await fs.mkdir("/app");
+
+		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const result = await proc.exec(
+			`
+      (async () => {
+        await import("./missing.mjs");
+      })();
+    `,
+			{ filePath: "/app/entry.js" },
+		);
+
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("Cannot dynamically import './missing.mjs':");
+	});
+
 	it("serves requests through bridged http.createServer and host network fetch", async () => {
 		const driver = createNodeDriver({
 			filesystem: new NodeFileSystem(),
