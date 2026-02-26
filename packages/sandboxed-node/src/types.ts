@@ -79,24 +79,41 @@ export interface CommandExecutor {
 	): SpawnedProcess;
 }
 
+export interface NetworkServerAddress {
+	address: string;
+	family: string;
+	port: number;
+}
+
+export interface NetworkServerRequest {
+	method: string;
+	url: string;
+	headers: Record<string, string>;
+	rawHeaders: string[];
+	bodyBase64?: string;
+}
+
+export interface NetworkServerResponse {
+	status: number;
+	headers?: Array<[string, string]>;
+	body?: string;
+	bodyEncoding?: "utf8" | "base64";
+}
+
+export interface NetworkServerListenOptions {
+	serverId: number;
+	port?: number;
+	hostname?: string;
+	onRequest(
+		request: NetworkServerRequest,
+	): Promise<NetworkServerResponse> | NetworkServerResponse;
+}
+
 export interface NetworkAdapter {
-	honoServe?(
-		options: {
-			port?: number;
-			hostname?: string;
-			fetch: (request: Request) => Promise<Response> | Response;
-		},
-	): Promise<{
-		serverId: number;
-		address:
-			| {
-					address: string;
-					family: string;
-					port: number;
-			  }
-			| null;
-	}>;
-	honoClose?(serverId: number): Promise<void>;
+	httpServerListen?(
+		options: NetworkServerListenOptions,
+	): Promise<{ address: NetworkServerAddress | null }>;
+	httpServerClose?(serverId: number): Promise<void>;
 	fetch(
 		url: string,
 		options: {

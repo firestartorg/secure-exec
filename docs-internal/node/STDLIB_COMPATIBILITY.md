@@ -66,11 +66,13 @@ Status of each Node.js core module in sandboxed-node. Modules are provided via o
 
 - Bridge implementation (`src/bridge/network.ts`, ~880 lines)
 - `request()`, `get()` — backed by host-side `_networkHttpRequestRaw`
+- `createServer()` — bridged to host-side `NetworkAdapter.httpServerListen/httpServerClose`
 - `ClientRequest` class with event support
 - `IncomingMessage` class with stream support
 - `Agent` class (simplified), `globalAgent`
 - `METHODS`, `STATUS_CODES` constants
-- Missing: `createServer()` (throws; use `@hono/node-server` bridge instead)
+- Server bindings are loopback-restricted in Node driver (`127.0.0.1` / `::1`; `0.0.0.0` is coerced to loopback)
+- `http2` compatibility stubs exported for `Http2ServerRequest`/`Http2ServerResponse` instanceof checks
 
 ## dns
 

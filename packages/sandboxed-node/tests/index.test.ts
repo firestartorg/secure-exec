@@ -139,7 +139,7 @@ describe("NodeProcess", () => {
 		expect(esmResult.stdout).toContain("esm-entry:esm-feature");
 	});
 
-	it("serves a request via @hono/node-server bridge", async () => {
+	it("serves requests through bridged http.createServer and host network fetch", async () => {
 		const driver = createNodeDriver({
 			filesystem: new NodeFileSystem(),
 			useDefaultNetwork: true,
@@ -151,24 +151,233 @@ describe("NodeProcess", () => {
 			},
 		});
 
-		const result = await proc.exec(`
-      const { serve } = require('@hono/node-server');
-      const server = serve({
-        fetch: () => new Response('bridge-ok', { status: 200 }),
-        port: 0,
-        hostname: '127.0.0.1',
-      });
+		const port = 33221;
+		const execPromise = proc.exec(
+			`
+      (async () => {
+        const http = require('http');
+        let server;
+        server = http.createServer((req, res) => {
+          if (req.url === '/shutdown') {
+            res.writeHead(200, { 'content-type': 'text/plain' });
+            res.end('closing');
+            server.close();
+            return;
+          }
 
-      server.once('listening', async () => {
-        const address = server.address();
-        const res = await fetch('http://127.0.0.1:' + address.port + '/');
-        console.log(await res.text());
-        server.close(() => console.log('closed'));
-      });
-    `);
+          if (req.url === '/json') {
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ ok: true, runtime: 'sandboxed-node' }));
+            return;
+          }
 
+          res.writeHead(200, { 'content-type': 'text/plain' });
+          res.end('bridge-ok');
+        });
+
+        await new Promise((resolve, reject) => {
+          server.once('error', reject);
+          server.listen(Number(process.env.TEST_PORT), process.env.TEST_HOST, resolve);
+        });
+
+        await new Promise((resolve) => {
+          server.once('close', resolve);
+        });
+      })();
+    `,
+			{
+				env: {
+					TEST_PORT: String(port),
+					TEST_HOST: "127.0.0.1",
+				},
+			},
+		);
+
+		for (let attempt = 0; attempt < 40; attempt++) {
+			try {
+				const ready = await proc.network.fetch(
+					`http://127.0.0.1:${port}/`,
+					{ method: "GET" },
+				);
+				if (ready.status === 200) {
+					break;
+				}
+			} catch {
+				// Retry while server starts.
+			}
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+
+		const textResponse = await proc.network.fetch(
+			`http://127.0.0.1:${port}/`,
+			{ method: "GET" },
+		);
+		expect(textResponse.status).toBe(200);
+		expect(textResponse.body).toBe("bridge-ok");
+
+		const jsonResponse = await proc.network.fetch(
+			`http://127.0.0.1:${port}/json`,
+			{ method: "GET" },
+		);
+		expect(jsonResponse.status).toBe(200);
+		expect(jsonResponse.body).toContain('"ok":true');
+
+		const shutdownResponse = await proc.network.fetch(
+			`http://127.0.0.1:${port}/shutdown`,
+			{ method: "GET" },
+		);
+		expect(shutdownResponse.status).toBe(200);
+
+		const result = await execPromise;
 		expect(result.code).toBe(0);
-		expect(result.stdout).toContain("bridge-ok");
-		expect(result.stdout).toContain("closed");
+	});
+
+	it("coerces 0.0.0.0 listen to loopback for strict sandboxing", async () => {
+		const driver = createNodeDriver({
+			filesystem: new NodeFileSystem(),
+			useDefaultNetwork: true,
+		});
+		proc = new NodeProcess({
+			driver,
+			processConfig: {
+				cwd: "/",
+			},
+		});
+
+		const port = 33222;
+		const execPromise = proc.exec(
+			`
+      (async () => {
+        const http = require('http');
+        let server;
+        server = http.createServer((req, res) => {
+          if (req.url === '/shutdown') {
+            res.writeHead(200, { 'content-type': 'text/plain' });
+            res.end('closing');
+            server.close();
+            return;
+          }
+          res.writeHead(200, { 'content-type': 'text/plain' });
+          res.end('loopback-only');
+        });
+
+        await new Promise((resolve, reject) => {
+          server.once('error', reject);
+          server.listen(Number(process.env.TEST_PORT), process.env.TEST_HOST, resolve);
+        });
+        await new Promise((resolve) => server.once('close', resolve));
+      })();
+    `,
+			{
+				env: {
+					TEST_PORT: String(port),
+					TEST_HOST: "0.0.0.0",
+				},
+			},
+		);
+
+		for (let attempt = 0; attempt < 40; attempt++) {
+			try {
+				const ready = await proc.network.fetch(
+					`http://127.0.0.1:${port}/`,
+					{ method: "GET" },
+				);
+				if (ready.status === 200) {
+					break;
+				}
+			} catch {
+				// Retry while server starts.
+			}
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+
+		const response = await proc.network.fetch(
+			`http://127.0.0.1:${port}/`,
+			{ method: "GET" },
+		);
+		expect(response.status).toBe(200);
+		expect(response.body).toBe("loopback-only");
+
+		const shutdown = await proc.network.fetch(
+			`http://127.0.0.1:${port}/shutdown`,
+			{ method: "GET" },
+		);
+		expect(shutdown.status).toBe(200);
+
+		const result = await execPromise;
+		expect(result.code).toBe(0);
+	});
+
+	it("can terminate a running sandbox HTTP server from host side", async () => {
+		const driver = createNodeDriver({
+			filesystem: new NodeFileSystem(),
+			useDefaultNetwork: true,
+		});
+		proc = new NodeProcess({
+			driver,
+			processConfig: {
+				cwd: "/",
+			},
+		});
+
+		const port = 33223;
+		const execPromise = proc.exec(
+			`
+      (async () => {
+        const http = require('http');
+        const server = http.createServer((_req, res) => {
+          res.writeHead(200, { 'content-type': 'text/plain' });
+          res.end('running');
+        });
+
+        await new Promise((resolve, reject) => {
+          server.once('error', reject);
+          server.listen(Number(process.env.TEST_PORT), process.env.TEST_HOST, resolve);
+        });
+
+        await new Promise(() => {
+          // Keep alive until host termination.
+        });
+      })();
+    `,
+			{
+				env: {
+					TEST_PORT: String(port),
+					TEST_HOST: "127.0.0.1",
+				},
+			},
+		);
+
+		for (let attempt = 0; attempt < 40; attempt++) {
+			try {
+				const ready = await proc.network.fetch(
+					`http://127.0.0.1:${port}/`,
+					{ method: "GET" },
+				);
+				if (ready.status === 200) {
+					break;
+				}
+			} catch {
+				// Retry while server starts.
+			}
+			await new Promise((resolve) => setTimeout(resolve, 25));
+		}
+
+		const response = await proc.network.fetch(
+			`http://127.0.0.1:${port}/`,
+			{ method: "GET" },
+		);
+		expect(response.status).toBe(200);
+		expect(response.body).toBe("running");
+
+		await proc.terminate();
+
+		const result = await Promise.race([
+			execPromise,
+			new Promise<{ code: number }>((resolve) =>
+				setTimeout(() => resolve({ code: -999 }), 2000),
+			),
+		]);
+		expect(result.code).not.toBe(-999);
 	});
 });

@@ -29,7 +29,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.6",
     "buffer": "^6.0.3",
     "esbuild": "^0.27.1",
     "isolated-vm": "^6.0.0",

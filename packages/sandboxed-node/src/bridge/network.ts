@@ -29,6 +29,34 @@ declare const _networkHttpRequestRaw: {
   ): Promise<string>;
 };
 
+declare const _networkHttpServerListenRaw:
+  | {
+      apply(
+        ctx: undefined,
+        args: [string],
+        options: { result: { promise: true } }
+      ): Promise<string>;
+    }
+  | undefined;
+
+declare const _networkHttpServerCloseRaw:
+  | {
+      apply(
+        ctx: undefined,
+        args: [number],
+        options: { result: { promise: true } }
+      ): Promise<void>;
+    }
+  | undefined;
+
+declare const _registerHandle:
+  | ((id: string, description: string) => void)
+  | undefined;
+
+declare const _unregisterHandle:
+  | ((id: string) => void)
+  | undefined;
+
 // Types for fetch API
 interface FetchOptions {
   method?: string;
@@ -150,6 +178,10 @@ export class Headers {
 
   entries(): IterableIterator<[string, string]> {
     return Object.entries(this._headers)[Symbol.iterator]() as IterableIterator<[string, string]>;
+  }
+
+  [Symbol.iterator](): IterableIterator<[string, string]> {
+    return this.entries();
   }
 
   keys(): IterableIterator<string> {
@@ -772,6 +804,442 @@ class Agent {
   }
 }
 
+interface ServerAddress {
+  address: string;
+  family: string;
+  port: number;
+}
+
+interface SerializedServerListenResult {
+  address: ServerAddress | null;
+}
+
+interface SerializedServerRequest {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  rawHeaders: string[];
+  bodyBase64?: string;
+}
+
+interface SerializedServerResponse {
+  status: number;
+  headers?: Array<[string, string]>;
+  body?: string;
+  bodyEncoding?: "utf8" | "base64";
+}
+
+let nextServerId = 1;
+const serverRequestListeners = new Map<
+  number,
+  (incoming: ServerIncomingMessage, outgoing: ServerResponseBridge) => unknown
+>();
+
+class ServerIncomingMessage {
+  headers: Record<string, string>;
+  rawHeaders: string[];
+  method: string;
+  url: string;
+  socket: { encrypted: boolean };
+  rawBody?: Buffer;
+  destroyed = false;
+  errored?: Error;
+  private _listeners: Record<string, EventListener[]> = {};
+
+  constructor(request: SerializedServerRequest) {
+    this.headers = request.headers || {};
+    this.rawHeaders = request.rawHeaders || [];
+    if (!Array.isArray(this.rawHeaders) || this.rawHeaders.length % 2 !== 0) {
+      this.rawHeaders = [];
+    }
+    this.method = request.method || "GET";
+    this.url = request.url || "/";
+    this.socket = { encrypted: false };
+    const rawHost = this.headers.host;
+    if (typeof rawHost === "string" && rawHost.includes(",")) {
+      this.headers.host = rawHost.split(",")[0].trim();
+    }
+    if (!this.headers.host) {
+      this.headers.host = "127.0.0.1";
+    }
+    if (this.rawHeaders.length === 0) {
+      Object.entries(this.headers).forEach(([key, value]) => {
+        this.rawHeaders.push(key, value);
+      });
+    }
+    if (request.bodyBase64 && typeof Buffer !== "undefined") {
+      this.rawBody = Buffer.from(request.bodyBase64, "base64");
+    }
+  }
+
+  on(event: string, listener: EventListener): this {
+    if (!this._listeners[event]) this._listeners[event] = [];
+    this._listeners[event].push(listener);
+    if (event === "end") {
+      Promise.resolve().then(() => listener());
+    }
+    return this;
+  }
+
+  once(event: string, listener: EventListener): this {
+    const wrapped = (...args: unknown[]): void => {
+      this.off(event, wrapped);
+      listener(...args);
+    };
+    return this.on(event, wrapped);
+  }
+
+  off(event: string, listener: EventListener): this {
+    const listeners = this._listeners[event];
+    if (!listeners) return this;
+    const index = listeners.indexOf(listener);
+    if (index !== -1) listeners.splice(index, 1);
+    return this;
+  }
+
+  removeListener(event: string, listener: EventListener): this {
+    return this.off(event, listener);
+  }
+
+  emit(event: string, ...args: unknown[]): boolean {
+    const listeners = this._listeners[event];
+    if (!listeners || listeners.length === 0) return false;
+    listeners.slice().forEach((fn) => fn(...args));
+    return true;
+  }
+
+  destroy(err?: Error): this {
+    this.destroyed = true;
+    this.errored = err;
+    if (err) {
+      this.emit("error", err);
+    }
+    this.emit("close");
+    return this;
+  }
+}
+
+class ServerResponseBridge {
+  statusCode = 200;
+  statusMessage = "OK";
+  headersSent = false;
+  writable = true;
+  writableFinished = false;
+  private _headers = new Map<string, string>();
+  private _chunks: Uint8Array[] = [];
+  private _listeners: Record<string, EventListener[]> = {};
+  private _closedPromise: Promise<void>;
+  private _resolveClosed: (() => void) | null = null;
+
+  constructor() {
+    this._closedPromise = new Promise<void>((resolve) => {
+      this._resolveClosed = resolve;
+    });
+  }
+
+  on(event: string, listener: EventListener): this {
+    if (!this._listeners[event]) this._listeners[event] = [];
+    this._listeners[event].push(listener);
+    return this;
+  }
+
+  once(event: string, listener: EventListener): this {
+    const wrapped = (...args: unknown[]): void => {
+      this.off(event, wrapped);
+      listener(...args);
+    };
+    return this.on(event, wrapped);
+  }
+
+  off(event: string, listener: EventListener): this {
+    const listeners = this._listeners[event];
+    if (!listeners) return this;
+    const index = listeners.indexOf(listener);
+    if (index !== -1) listeners.splice(index, 1);
+    return this;
+  }
+
+  removeListener(event: string, listener: EventListener): this {
+    return this.off(event, listener);
+  }
+
+  private _emit(event: string, ...args: unknown[]): void {
+    const listeners = this._listeners[event];
+    if (!listeners) return;
+    listeners.slice().forEach((fn) => fn(...args));
+  }
+
+  writeHead(
+    statusCode: number,
+    headers?: Record<string, string> | Array<[string, string]>
+  ): this {
+    this.statusCode = statusCode;
+    if (headers) {
+      if (Array.isArray(headers)) {
+        headers.forEach(([key, value]) => this.setHeader(key, value));
+      } else {
+        Object.entries(headers).forEach(([key, value]) =>
+          this.setHeader(key, value)
+        );
+      }
+    }
+    this.headersSent = true;
+    return this;
+  }
+
+  setHeader(name: string, value: string | number | string[]): this {
+    const normalized = Array.isArray(value) ? value.join(", ") : String(value);
+    this._headers.set(name.toLowerCase(), normalized);
+    return this;
+  }
+
+  getHeader(name: string): string | undefined {
+    return this._headers.get(name.toLowerCase());
+  }
+
+  hasHeader(name: string): boolean {
+    return this._headers.has(name.toLowerCase());
+  }
+
+  removeHeader(name: string): void {
+    this._headers.delete(name.toLowerCase());
+  }
+
+  write(chunk: string | Uint8Array): boolean {
+    this.headersSent = true;
+    if (typeof chunk === "string") {
+      this._chunks.push(Buffer.from(chunk));
+    } else {
+      this._chunks.push(chunk);
+    }
+    return true;
+  }
+
+  end(chunk?: string | Uint8Array): this {
+    if (chunk !== undefined) {
+      this.write(chunk);
+    }
+    this._finalize();
+    return this;
+  }
+
+  flushHeaders(): void {
+    this.headersSent = true;
+  }
+
+  destroy(err?: Error): void {
+    if (err) {
+      this._emit("error", err);
+    }
+    this._finalize();
+  }
+
+  async waitForClose(): Promise<void> {
+    await this._closedPromise;
+  }
+
+  serialize(): SerializedServerResponse {
+    const bodyBuffer =
+      this._chunks.length > 0 ? Buffer.concat(this._chunks) : Buffer.alloc(0);
+    return {
+      status: this.statusCode,
+      headers: Array.from(this._headers.entries()),
+      body: bodyBuffer.toString("base64"),
+      bodyEncoding: "base64",
+    };
+  }
+
+  private _finalize(): void {
+    if (this.writableFinished) {
+      return;
+    }
+    this.writableFinished = true;
+    this.writable = false;
+    this._emit("finish");
+    this._emit("close");
+    this._resolveClosed?.();
+    this._resolveClosed = null;
+  }
+}
+
+class Server {
+  listening = false;
+  private _listeners: Record<string, EventListener[]> = {};
+  private _serverId: number;
+  private _listenPromise: Promise<void> | null = null;
+  private _address: ServerAddress | null = null;
+  private _handleId: string | null = null;
+
+  constructor(requestListener?: (req: ServerIncomingMessage, res: ServerResponseBridge) => unknown) {
+    this._serverId = nextServerId++;
+    if (requestListener) {
+      serverRequestListeners.set(this._serverId, requestListener);
+    } else {
+      serverRequestListeners.set(this._serverId, () => undefined);
+    }
+  }
+
+  private _emit(event: string, ...args: unknown[]): void {
+    const listeners = this._listeners[event];
+    if (!listeners || listeners.length === 0) return;
+    listeners.slice().forEach((listener) => listener(...args));
+  }
+
+  private async _start(port?: number, hostname?: string): Promise<void> {
+    if (typeof _networkHttpServerListenRaw === "undefined") {
+      throw new Error(
+        "http.createServer requires NetworkAdapter.httpServerListen support"
+      );
+    }
+
+    const resultJson = await _networkHttpServerListenRaw.apply(
+      undefined,
+      [JSON.stringify({ serverId: this._serverId, port, hostname })],
+      { result: { promise: true } }
+    );
+    const result = JSON.parse(resultJson) as SerializedServerListenResult;
+    this._address = result.address;
+    this.listening = true;
+    this._handleId = `http-server:${this._serverId}`;
+    if (typeof _registerHandle === "function") {
+      _registerHandle(this._handleId, "http server");
+    }
+  }
+
+  listen(
+    portOrCb?: number | (() => void),
+    hostOrCb?: string | (() => void),
+    cb?: () => void
+  ): this {
+    const port = typeof portOrCb === "number" ? portOrCb : undefined;
+    const hostname = typeof hostOrCb === "string" ? hostOrCb : undefined;
+    const callback =
+      typeof cb === "function"
+        ? cb
+        : typeof hostOrCb === "function"
+          ? hostOrCb
+          : typeof portOrCb === "function"
+            ? portOrCb
+            : undefined;
+
+    if (!this._listenPromise) {
+      this._listenPromise = this._start(port, hostname)
+        .then(() => {
+          this._emit("listening");
+          callback?.();
+        })
+        .catch((error) => {
+          this._emit("error", error);
+        });
+    }
+    return this;
+  }
+
+  close(cb?: (err?: Error) => void): this {
+    const run = async () => {
+      try {
+        if (this._listenPromise) {
+          await this._listenPromise;
+        }
+        if (this.listening && typeof _networkHttpServerCloseRaw !== "undefined") {
+          await _networkHttpServerCloseRaw.apply(undefined, [this._serverId], {
+            result: { promise: true },
+          });
+        }
+        this.listening = false;
+        this._address = null;
+        if (this._handleId && typeof _unregisterHandle === "function") {
+          _unregisterHandle(this._handleId);
+        }
+        this._handleId = null;
+        cb?.();
+        this._emit("close");
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        cb?.(error);
+        this._emit("error", error);
+      }
+    };
+    void run();
+    return this;
+  }
+
+  address(): ServerAddress | null {
+    return this._address;
+  }
+
+  on(event: string, listener: EventListener): this {
+    if (!this._listeners[event]) this._listeners[event] = [];
+    this._listeners[event].push(listener);
+    return this;
+  }
+
+  once(event: string, listener: EventListener): this {
+    const wrapped = (...args: unknown[]): void => {
+      this.off(event, wrapped);
+      listener(...args);
+    };
+    return this.on(event, wrapped);
+  }
+
+  off(event: string, listener: EventListener): this {
+    const listeners = this._listeners[event];
+    if (!listeners) return this;
+    const index = listeners.indexOf(listener);
+    if (index !== -1) listeners.splice(index, 1);
+    return this;
+  }
+
+  removeListener(event: string, listener: EventListener): this {
+    return this.off(event, listener);
+  }
+
+  removeAllListeners(event?: string): this {
+    if (event) {
+      delete this._listeners[event];
+    } else {
+      this._listeners = {};
+    }
+    return this;
+  }
+
+  ref(): this {
+    return this;
+  }
+
+  unref(): this {
+    return this;
+  }
+}
+
+async function dispatchServerRequest(
+  serverId: number,
+  requestJson: string
+): Promise<string> {
+  const listener = serverRequestListeners.get(serverId);
+  if (!listener) {
+    throw new Error(`Unknown HTTP server: ${serverId}`);
+  }
+
+  const request = JSON.parse(requestJson) as SerializedServerRequest;
+  const incoming = new ServerIncomingMessage(request);
+  const outgoing = new ServerResponseBridge();
+
+  try {
+    await Promise.resolve(listener(incoming, outgoing));
+  } catch (err) {
+    outgoing.statusCode = 500;
+    outgoing.end(err instanceof Error ? `Error: ${err.message}` : "Error");
+  }
+
+  if (!outgoing.writableFinished) {
+    outgoing.end();
+  }
+
+  await outgoing.waitForClose();
+  return JSON.stringify(outgoing.serialize());
+}
+
 // Create HTTP module
 function createHttpModule(_protocol: string): Partial<typeof nodeHttp> {
   return {
@@ -825,12 +1293,24 @@ function createHttpModule(_protocol: string): Partial<typeof nodeHttp> {
       return req;
     },
 
-    createServer(): never {
-      throw new Error("http.createServer is not supported in sandbox");
+    createServer(
+      _optionsOrListener?: unknown,
+      maybeListener?: (req: ServerIncomingMessage, res: ServerResponseBridge) => void
+    ): Server {
+      const listener =
+        typeof _optionsOrListener === "function"
+          ? (_optionsOrListener as (
+              req: ServerIncomingMessage,
+              res: ServerResponseBridge
+            ) => void)
+          : maybeListener;
+      return new Server(listener);
     },
 
     Agent,
     globalAgent: new Agent({ keepAlive: false }),
+    Server: Server as unknown as typeof nodeHttp.Server,
+    ServerResponse: ServerResponseBridge as unknown as typeof nodeHttp.ServerResponse,
     IncomingMessage: IncomingMessage as unknown as typeof nodeHttp.IncomingMessage,
     ClientRequest: ClientRequest as unknown as typeof nodeHttp.ClientRequest,
 
@@ -853,17 +1333,33 @@ function createHttpModule(_protocol: string): Partial<typeof nodeHttp> {
 
 export const http = createHttpModule("http");
 export const https = createHttpModule("https");
+export const http2 = {
+  Http2ServerRequest: class Http2ServerRequest {},
+  Http2ServerResponse: class Http2ServerResponse {},
+  createServer(): never {
+    throw new Error("http2.createServer is not supported in sandbox");
+  },
+  createSecureServer(): never {
+    throw new Error("http2.createSecureServer is not supported in sandbox");
+  },
+};
 
 // Export modules and make them available as globals for require()
 (globalThis as Record<string, unknown>)._httpModule = http;
 (globalThis as Record<string, unknown>)._httpsModule = https;
+(globalThis as Record<string, unknown>)._http2Module = http2;
 (globalThis as Record<string, unknown>)._dnsModule = dns;
+(globalThis as Record<string, unknown>)._httpServerDispatch = dispatchServerRequest;
 
 // Make fetch API available globally
 (globalThis as Record<string, unknown>).fetch = fetch;
 (globalThis as Record<string, unknown>).Headers = Headers;
 (globalThis as Record<string, unknown>).Request = Request;
 (globalThis as Record<string, unknown>).Response = Response;
+if (typeof (globalThis as Record<string, unknown>).Blob === "undefined") {
+  // Minimal Blob stub used by server frameworks for instanceof checks.
+  (globalThis as Record<string, unknown>).Blob = class BlobStub {};
+}
 
 export default {
   fetch,
@@ -873,6 +1369,7 @@ export default {
   dns,
   http,
   https,
+  http2,
   IncomingMessage,
   ClientRequest,
 };

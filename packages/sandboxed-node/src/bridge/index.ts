@@ -30,9 +30,6 @@ import * as childProcess from "./child-process.js";
 // Network modules (fetch, dns, http, https)
 import * as network from "./network.js";
 
-// @hono/node-server bridge
-import * as honoNodeServer from "./hono-node-server.js";
-
 // Process and global polyfills
 import process, {
   setupGlobals,
@@ -65,7 +62,6 @@ export {
 
   // Network
   network,
-  honoNodeServer,
 
   // Process globals
   setupGlobals,

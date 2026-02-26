@@ -29,6 +29,10 @@ const driver = createNodeDriver({
 const proc = new NodeProcess({ driver });
 const result = await proc.exec("console.log('hello from node')");
 console.log(result.stdout);
+
+// Host-side network calls through the sandbox network adapter.
+const response = await proc.network.fetch("https://example.com", { method: "GET" });
+console.log(response.status, response.body);
 ```
 
 ## Usage (Browser)

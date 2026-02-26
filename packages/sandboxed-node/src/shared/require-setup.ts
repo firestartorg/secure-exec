@@ -63,6 +63,13 @@ export function getRequireSetupCode(): string {
           return _httpsModule;
         }
 
+        // Special handling for http2 module
+        if (name === 'http2') {
+          if (_moduleCache['http2']) return _moduleCache['http2'];
+          _moduleCache['http2'] = _http2Module;
+          return _http2Module;
+        }
+
         // Special handling for dns module
         if (name === 'dns') {
           if (_moduleCache['dns']) return _moduleCache['dns'];
@@ -88,13 +95,6 @@ export function getRequireSetupCode(): string {
         // This prevents node-stdlib-browser's process polyfill from overwriting it.
         if (name === 'process') {
           return globalThis.process;
-        }
-
-        // Special handling for @hono/node-server module
-        if (name === '@hono/node-server') {
-          if (_moduleCache['@hono/node-server']) return _moduleCache['@hono/node-server'];
-          _moduleCache['@hono/node-server'] = _honoNodeServerModule;
-          return _honoNodeServerModule;
         }
 
         // Stub for chalk (ESM module that npm uses for coloring)

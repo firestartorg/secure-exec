@@ -1,5 +1,23 @@
 # Sandboxed Node Friction Log
 
+## 2026-02-26
+
+1. **[resolved]** Bridging `@hono/node-server` violated strict sandbox boundary policy.
+   - Symptom: third-party module behavior was injected via bridge instead of coming from sandboxed `node_modules`.
+   - Fix: removed `@hono/node-server` bridge completely; replaced with built-in Node `http.createServer` bridge (`NetworkAdapter.httpServerListen/httpServerClose`) and kept framework code in sandboxed `node_modules`.
+
+2. **[resolved]** Needed host-driven verification path for sandbox HTTP servers.
+   - Symptom: Hono runner self-tested using in-sandbox `fetch`, which did not verify host-to-sandbox request path.
+   - Fix: added host-side `NodeProcess.network.fetch(...)` facade and updated `examples/hono/loader` to issue requests and terminate from loader.
+
+3. **[resolved]** Bridge bundle could go stale when non-entry bridge files changed.
+   - Symptom: runtime still used old `dist/bridge.js` behavior (for example `http.createServer` still throwing) after editing `src/bridge/network.ts`.
+   - Fix: bridge loader now rebuilds when any file under `src/bridge/` is newer than `dist/bridge.js`, not just when `index.ts` changes.
+
+4. **[resolved]** `@hono/node-server` path failed with `400` due `http2` runtime assumptions.
+   - Symptom: requests reached the sandbox server but responded `400`; root cause was `instanceof http2.Http2ServerRequest` checks throwing when `http2` constructors were undefined.
+   - Fix: added built-in `http2` compatibility stubs (`Http2ServerRequest`/`Http2ServerResponse`) and routed `require('http2')` / ESM `import 'http2'` to that stub module.
+
 ## 2026-02-25
 
 1. **[resolved]** Package resolution for `node_modules` was too limited.

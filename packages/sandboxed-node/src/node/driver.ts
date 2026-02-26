@@ -1,10 +1,10 @@
 import * as dns from "node:dns";
 import * as fs from "node:fs/promises";
 import type { AddressInfo } from "node:net";
+import * as http from "node:http";
 import * as https from "node:https";
 import type { Server as HttpServer } from "node:http";
 import * as zlib from "node:zlib";
-import { serve as honoServe } from "@hono/node-server";
 import {
 	filterEnv,
 	wrapCommandExecutor,
@@ -70,16 +70,79 @@ export class NodeFileSystem implements VirtualFileSystem {
 	}
 }
 
+function normalizeLoopbackHostname(hostname?: string): string {
+	if (!hostname || hostname === "localhost") return "127.0.0.1";
+	if (hostname === "127.0.0.1" || hostname === "::1") return hostname;
+	if (hostname === "0.0.0.0" || hostname === "::") return "127.0.0.1";
+	throw new Error(
+		`Sandbox HTTP servers are restricted to loopback interfaces. Received hostname: ${hostname}`,
+	);
+}
+
 export function createDefaultNetworkAdapter(): NetworkAdapter {
 	const servers = new Map<number, HttpServer>();
-	let nextServerId = 1;
 
 	return {
-		async honoServe(options) {
-			const server = honoServe({
-				fetch: options.fetch,
-				port: options.port ?? 3000,
-				hostname: options.hostname,
+		async httpServerListen(options) {
+			const listenHost = normalizeLoopbackHostname(options.hostname);
+			const server = http.createServer(async (req, res) => {
+				try {
+					const chunks: Buffer[] = [];
+					for await (const chunk of req) {
+						chunks.push(
+							Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
+						);
+					}
+
+					const headers: Record<string, string> = {};
+					Object.entries(req.headers).forEach(([key, value]) => {
+						if (typeof value === "string") {
+							headers[key] = value;
+						} else if (Array.isArray(value)) {
+							headers[key] = value[0] ?? "";
+						}
+					});
+					if (!headers.host) {
+						const localAddress = req.socket.localAddress;
+						const localPort = req.socket.localPort;
+						if (localAddress && localPort) {
+							headers.host = `${localAddress}:${localPort}`;
+						}
+					}
+
+					const response = await options.onRequest({
+						method: req.method || "GET",
+						url: req.url || "/",
+						headers,
+						rawHeaders: req.rawHeaders || [],
+						bodyBase64:
+							chunks.length > 0
+								? Buffer.concat(chunks).toString("base64")
+								: undefined,
+					});
+
+					res.statusCode = response.status || 200;
+					for (const [key, value] of response.headers || []) {
+						res.setHeader(key, value);
+					}
+
+					if (response.body !== undefined) {
+						if (response.bodyEncoding === "base64") {
+							res.end(Buffer.from(response.body, "base64"));
+						} else {
+							res.end(response.body);
+						}
+					} else {
+						res.end();
+					}
+				} catch (error) {
+					res.statusCode = 500;
+					res.end(
+						error instanceof Error
+							? error.message
+							: "Sandbox HTTP server bridge error",
+					);
+				}
 			});
 
 			await new Promise<void>((resolve, reject) => {
@@ -87,6 +150,7 @@ export function createDefaultNetworkAdapter(): NetworkAdapter {
 				const onError = (err: Error) => reject(err);
 				server.once("listening", onListening);
 				server.once("error", onError);
+				server.listen(options.port ?? 0, listenHost);
 			});
 
 			const rawAddress = server.address();
@@ -101,12 +165,11 @@ export function createDefaultNetworkAdapter(): NetworkAdapter {
 				};
 			}
 
-			const serverId = nextServerId++;
-			servers.set(serverId, server);
-			return { serverId, address };
+			servers.set(options.serverId, server);
+			return { address };
 		},
 
-		async honoClose(serverId) {
+		async httpServerClose(serverId) {
 			const server = servers.get(serverId);
 			if (!server) return;
 

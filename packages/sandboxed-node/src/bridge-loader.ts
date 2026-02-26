@@ -19,15 +19,39 @@ function findBridgeSourcePath(): string | null {
 	return null;
 }
 
-function ensureBridgeBundle(bridgePath: string): void {
-	if (fs.existsSync(bridgePath)) return;
+function getLatestMtimeMs(dir: string): number {
+	let latest = 0;
+	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+		const entryPath = path.join(dir, entry.name);
+		if (entry.isDirectory()) {
+			latest = Math.max(latest, getLatestMtimeMs(entryPath));
+		} else if (entry.isFile()) {
+			latest = Math.max(latest, fs.statSync(entryPath).mtimeMs);
+		}
+	}
+	return latest;
+}
 
+function ensureBridgeBundle(bridgePath: string): void {
 	const sourcePath = findBridgeSourcePath();
+
+	// Fall back to an existing bridge bundle when source is unavailable.
 	if (!sourcePath) {
+		if (fs.existsSync(bridgePath)) return;
 		throw new Error(
 			"bridge.js not found and source is unavailable. Run `pnpm -C packages/sandboxed-node build:bridge`.",
 		);
 	}
+
+	const shouldBuild = (() => {
+		if (!fs.existsSync(bridgePath)) return true;
+		const sourceDir = path.dirname(sourcePath);
+		const sourceMtime = getLatestMtimeMs(sourceDir);
+		const bundleMtime = fs.statSync(bridgePath).mtimeMs;
+		return sourceMtime > bundleMtime;
+	})();
+
+	if (!shouldBuild) return;
 
 	fs.mkdirSync(path.dirname(bridgePath), { recursive: true });
 	const result = esbuild.buildSync({

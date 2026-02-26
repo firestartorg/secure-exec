@@ -1,44 +1,17 @@
-import { execFile } from "node:child_process";
-import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import {
   NodeFileSystem,
   NodeProcess,
   createNodeDriver,
 } from "../../../../packages/sandboxed-node/src/index.ts";
-
-const execFileAsync = promisify(execFile);
-
-async function prepareRunnerInTempDir(sourceDir: string): Promise<{
-  tempDir: string;
-  entryPath: string;
-}> {
-  const tempDir = await mkdtemp(path.join(tmpdir(), "libsandbox-hono-runner-"));
-
-  await cp(sourceDir, tempDir, {
-    recursive: true,
-    filter: (src) => !src.includes(`${path.sep}node_modules`),
-  });
-
-  try {
-    await execFileAsync("pnpm", ["install", "--ignore-workspace"], {
-      cwd: tempDir,
-      maxBuffer: 10 * 1024 * 1024,
-    });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown pnpm install failure";
-    throw new Error(`Failed to install runner dependencies in temp dir: ${message}`);
-  }
-
-  return {
-    tempDir,
-    entryPath: path.join(tempDir, "src/index.ts"),
-  };
-}
+import {
+  LOOPBACK_HOST,
+  findOpenPort,
+  prepareRunnerInTempDir,
+  waitForServer,
+} from "../../../shared/src/sandbox-runner-utils.ts";
 
 async function main(): Promise<void> {
   const loaderDir = path.dirname(fileURLToPath(import.meta.url));
@@ -49,6 +22,8 @@ async function main(): Promise<void> {
 
   try {
     const runnerCode = await readFile(runnerEntry, "utf8");
+    const runnerPort = await findOpenPort();
+    const baseUrl = `http://${LOOPBACK_HOST}:${runnerPort}`;
 
     const driver = createNodeDriver({
       filesystem: new NodeFileSystem(),
@@ -63,21 +38,28 @@ async function main(): Promise<void> {
       },
     });
 
-    const result = await proc.exec(runnerCode, {
+    const execPromise = proc.exec(runnerCode, {
       filePath: runnerEntry,
       cwd: runnerRoot,
+      env: {
+        HONO_PORT: String(runnerPort),
+        HONO_HOST: LOOPBACK_HOST,
+      },
     });
 
-    if (result.stdout) {
-      process.stdout.write(result.stdout);
-    }
-    if (result.stderr) {
-      process.stderr.write(result.stderr);
-    }
+    await waitForServer(proc, baseUrl);
 
-    if (result.code !== 0) {
-      throw new Error(`Sandboxed runner exited with code ${result.code}`);
-    }
+    const textResponse = await proc.network.fetch(`${baseUrl}/`, { method: "GET" });
+    const jsonResponse = await proc.network.fetch(`${baseUrl}/json`, { method: "GET" });
+
+    console.log(`loader:text:${textResponse.status}:${textResponse.body}`);
+    console.log(`loader:json:${jsonResponse.status}:${jsonResponse.body}`);
+
+    // Shut down the sandbox from the host side.
+    await proc.terminate();
+
+    // Ensure pending execution settles after termination.
+    await execPromise.catch(() => undefined);
   } finally {
     await rm(runnerRoot, { recursive: true, force: true });
   }

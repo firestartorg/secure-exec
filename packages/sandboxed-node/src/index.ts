@@ -25,6 +25,7 @@ import type {
 	NetworkAdapter,
 	Permissions,
 	SandboxDriver,
+	SpawnedProcess,
 	VirtualFileSystem,
 } from "./types.js";
 import type {
@@ -87,6 +88,8 @@ export class NodeProcess {
 	private filesystemEnabled: boolean = false;
 	private commandExecutorEnabled: boolean = false;
 	private networkEnabled: boolean = false;
+	private activeHttpServerIds: Set<number> = new Set();
+	private disposed: boolean = false;
 	// Cache for compiled ESM modules (per isolate)
 	private esmModuleCache: Map<string, ivm.Module> = new Map();
 
@@ -138,6 +141,18 @@ export class NodeProcess {
 	}
 
 	/**
+	 * Host-side network access routed through the sandbox network adapter.
+	 */
+	get network(): Pick<NetworkAdapter, "fetch" | "dnsLookup" | "httpRequest"> {
+		const adapter = this.networkAdapter ?? createNetworkStub();
+		return {
+			fetch: (url, options) => adapter.fetch(url, options),
+			dnsLookup: (hostname) => adapter.dnsLookup(hostname),
+			httpRequest: (url, options) => adapter.httpRequest(url, options),
+		};
+	}
+
+	/**
 	 * Set the filesystem for file access
 	 */
 	setFilesystem(filesystem: VirtualFileSystem): void {
@@ -167,10 +182,10 @@ export class NodeProcess {
 			"os",
 			"http",
 			"https",
+			"http2",
 			"dns",
 			"child_process",
 			"process",
-			"@hono/node-server",
 		];
 		if (hasPolyfill(moduleName) || bridgeModules.includes(moduleName)) {
 			return specifier; // Return as-is, compileESMModule will handle it
@@ -237,10 +252,10 @@ export class NodeProcess {
 			"os",
 			"http",
 			"https",
+			"http2",
 			"dns",
 			"child_process",
 			"process",
-			"@hono/node-server",
 		];
 		const isSpecialModule = specialModules.includes(moduleName);
 
@@ -297,6 +312,11 @@ export class NodeProcess {
           const _https = globalThis._httpsModule || globalThis.bridge?.network?.https || {};
           export default _https;
         `;
+			} else if (moduleName === "http2") {
+				code = `
+          const _http2 = globalThis._http2Module || {};
+          export default _http2;
+        `;
 			} else if (moduleName === "dns") {
 				code = `
           const _dns = globalThis._dnsModule || globalThis.bridge?.network?.dns || {};
@@ -311,15 +331,6 @@ export class NodeProcess {
 				code = `
           const _proc = globalThis.process || {};
           export default _proc;
-        `;
-			} else if (moduleName === "@hono/node-server") {
-				code = `
-          const _honoNodeServer = globalThis._honoNodeServerModule || globalThis.bridge?.honoNodeServer || {};
-          export default _honoNodeServer;
-          export const serve = _honoNodeServer.serve;
-          export const createAdaptorServer = _honoNodeServer.createAdaptorServer;
-          export const getRequestListener = _honoNodeServer.getRequestListener;
-          export const RequestError = _honoNodeServer.RequestError;
         `;
 			} else {
 				// Get polyfill code and wrap for ESM
@@ -539,7 +550,12 @@ export class NodeProcess {
 				}
 
 				// Network modules are handled specially
-				if (name === "http" || name === "https" || name === "dns") {
+				if (
+					name === "http" ||
+					name === "https" ||
+					name === "http2" ||
+					name === "dns"
+				) {
 					return null;
 				}
 
@@ -550,11 +566,6 @@ export class NodeProcess {
 
 				// module is handled specially with our own polyfill
 				if (name === "module") {
-					return null;
-				}
-
-				// @hono/node-server is provided by bridge
-				if (name === "@hono/node-server") {
 					return null;
 				}
 
@@ -876,101 +887,87 @@ export class NodeProcess {
 				},
 			);
 
-			// Lazy dispatcher reference for @hono/node-server fetch callbacks
-			let honoDispatchRef: ivm.Reference<
+			// Lazy dispatcher reference for in-sandbox HTTP server callbacks
+			let httpServerDispatchRef: ivm.Reference<
 				(
-					handlerId: number,
+					serverId: number,
 					requestJson: string,
 				) => Promise<string>
 			> | null = null;
 
-			const getHonoDispatchRef = () => {
-				if (!honoDispatchRef) {
-					honoDispatchRef = context.global.getSync("_honoNodeServerDispatch", {
+			const getHttpServerDispatchRef = () => {
+				if (!httpServerDispatchRef) {
+					httpServerDispatchRef = context.global.getSync("_httpServerDispatch", {
 						reference: true,
 					}) as ivm.Reference<
 						(
-							handlerId: number,
+							serverId: number,
 							requestJson: string,
 						) => Promise<string>
 					>;
 				}
-				return honoDispatchRef!;
+				return httpServerDispatchRef!;
 			};
 
-			// Reference for starting a @hono/node-server server
-			const networkHonoServeRef = new ivm.Reference(
+			// Reference for starting an in-sandbox HTTP server
+			const networkHttpServerListenRef = new ivm.Reference(
 				async (optionsJson: string): Promise<string> => {
-					if (!adapter.honoServe) {
+					if (!adapter.httpServerListen) {
 						throw new Error(
-							"@hono/node-server requires NetworkAdapter.honoServe support",
+							"http.createServer requires NetworkAdapter.httpServerListen support",
 						);
 					}
 
 					const options = JSON.parse(optionsJson) as {
-						handlerId: number;
+						serverId: number;
 						port?: number;
 						hostname?: string;
 					};
 
-					const result = await adapter.honoServe({
+					const result = await adapter.httpServerListen({
+						serverId: options.serverId,
 						port: options.port,
 						hostname: options.hostname,
-						fetch: async (request: Request): Promise<Response> => {
-							const headers = Array.from(request.headers.entries());
-							const method = request.method || "GET";
-							const body =
-								method === "GET" || method === "HEAD"
-									? undefined
-									: await request.text();
+						onRequest: async (request) => {
+							const requestJson = JSON.stringify(request);
 
-							const requestJson = JSON.stringify({
-								url: request.url,
-								method,
-								headers,
-								body,
-							});
-
-							const responseJson = await getHonoDispatchRef().apply(
+							const responseJson = await getHttpServerDispatchRef().apply(
 								undefined,
-								[options.handlerId, requestJson],
+								[options.serverId, requestJson],
 								{ result: { promise: true } },
 							);
-
-							const response = JSON.parse(responseJson) as {
+							return JSON.parse(String(responseJson)) as {
 								status: number;
 								headers?: Array<[string, string]>;
 								body?: string;
+								bodyEncoding?: "utf8" | "base64";
 							};
-
-							return new Response(response.body ?? "", {
-								status: response.status ?? 200,
-								headers: response.headers ?? [],
-							});
 						},
 					});
+					this.activeHttpServerIds.add(options.serverId);
 
 					return JSON.stringify(result);
 				},
 			);
 
-			// Reference for closing a @hono/node-server server
-			const networkHonoCloseRef = new ivm.Reference(
+			// Reference for closing an in-sandbox HTTP server
+			const networkHttpServerCloseRef = new ivm.Reference(
 				async (serverId: number): Promise<void> => {
-					if (!adapter.honoClose) {
+					if (!adapter.httpServerClose) {
 						throw new Error(
-							"@hono/node-server close requires NetworkAdapter.honoClose support",
+							"http.createServer close requires NetworkAdapter.httpServerClose support",
 						);
 					}
-					await adapter.honoClose(serverId);
+					await adapter.httpServerClose(serverId);
+					this.activeHttpServerIds.delete(serverId);
 				},
 			);
 
 			await jail.set("_networkFetchRaw", networkFetchRef);
 			await jail.set("_networkDnsLookupRaw", networkDnsLookupRef);
 			await jail.set("_networkHttpRequestRaw", networkHttpRequestRef);
-			await jail.set("_networkHonoServeRaw", networkHonoServeRef);
-			await jail.set("_networkHonoCloseRaw", networkHonoCloseRef);
+			await jail.set("_networkHttpServerListenRaw", networkHttpServerListenRef);
+			await jail.set("_networkHttpServerCloseRaw", networkHttpServerCloseRef);
 		}
 
 		// Set up globals needed by the bridge BEFORE loading it
@@ -1008,115 +1005,17 @@ export class NodeProcess {
 
 	/**
 	 * Run code and return the value of module.exports (CJS) or default export (ESM)
-	 * along with exit code and captured stdout/stderr
+	 * along with exit code and captured stdout/stderr.
 	 */
 	async run<T = unknown>(
 		code: string,
 		filePath?: string,
 	): Promise<RunResult<T>> {
-		// Clear caches for fresh run
-		this.esmModuleCache.clear();
-		this.dynamicImportCache.clear();
-
-		const context = await this.isolate.createContext();
-		const stdout: string[] = [];
-		const stderr: string[] = [];
-
-		try {
-			const jail = context.global;
-			await jail.set("global", jail.derefInto());
-
-			// Set up console capture
-			await this.setupConsole(context, jail, stdout, stderr);
-
-			let exports: T;
-
-			// Detect ESM vs CJS
-			if (isESM(code, filePath)) {
-				// ESM path
-				await this.setupESMGlobals(context, jail);
-
-				// Transform dynamic import() to __dynamicImport()
-				const transformedCode = transformDynamicImport(code);
-
-				// Pre-compile all dynamic imports
-				await this.precompileDynamicImports(transformedCode, context);
-
-				// Set up dynamic import function
-				await this.setupDynamicImport(context, jail);
-
-				exports = (await this.runESM(transformedCode, context, filePath)) as T;
-			} else {
-				// CJS path (existing behavior)
-				await this.setupRequire(context, jail);
-
-				// Create module object
-				const moduleObj = await this.isolate.compileScript(
-					"globalThis.module = { exports: {} };",
-				);
-				await moduleObj.run(context);
-
-				// Transform dynamic import() to __dynamicImport()
-				const transformedCode = transformDynamicImport(code);
-
-				// Pre-compile all dynamic imports
-				await this.precompileDynamicImports(transformedCode, context);
-
-				// Set up dynamic import function
-				await this.setupDynamicImport(context, jail);
-
-				// Run user code
-				const script = await this.isolate.compileScript(transformedCode);
-				await script.run(context);
-
-				// Get module.exports
-				exports = (await context.eval("module.exports", { copy: true })) as T;
-			}
-
-			// Wait for any active handles (child processes, etc.) to complete
-			// See: packages/sandboxed-node/docs/ACTIVE_HANDLES.md
-			await context.eval(
-				'typeof _waitForActiveHandles === "function" ? _waitForActiveHandles() : Promise.resolve()',
-				{ promise: true },
-			);
-
-			// Get exit code from process.exitCode if set
-			const exitCode = (await context.eval("process.exitCode || 0", {
-				copy: true,
-			})) as number;
-
-			return {
-				stdout: stdout.join("\n") + (stdout.length > 0 ? "\n" : ""),
-				stderr: stderr.join("\n") + (stderr.length > 0 ? "\n" : ""),
-				code: exitCode,
-				exports,
-			};
-		} catch (err) {
-			// Check if this is a ProcessExitError (controlled exit)
-			const errMessage = err instanceof Error ? err.message : String(err);
-
-			// ProcessExitError format: "process.exit(N)"
-			const exitMatch = errMessage.match(/process\.exit\((\d+)\)/);
-			if (exitMatch) {
-				const exitCode = parseInt(exitMatch[1], 10);
-				return {
-					stdout: stdout.join("\n") + (stdout.length > 0 ? "\n" : ""),
-					stderr: stderr.join("\n") + (stderr.length > 0 ? "\n" : ""),
-					code: exitCode,
-					exports: undefined as T,
-				};
-			}
-
-			stderr.push(errMessage);
-			return {
-				stdout: stdout.join("\n") + (stdout.length > 0 ? "\n" : ""),
-				stderr: stderr.join("\n") + (stderr.length > 0 ? "\n" : ""),
-				code: 1,
-				exports: undefined as T,
-			};
-		} finally {
-			context.release();
-		}
+		return this.executeInternal<T>({
+			mode: "run",
+			code,
+			filePath,
+		});
 	}
 
 	/**
@@ -1161,11 +1060,37 @@ export class NodeProcess {
 	 * Supports both CJS and ESM syntax
 	 */
 	async exec(code: string, options?: ExecOptions): Promise<ExecResult> {
-		const { filePath, env, cwd, stdin } = options ?? {};
+		const result = await this.executeInternal({
+			mode: "exec",
+			code,
+			filePath: options?.filePath,
+			env: options?.env,
+			cwd: options?.cwd,
+			stdin: options?.stdin,
+		});
 
+		return {
+			stdout: result.stdout,
+			stderr: result.stderr,
+			code: result.code,
+		};
+	}
+
+	/**
+	 * Shared execution pipeline for module-oriented and script-oriented execution.
+	 */
+	private async executeInternal<T = unknown>(options: {
+		mode: "run" | "exec";
+		code: string;
+		filePath?: string;
+		env?: Record<string, string>;
+		cwd?: string;
+		stdin?: string;
+	}): Promise<RunResult<T>> {
 		// Clear caches for fresh run
 		this.esmModuleCache.clear();
 		this.dynamicImportCache.clear();
+		this.activeHttpServerIds.clear();
 
 		const context = await this.isolate.createContext();
 		const stdout: string[] = [];
@@ -1178,117 +1103,97 @@ export class NodeProcess {
 			// Set up console capture
 			await this.setupConsole(context, jail, stdout, stderr);
 
-			// Detect ESM vs CJS
-			if (isESM(code, filePath)) {
-				// ESM path
+			let exports: T | undefined;
+			const transformedCode = transformDynamicImport(options.code);
+
+			// Detect ESM vs CJS and run the mode-specific path.
+			if (isESM(options.code, options.filePath)) {
 				await this.setupESMGlobals(context, jail);
 
-				// Override process.env and process.cwd if provided
-				if (env || cwd) {
-					await this.overrideProcessConfig(context, env, cwd);
+				if (options.mode === "exec") {
+					await this.applyExecutionOverrides(
+						context,
+						options.env,
+						options.cwd,
+						options.stdin,
+					);
 				}
 
-				// Set stdin data if provided
-				if (stdin !== undefined) {
-					await this.setStdinData(context, stdin);
-				}
-
-				// Transform dynamic import() to __dynamicImport()
-				const transformedCode = transformDynamicImport(code);
-
-				// Pre-compile all dynamic imports
 				await this.precompileDynamicImports(transformedCode, context);
-
-				// Set up dynamic import function
 				await this.setupDynamicImport(context, jail);
 
-				await this.runESM(transformedCode, context, filePath);
+				const esmResult = await this.runESM(
+					transformedCode,
+					context,
+					options.filePath,
+				);
+				if (options.mode === "run") {
+					exports = esmResult as T;
+				}
 			} else {
-				// CJS path
 				await this.setupRequire(context, jail);
 				await context.eval("globalThis.module = { exports: {} };");
 
-				// Override process.env and process.cwd if provided
-				if (env || cwd) {
-					await this.overrideProcessConfig(context, env, cwd);
+				if (options.mode === "exec") {
+					await this.applyExecutionOverrides(
+						context,
+						options.env,
+						options.cwd,
+						options.stdin,
+					);
+
+					if (options.filePath) {
+						await this.setCommonJsFileGlobals(context, options.filePath);
+					}
 				}
 
-				// Set stdin data if provided
-				if (stdin !== undefined) {
-					await this.setStdinData(context, stdin);
-				}
-
-				// Set up __filename and __dirname if a file path is provided
-				// This is critical for relative require() calls to work correctly
-				if (filePath) {
-					const dirname = filePath.includes("/")
-						? filePath.substring(0, filePath.lastIndexOf("/")) || "/"
-						: "/";
-					await context.eval(`
-						globalThis.__filename = ${JSON.stringify(filePath)};
-						globalThis.__dirname = ${JSON.stringify(dirname)};
-						globalThis._currentModule.dirname = ${JSON.stringify(dirname)};
-						globalThis._currentModule.filename = ${JSON.stringify(filePath)};
-					`);
-				}
-
-				// Transform dynamic import() to __dynamicImport()
-				const transformedCode = transformDynamicImport(code);
-
-				// Pre-compile all dynamic imports (must happen before setting up the function)
 				await this.precompileDynamicImports(transformedCode, context);
-
-				// Now set up the dynamic import function (uses pre-compiled cache)
 				await this.setupDynamicImport(context, jail);
 
-				// Wrap code to capture the result in a global and await if it's a promise
-				// For async IIFEs, we need to capture the Promise returned by the IIFE
-				const wrappedCode = `
-          globalThis.__scriptResult__ = eval(${JSON.stringify(transformedCode)});
-        `;
-				const script = await this.isolate.compileScript(wrappedCode);
-				await script.run(context);
-
-				// If the script returned a promise, await it
-				// Return the promise directly so isolated-vm can properly await it with { promise: true }
-				const hasPromise = await context.eval(
-					`globalThis.__scriptResult__ && typeof globalThis.__scriptResult__.then === 'function'`,
-					{ copy: true },
-				);
-				if (hasPromise) {
-					await context.eval(`globalThis.__scriptResult__`, { promise: true });
+				if (options.mode === "exec") {
+					// Capture eval() result and await it if script returns a Promise.
+					const wrappedCode = `
+            globalThis.__scriptResult__ = eval(${JSON.stringify(transformedCode)});
+          `;
+					const script = await this.isolate.compileScript(wrappedCode);
+					await script.run(context);
+					await this.awaitScriptResult(context);
+				} else {
+					const script = await this.isolate.compileScript(transformedCode);
+					await script.run(context);
+					exports = (await context.eval("module.exports", { copy: true })) as T;
 				}
 			}
 
-			// Wait for any active handles (child processes, etc.) to complete
-			// See: packages/sandboxed-node/docs/ACTIVE_HANDLES.md
+			// Wait for any active handles (child processes, etc.) to complete.
 			await context.eval(
 				'typeof _waitForActiveHandles === "function" ? _waitForActiveHandles() : Promise.resolve()',
 				{ promise: true },
 			);
 
-			// Get exit code from process.exitCode if set
-			const exitCode = await context.eval("process.exitCode || 0", {
+			// Get exit code from process.exitCode if set.
+			const exitCode = (await context.eval("process.exitCode || 0", {
 				copy: true,
-			});
+			})) as number;
 
 			return {
 				stdout: stdout.join("\n") + (stdout.length > 0 ? "\n" : ""),
 				stderr: stderr.join("\n") + (stderr.length > 0 ? "\n" : ""),
-				code: exitCode as number,
+				code: exitCode,
+				exports,
 			};
 		} catch (err) {
-			// Check if this is a ProcessExitError (controlled exit)
+			// Handle controlled process exits from process.exit(N).
 			const errMessage = err instanceof Error ? err.message : String(err);
-
-			// ProcessExitError format: "process.exit(N)"
 			const exitMatch = errMessage.match(/process\.exit\((\d+)\)/);
+
 			if (exitMatch) {
 				const exitCode = parseInt(exitMatch[1], 10);
 				return {
 					stdout: stdout.join("\n") + (stdout.length > 0 ? "\n" : ""),
 					stderr: stderr.join("\n") + (stderr.length > 0 ? "\n" : ""),
 					code: exitCode,
+					exports: undefined as T,
 				};
 			}
 
@@ -1297,9 +1202,58 @@ export class NodeProcess {
 				stdout: stdout.join("\n") + (stdout.length > 0 ? "\n" : ""),
 				stderr: stderr.join("\n") + (stderr.length > 0 ? "\n" : ""),
 				code: 1,
+				exports: undefined as T,
 			};
 		} finally {
 			context.release();
+		}
+	}
+
+	/**
+	 * Apply runtime overrides used by script-style execution.
+	 */
+	private async applyExecutionOverrides(
+		context: ivm.Context,
+		env?: Record<string, string>,
+		cwd?: string,
+		stdin?: string,
+	): Promise<void> {
+		if (env || cwd) {
+			await this.overrideProcessConfig(context, env, cwd);
+		}
+		if (stdin !== undefined) {
+			await this.setStdinData(context, stdin);
+		}
+	}
+
+	/**
+	 * Set CommonJS file globals for accurate relative require() behavior.
+	 */
+	private async setCommonJsFileGlobals(
+		context: ivm.Context,
+		filePath: string,
+	): Promise<void> {
+		const dirname = filePath.includes("/")
+			? filePath.substring(0, filePath.lastIndexOf("/")) || "/"
+			: "/";
+		await context.eval(`
+      globalThis.__filename = ${JSON.stringify(filePath)};
+      globalThis.__dirname = ${JSON.stringify(dirname)};
+      globalThis._currentModule.dirname = ${JSON.stringify(dirname)};
+      globalThis._currentModule.filename = ${JSON.stringify(filePath)};
+    `);
+	}
+
+	/**
+	 * Await script result when eval() returns a Promise.
+	 */
+	private async awaitScriptResult(context: ivm.Context): Promise<void> {
+		const hasPromise = await context.eval(
+			`globalThis.__scriptResult__ && typeof globalThis.__scriptResult__.then === 'function'`,
+			{ copy: true },
+		);
+		if (hasPromise) {
+			await context.eval(`globalThis.__scriptResult__`, { promise: true });
 		}
 	}
 
@@ -1348,6 +1302,28 @@ export class NodeProcess {
 	}
 
 	dispose(): void {
+		if (this.disposed) {
+			return;
+		}
+		this.disposed = true;
+		this.isolate.dispose();
+	}
+
+	/**
+	 * Terminate sandbox execution from the host.
+	 * Closes bridged HTTP servers before disposing the isolate.
+	 */
+	async terminate(): Promise<void> {
+		if (this.disposed) {
+			return;
+		}
+		const adapter = this.networkAdapter;
+		if (adapter?.httpServerClose) {
+			const ids = Array.from(this.activeHttpServerIds);
+			await Promise.allSettled(ids.map((id) => adapter.httpServerClose!(id)));
+		}
+		this.activeHttpServerIds.clear();
+		this.disposed = true;
 		this.isolate.dispose();
 	}
 }
