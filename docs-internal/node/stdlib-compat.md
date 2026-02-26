@@ -169,22 +169,22 @@ Status of each Node.js core module in sandboxed-node. Modules are provided via o
 
 ## tty
 
-- Stub (`src/shared/require-setup.ts`)
+- Polyfill via `node-stdlib-browser` (`tty-browserify`)
 - `isatty()` — returns `false`
-- `ReadStream`, `WriteStream` — stubs
+- `ReadStream`, `WriteStream` — present for compatibility but not implemented (constructors throw)
 
 ## v8
 
-- Stub (`src/shared/require-setup.ts`)
+- Pre-registered module-cache stub (`src/index.ts`, isolate setup)
 - `getHeapStatistics()` — mock values (64MB total, 50MB used)
 - `serialize()`, `deserialize()` — JSON-based (not real V8 serialization)
 - `setFlagsFromString()` — no-op
 
 ## constants
 
-- Stub (`src/shared/require-setup.ts`)
-- `signal.SIGTERM`, `signal.SIGKILL`, `signal.SIGINT` only
-- Full signal/errno constants available via `os.constants` instead
+- Polyfill via `node-stdlib-browser` (`constants-browserify`)
+- Large constant surface including `SIGTERM`, errno values, fs flags, SSL constants
+- `os.constants` remains available from the `os` bridge module
 
 ## vm
 
@@ -209,10 +209,8 @@ Status of each Node.js core module in sandboxed-node. Modules are provided via o
 - **trace_events** — no tracing
 - **domain** — deprecated, not implemented
 
-## Third-party stubs
+## Third-party bridge modules
 
-These are not Node.js core modules but are stubbed for npm package compatibility:
+These are not Node.js core modules but are still bridged:
 
-- **chalk** — pass-through (no color), `level: 0`
-- **supports-color** — `stdout: false`, `stderr: false`
 - **@hono/node-server** — full bridge implementation (`serve()`, `createAdaptorServer()`)

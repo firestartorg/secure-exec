@@ -41,6 +41,47 @@ describe("NodeProcess", () => {
 		expect(result.exports).toBe("foo/bar");
 	});
 
+	it("does not shim third-party packages in require resolution", async () => {
+		proc = new NodeProcess();
+		const result = await proc.exec(`require('chalk')`);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("Cannot find module");
+	});
+
+	it("loads tty/constants polyfills and v8 stub", async () => {
+		proc = new NodeProcess();
+		const result = await proc.run(`
+      const tty = require('tty');
+      const constants = require('constants');
+      const v8 = require('v8');
+      let readStreamThrows = false;
+      try {
+        new tty.ReadStream();
+      } catch (error) {
+        readStreamThrows = true;
+      }
+      module.exports = {
+        ttyIsatty: tty.isatty(1),
+        ttyReadStreamThrows: readStreamThrows,
+        constantsKeyCount: Object.keys(constants).length,
+        hasSigtermConstant: typeof constants.SIGTERM === 'number',
+        heapSizeLimitType: typeof v8.getHeapStatistics().heap_size_limit,
+      };
+    `);
+		const exports = result.exports as {
+			ttyIsatty: boolean;
+			ttyReadStreamThrows: boolean;
+			constantsKeyCount: number;
+			hasSigtermConstant: boolean;
+			heapSizeLimitType: string;
+		};
+		expect(exports.ttyIsatty).toBe(false);
+		expect(exports.ttyReadStreamThrows).toBe(true);
+		expect(exports.constantsKeyCount).toBeGreaterThan(10);
+		expect(exports.hasSigtermConstant).toBe(true);
+		expect(exports.heapSizeLimitType).toBe("number");
+	});
+
 	it("errors for unknown modules", async () => {
 		proc = new NodeProcess();
 		const result = await proc.exec(`require('nonexistent-module')`);

@@ -20,7 +20,7 @@
 - [ ] Fix dynamic import execution semantics so imports are not eagerly evaluated before user code.
   - `packages/sandboxed-node/src/index.ts`
 
-- [ ] Remove brittle require-path hacks/monkeypatches and replace with minimal, explicit compatibility behavior.
+- [x] Remove brittle require-path hacks/monkeypatches and replace with minimal, explicit compatibility behavior.
   - Current hacks include `chalk`, `supports-color`, `tty`, `constants`, `v8`, and `util/url/path` patching.
   - `packages/sandboxed-node/src/shared/require-setup.ts`
 
