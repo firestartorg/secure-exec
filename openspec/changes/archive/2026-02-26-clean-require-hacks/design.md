@@ -82,7 +82,7 @@ Steps 1-4 are unchanged. Step 5 loses the inline patches. Step 6 is unchanged. T
 
 ## Risks / Trade-offs
 
-**[Packages depending on `chalk`/`supports-color` shims will break]** → Expected and correct. Surfaces real missing dependencies. Mitigation: document in stdlib-compat.md that third-party packages must be in sandboxed `node_modules`.
+**[Packages depending on `chalk`/`supports-color` shims will break]** → Expected and correct. Surfaces real missing dependencies. Mitigation: document in node-compatability.mdx that third-party packages must be in sandboxed `node_modules`.
 
 **[`tty-browserify` or `constants-browserify` polyfill may behave differently than current stubs]** → Low risk. `tty-browserify` returns `isatty: false` (same as current stub). `constants-browserify` provides a superset of the current three-signal stub. Mitigation: verify behavior in existing tests after change.
 

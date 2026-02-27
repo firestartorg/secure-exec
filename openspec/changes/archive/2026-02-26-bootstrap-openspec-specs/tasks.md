@@ -8,7 +8,7 @@
 
 - [x] 2.1 Verify runtime requirements against `README.md` and `packages/sandboxed-node/docs/ACTIVE_HANDLES.md`.
 - [x] 2.2 Verify bridge boundary requirements against current bridge policy and module-resolution behavior in `packages/sandboxed-node`.
-- [x] 2.3 Verify governance requirements against `docs-internal/node/stdlib-compat.md`, OpenSpec tracking artifacts, and `docs-internal/friction/sandboxed-node.md`.
+- [x] 2.3 Verify governance requirements against `docs/node-compatability.mdx`, OpenSpec tracking artifacts, and `docs-internal/friction/sandboxed-node.md`.
 
 ## 3. Capture Immediate Follow-Up Work
 

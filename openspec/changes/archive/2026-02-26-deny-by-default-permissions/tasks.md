@@ -26,5 +26,5 @@
 
 ## 5. Documentation
 
-- [x] 5.1 Update `docs-internal/node/stdlib-compat.md` to note deny-by-default permission model
+- [x] 5.1 Update `docs/node-compatability.mdx` to note deny-by-default permission model
 - [x] 5.2 Mark the permission todo item as done in `docs-internal/todo/sandboxed-node.md`

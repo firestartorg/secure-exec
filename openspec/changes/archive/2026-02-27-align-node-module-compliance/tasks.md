@@ -19,7 +19,7 @@
 
 - [x] 4.1 Add regression tests for package metadata semantics (`type` handling and require/import entrypoint behavior) and builtin resolver helper behavior.
 - [x] 4.2 Add regression tests for dynamic import error fidelity and CJS namespace shape edge cases (primitive/null exports).
-- [x] 4.3 Update compatibility artifacts (`docs-internal/node/stdlib-compat.md`, `docs-internal/friction/sandboxed-node.md`) for any intentional or remaining Node deviations.
+- [x] 4.3 Update compatibility artifacts (`docs/node-compatability.mdx`, `docs-internal/friction/sandboxed-node.md`) for any intentional or remaining Node deviations.
 - [x] 4.4 Run targeted sandboxed-node checks (`pnpm vitest` scoped module tests, `pnpm tsc`/project type checks) and record outcomes in the change notes.
   - `2026-02-26`: `pnpm --filter sandboxed-node test -- tests/index.test.ts` passed (`27` tests).
   - `2026-02-26`: `pnpm --filter sandboxed-node check-types` still reports pre-existing bridge/browser type errors; no errors were reported in modified module-compliance files when filtered to touched paths.

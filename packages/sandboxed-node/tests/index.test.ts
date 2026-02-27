@@ -608,10 +608,34 @@ describe("NodeProcess", () => {
 		expect(result.stderr).toContain("CPU time limit exceeded");
 	});
 
+	it("hardens active-handle bridge globals as non-writable and non-configurable", async () => {
+		proc = new NodeProcess();
+		const result = await proc.exec(`
+	      const targets = [
+	        "_registerHandle",
+	        "_unregisterHandle",
+	        "_waitForActiveHandles",
+	      ];
+	      const descriptors = Object.fromEntries(
+	        targets.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)])
+	      );
+	      console.log(JSON.stringify(descriptors));
+	    `);
+		expect(result.code).toBe(0);
+		const descriptors = JSON.parse(result.stdout.trim()) as Record<
+			string,
+			{ writable?: boolean; configurable?: boolean } | undefined
+		>;
+		for (const name of ["_registerHandle", "_unregisterHandle", "_waitForActiveHandles"]) {
+			expect(descriptors[name]?.writable).toBe(false);
+			expect(descriptors[name]?.configurable).toBe(false);
+		}
+	});
+
 	it("enforces shared cpuTimeLimitMs deadline during active-handle wait", async () => {
 		proc = new NodeProcess({ cpuTimeLimitMs: 100 });
 		const result = await proc.run(`
-	      globalThis._waitForActiveHandles = () => new Promise(() => {});
+	      globalThis._registerHandle("test:stuck", "test unresolved handle");
 	      module.exports = 42;
 	    `);
 		expect(result.code).toBe(124);

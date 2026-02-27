@@ -58,8 +58,24 @@ export function _getActiveHandles(): Array<[string, string]> {
 	return Array.from(_activeHandles.entries());
 }
 
-// Install on globalThis for use by other bridge modules and exec()
-(globalThis as Record<string, unknown>)._registerHandle = _registerHandle;
-(globalThis as Record<string, unknown>)._unregisterHandle = _unregisterHandle;
-(globalThis as Record<string, unknown>)._waitForActiveHandles = _waitForActiveHandles;
+// Install on globalThis for use by other bridge modules and exec().
+// Lock bridge internals so sandbox code cannot replace lifecycle hooks.
+Object.defineProperty(globalThis, "_registerHandle", {
+	value: _registerHandle,
+	writable: false,
+	configurable: false,
+	enumerable: true,
+});
+Object.defineProperty(globalThis, "_unregisterHandle", {
+	value: _unregisterHandle,
+	writable: false,
+	configurable: false,
+	enumerable: true,
+});
+Object.defineProperty(globalThis, "_waitForActiveHandles", {
+	value: _waitForActiveHandles,
+	writable: false,
+	configurable: false,
+	enumerable: true,
+});
 (globalThis as Record<string, unknown>)._getActiveHandles = _getActiveHandles;

@@ -20,5 +20,5 @@
 ## Impact
 
 - Affected code: `packages/sandboxed-node/src/shared/require-setup.ts` and related module-loading paths.
-- Affected docs: `docs-internal/node/stdlib-compat.md`.
+- Affected docs: `docs/node-compatability.mdx`.
 - Affected follow-up validation: bridge/runtime compatibility tests.

@@ -45,7 +45,7 @@ Alternatives considered:
 ### 3. Treat internal docs as first-class requirement inputs
 
 Decision:
-- Use README, `docs-internal/node/stdlib-compat.md`, `docs-internal/friction/sandboxed-node.md`, and existing OpenSpec change artifacts as authoritative inputs for this baseline.
+- Use README, `docs/node-compatability.mdx`, `docs-internal/friction/sandboxed-node.md`, and existing OpenSpec change artifacts as authoritative inputs for this baseline.
 
 Rationale:
 - These files already encode project constraints and unresolved decisions.

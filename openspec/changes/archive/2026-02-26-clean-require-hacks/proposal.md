@@ -22,4 +22,4 @@ _(none — this change aligns with existing bridge-boundary-policy and compatibi
 - **Code**: `packages/sandboxed-node/src/shared/require-setup.ts` (primary), `packages/sandboxed-node/src/index.ts` (v8 stub registration)
 - **Dependencies**: No new dependencies. Relies on existing `node-stdlib-browser` polyfills (`tty-browserify`, `constants-browserify`) already installed.
 - **Risk**: Packages that implicitly depend on the `chalk`/`supports-color` shims will fail to resolve if those packages aren't in their sandboxed `node_modules`. This is the correct behavior per bridge-boundary-policy but may surface missing dependencies in existing sandbox setups.
-- **Docs**: `docs-internal/node/stdlib-compat.md` entries for `tty`, `constants`, `v8` need updating to reflect new resolution paths.
+- **Docs**: `docs/node-compatability.mdx` entries for `tty`, `constants`, `v8` need updating to reflect new resolution paths.

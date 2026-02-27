@@ -16,6 +16,10 @@
       {
         "group": "Security",
         "pages": ["security-model"]
+      },
+      {
+        "group": "Compatibility",
+        "pages": ["node-compatability"]
       }
     ]
   }

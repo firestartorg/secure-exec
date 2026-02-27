@@ -23,4 +23,4 @@ Sandboxed-node still diverges from standard Node.js module semantics in several 
 
 - Affected code: `packages/sandboxed-node/src/index.ts`, `packages/sandboxed-node/src/package-bundler.ts`, `packages/sandboxed-node/src/shared/esm-utils.ts`, `packages/sandboxed-node/src/shared/require-setup.ts`, `packages/sandboxed-node/src/bridge/module.ts`.
 - Affected tests: `packages/sandboxed-node/tests/index.test.ts` (new module-compat edge-case scenarios).
-- Affected docs: `docs-internal/node/stdlib-compat.md` and `docs-internal/friction/sandboxed-node.md` for any intentional or remaining deltas.
+- Affected docs: `docs/node-compatability.mdx` and `docs-internal/friction/sandboxed-node.md` for any intentional or remaining deltas.

@@ -1,5 +1,19 @@
 # Sandboxed Node TODOs
 
+## High level
+
+- Review the node driver
+- Plan desired minimal driver that we'll use in rivet
+- Add codemode example
+- Add just-bash example
+- Test with
+    - Pi
+    - Express
+    - Hono
+    - ???
+
+## Todo
+
 - [x] Remove all `@hono/node-server` bridge integration and load it only from sandboxed `node_modules`.
   - Remove bridge module and exports (`packages/sandboxed-node/src/bridge/hono-node-server.ts`, `packages/sandboxed-node/src/bridge/index.ts`).
   - Remove `@hono/node-server` special-cases in runtime resolution/execution (`packages/sandboxed-node/src/index.ts`, `packages/sandboxed-node/src/shared/require-setup.ts`).
@@ -14,11 +28,13 @@
   - Provide a NodeProcess-level network facade and document concurrent run/fetch pattern (`packages/sandboxed-node/src/index.ts`, `README.md`, `examples/hono/README.md`).
   - Validate end-to-end from loader to runner (`examples/hono/loader/src/index.ts`, `examples/hono/runner/src/index.ts`).
 
-- [ ] Fix `run()` ESM semantics to match docs (return module exports/default instead of evaluation result).
-  - `packages/sandboxed-node/src/index.ts`
+- [x] Fix `run()` ESM semantics to match docs (return module exports/default instead of evaluation result).
+  - Fix: `runESM` now returns copied entry-module namespace exports (default + named) after evaluation.
+  - `packages/sandboxed-node/src/index.ts`, `packages/sandboxed-node/tests/index.test.ts`
 
-- [ ] Fix dynamic import execution semantics so imports are not eagerly evaluated before user code.
-  - `packages/sandboxed-node/src/index.ts`
+- [x] Fix dynamic import execution semantics so imports are not eagerly evaluated before user code.
+  - Fix: precompile step now resolves/compiles only; instantiate/evaluate occur on first `import()` reach.
+  - `packages/sandboxed-node/src/index.ts`, `packages/sandboxed-node/tests/index.test.ts`
 
 - [x] Remove brittle require-path hacks/monkeypatches and replace with minimal, explicit compatibility behavior.
   - Current hacks include `chalk`, `supports-color`, `tty`, `constants`, `v8`, and `util/url/path` patching.
@@ -31,7 +47,7 @@
 - [x] Make console capture robust for circular objects (avoid `JSON.stringify` throw paths in logging).
   - `packages/sandboxed-node/src/index.ts`
 
-- [x] Reconcile `docs-internal/node/STDLIB_COMPATIBILITY.md` with current runtime behavior.
+- [x] Reconcile `docs/node-compatability.mdx` with current runtime behavior.
   - Fix: completed in `codify-stdlib-support-policy` (remove stale third-party bridge notes, align `http`/`https`/`http2` sections, add support tiers).
 
 - [x] Close or explicitly codify missing `fs` APIs listed in compatibility docs.

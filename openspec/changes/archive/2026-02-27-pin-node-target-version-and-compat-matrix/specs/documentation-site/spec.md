@@ -1,8 +1,5 @@
-# documentation-site Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change add-simple-mintlify-quickstart-docs. Update Purpose after archive.
-## Requirements
 ### Requirement: Single-Page Quickstart Navigation
 The documentation site SHALL expose a core navigation set that includes Quickstart, Security Model, and Node Compatibility pages for initial rollout.
 
@@ -14,16 +11,7 @@ The documentation site SHALL expose a core navigation set that includes Quicksta
 - **WHEN** a user selects the Node Compatibility page from navigation
 - **THEN** the docs site MUST resolve and render `node-compatability.mdx` successfully
 
-### Requirement: Quickstart Uses Steps With Runnable Example
-The Quickstart page SHALL present onboarding steps using Mintlify `<Steps>` and SHALL include at least one basic runnable example that verifies setup success.
-
-#### Scenario: Steps component structures onboarding
-- **WHEN** the Quickstart page is rendered
-- **THEN** the page MUST contain a `<Steps>` block with ordered setup actions
-
-#### Scenario: Quickstart includes basic verification example
-- **WHEN** a user follows the Quickstart page
-- **THEN** the page MUST provide at least one concrete command example and expected successful outcome text
+## ADDED Requirements
 
 ### Requirement: Node Compatibility Page Declares Target Version and Matrix
 The docs site MUST provide `docs/node-compatability.mdx` with an explicit target Node version statement near the top of the page and a clean compatibility matrix table that summarizes module support tier and runtime notes.

@@ -21,5 +21,5 @@
 ## 5. Verify and Update Docs
 
 - [x] 5.1 Run tests in `packages/sandboxed-node` to verify no regressions from the cleanup (`pnpm vitest run` scoped to require/polyfill tests).
-- [x] 5.2 Update `docs-internal/node/stdlib-compat.md` entries for `tty`, `constants`, and `v8` to reflect their new resolution paths (polyfill vs pre-registered stub).
+- [x] 5.2 Update `docs/node-compatability.mdx` entries for `tty`, `constants`, and `v8` to reflect their new resolution paths (polyfill vs pre-registered stub).
 - [x] 5.3 Mark the "Remove brittle require-path hacks" item in `docs-internal/todo/sandboxed-node.md` as complete.

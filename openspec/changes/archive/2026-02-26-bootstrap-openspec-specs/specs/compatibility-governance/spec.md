@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Maintain Node Stdlib Compatibility Matrix
-Changes affecting bridged or polyfilled Node APIs MUST keep `docs-internal/node/stdlib-compat.md` synchronized with the actual runtime surface, including supported, limited, and unsupported modules/APIs.
+Changes affecting bridged or polyfilled Node APIs MUST keep `docs/node-compatability.mdx` synchronized with the actual runtime surface, including supported, limited, and unsupported modules/APIs.
 
 #### Scenario: Bridge API surface changes
 - **WHEN** a change adds, removes, or materially alters bridged Node API behavior

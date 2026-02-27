@@ -1,6 +1,6 @@
 ## Context
 
-The compatibility matrix (`stdlib-compat.md`) was originally written during early development and has not been systematically reconciled since. Several bridge changes have landed (removal of `@hono/node-server` bridge, addition of `http.createServer`, implementation of `fs.access`/`fs.realpath`) without corresponding doc updates. Meanwhile, 16 unimplemented core modules and several missing API gaps in `fs`, `child_process`, and `crypto` remain as open questions with no recorded decision.
+The compatibility matrix (`node-compatability.mdx`) was originally written during early development and has not been systematically reconciled since. Several bridge changes have landed (removal of `@hono/node-server` bridge, addition of `http.createServer`, implementation of `fs.access`/`fs.realpath`) without corresponding doc updates. Meanwhile, 16 unimplemented core modules and several missing API gaps in `fs`, `child_process`, and `crypto` remain as open questions with no recorded decision.
 
 The existing `compatibility-governance` spec requires keeping the matrix synchronized but does not require explicit support-tier classification for every module.
 
