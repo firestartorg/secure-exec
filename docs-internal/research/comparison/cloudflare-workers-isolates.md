@@ -76,9 +76,23 @@ libsandbox uses `isolated-vm` (also V8 isolates) and shares some of the same pri
 
 ### 1. No CPU/time limits (HIGH)
 
-A malicious `while(true){}` locks the isolate permanently. `isolated-vm` supports timeouts on `run()`/`eval()` calls -- these should be used.
+A malicious `while(true){}` can lock an execution path indefinitely. `isolated-vm` supports per-call timeouts, but they must be applied consistently across all isolate entry points.
 
-**Recommendation:** Add execution timeouts using isolated-vm's timeout parameter on script execution calls. Expose a configurable `executionTimeout` option.
+**Proposed fix (concrete):**
+1. Add `cpuTimeLimitMs?: number` to `NodeProcessOptions` and `ExecOptions` (default unset for Node-like behavior; recommended secure preset: `50-100ms`).
+2. Add a per-execution budget helper that computes a deadline (`Date.now() + cpuTimeLimitMs`) and derives `remainingMs` for every isolate call.
+3. Pass `timeout: remainingMs` at all execution choke points in `packages/sandboxed-node/src/index.ts`:
+   - `script.run(...)` in CJS `run()` and `exec()` paths
+   - `context.eval(...)` calls that execute user-influenced code (`eval` wrapper, `module.exports`, active-handle wait, script-result await)
+   - `entryModule.evaluate(...)` and dynamic `module.evaluate(...)` in ESM paths
+4. On timeout, return deterministic failure (`code: 124`, stderr includes `CPU time limit exceeded`) and immediately dispose/recreate the isolate to avoid post-timeout state reuse.
+5. Add targeted tests:
+   - CJS infinite loop trips timeout
+   - ESM infinite loop trips timeout
+   - Dynamic import with loop trips timeout
+   - `_waitForActiveHandles()` cannot run past the configured budget
+
+**Why this shape:** per-call timeout alone is not enough. A shared per-execution deadline closes gaps across `run`, `eval`, ESM evaluation, and late-phase handle draining.
 
 ### 2. No OS-level sandboxing (MEDIUM-HIGH)
 
@@ -93,9 +107,21 @@ The host Node.js process has full OS access. If there is ever an isolated-vm esc
 
 `Date.now()` likely returns real time in isolated-vm, usable as a timing side-channel. Cloudflare freezes clocks during execution and monitors for Spectre patterns.
 
-**Recommendation:**
-- Override `Date.now()` and `performance.now()` in the isolate bridge to return fixed values (time of execution start)
-- Ensure `SharedArrayBuffer` is not available in the isolate (likely already absent)
+**Proposed fix (concrete):**
+1. Add `timingMitigation?: "off" | "freeze"` to `NodeProcessOptions` (default `"off"` to preserve Node-like semantics).
+2. In `packages/sandboxed-node/src/index.ts`, when `timingMitigation === "freeze"`, capture execution start time and install hardened time globals before user code runs:
+   - `Date.now()` returns the captured execution-start timestamp.
+   - `performance.now()` returns a deterministic constant value for that execution.
+3. Route process timing helpers to the hardened clock path in freeze mode:
+   - `process.hrtime()`
+   - `process.hrtime.bigint()`
+   - `process.uptime()`
+4. Remove `SharedArrayBuffer` from `globalThis` in freeze mode.
+5. Add targeted tests that assert:
+   - default mode preserves advancing clocks;
+   - freeze mode produces deterministic/frozen values;
+   - `SharedArrayBuffer` is unavailable in freeze mode.
+6. Track this as OpenSpec change `openspec/changes/mitigate-timing-attacks/` (proposal/design/spec/tasks) and document intentional Node-compat deviations in friction docs.
 
 ### 4. eval() and new Function() unrestricted (MEDIUM)
 
@@ -117,8 +143,8 @@ In `checkPermission()`, if no permission check function is defined, the operatio
 
 ## Recommended Priority Order
 
-1. Add execution timeouts (isolated-vm timeout parameter)
-2. Freeze `Date.now()` / `performance.now()` in bridge
+1. Add execution timeouts using a shared per-execution CPU budget (apply timeout to every isolate entry point)
+2. Add opt-in timing hardening profile (`timingMitigation: "freeze"`) and wire process timing helpers to frozen clocks
 3. Document threat model explicitly -- isolated-vm is not sufficient for untrusted internet code without additional OS-level hardening
 4. Add OS-level hardening guidance (container/namespace recommendations)
 5. Add `eval()` restriction option

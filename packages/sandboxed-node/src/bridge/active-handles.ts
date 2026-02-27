@@ -6,7 +6,7 @@
  * code finishes. This module tracks active handles and provides a promise that
  * resolves when all handles complete.
  *
- * See: docs/ACTIVE_HANDLES.md
+ * See: docs-internal/node/ACTIVE_HANDLES.md
  */
 
 // Map of active handles: id -> description (for debugging)

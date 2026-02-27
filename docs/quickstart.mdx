@@ -1,0 +1,67 @@
+---
+title: Quickstart
+description: Get secure-exec running from TypeScript in a few minutes.
+---
+
+This quickstart is for users installing the `secure-exec` library in their own app.
+
+<Steps>
+  <Step title="Create a project and install dependencies">
+    Initialize a project and install runtime + TypeScript tooling.
+
+    ```bash
+    mkdir secure-exec-quickstart
+    cd secure-exec-quickstart
+    pnpm init
+    pnpm add secure-exec
+    pnpm add -D typescript tsx @types/node
+    ```
+  </Step>
+  <Step title="Add a TypeScript config">
+    Create `tsconfig.json`:
+
+    ```json
+    {
+      "compilerOptions": {
+        "target": "ES2022",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "strict": true,
+        "esModuleInterop": true
+      }
+    }
+    ```
+  </Step>
+  <Step title="Create and run a TypeScript example">
+    Create `quickstart.ts`:
+
+    ```ts
+    import { NodeProcess, createNodeDriver } from "secure-exec";
+
+    async function main() {
+      const proc = new NodeProcess({ driver: createNodeDriver({}) });
+      const result = await proc.exec("console.log('hello from secure-exec')");
+      console.log(result.stdout.trim());
+      await proc.dispose();
+    }
+
+    await main();
+    ```
+
+    Run it:
+
+    ```bash
+    pnpm tsx quickstart.ts
+    ```
+  </Step>
+</Steps>
+
+## Basic Example
+
+The example above is the full minimal TypeScript setup.
+
+Expected output includes:
+
+```txt
+hello from secure-exec
+```

@@ -10,7 +10,7 @@
 import "./polyfills.js";
 
 // Active handles mechanism - must be imported early so other modules can use it.
-// See: docs/ACTIVE_HANDLES.md
+// See: docs-internal/node/ACTIVE_HANDLES.md
 import {
 	_registerHandle,
 	_unregisterHandle,
@@ -84,7 +84,7 @@ export {
   Module,
   SourceMap,
 
-  // Active handles (see docs/ACTIVE_HANDLES.md)
+  // Active handles (see docs-internal/node/ACTIVE_HANDLES.md)
   _registerHandle,
   _unregisterHandle,
   _waitForActiveHandles,

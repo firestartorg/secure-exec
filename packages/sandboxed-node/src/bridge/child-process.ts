@@ -2,7 +2,7 @@
 // Provides Node.js child_process module emulation that bridges to host
 //
 // Uses the active handles mechanism to keep the sandbox alive while child
-// processes are running. See: docs/ACTIVE_HANDLES.md
+// processes are running. See: docs-internal/node/ACTIVE_HANDLES.md
 
 import type * as nodeChildProcess from "child_process";
 
@@ -39,7 +39,7 @@ declare const _childProcessSpawnSync:
   | undefined;
 
 // Active handles functions (installed by active-handles.ts)
-// See: docs/ACTIVE_HANDLES.md
+// See: docs-internal/node/ACTIVE_HANDLES.md
 declare const _registerHandle: (id: string, description: string) => void;
 declare const _unregisterHandle: (id: string) => void;
 
@@ -71,7 +71,7 @@ const activeChildren = new Map<number, ChildProcess>();
     child.emit("exit", data, null);
     activeChildren.delete(sessionId);
     // Unregister handle - allows sandbox to exit if no other handles remain
-    // See: docs/ACTIVE_HANDLES.md
+    // See: docs-internal/node/ACTIVE_HANDLES.md
     if (typeof _unregisterHandle === "function") {
       _unregisterHandle(`child:${sessionId}`);
     }
@@ -453,7 +453,7 @@ function spawn(
     activeChildren.set(sessionId, child);
 
     // Register handle to keep sandbox alive until child exits
-    // See: docs/ACTIVE_HANDLES.md
+    // See: docs-internal/node/ACTIVE_HANDLES.md
     if (typeof _registerHandle === "function") {
       _registerHandle(`child:${sessionId}`, `child_process: ${command} ${argsArray.join(" ")}`);
     }

@@ -1,5 +1,11 @@
 # Sandboxed Node Friction Log
 
+## 2026-02-27
+
+1. TODO: runtime timing side-channel hardening is specified but not yet implemented.
+   - Symptom: sandboxed code currently observes advancing `Date.now()` / `performance.now()` and has no hardened timing profile.
+   - Next step: implement OpenSpec change `mitigate-timing-attacks` (`executionTimeoutMs` + `timingMitigation: "freeze"`) and add parity/deviation tests.
+
 ## 2026-02-26
 
 1. **[resolved]** Bridging `@hono/node-server` violated strict sandbox boundary policy.

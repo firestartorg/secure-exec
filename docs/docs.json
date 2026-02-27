@@ -1,0 +1,18 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "secure-exec",
+  "colors": {
+    "primary": "#0EA5A4",
+    "light": "#5EEAD4",
+    "dark": "#0F766E"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Getting Started",
+        "pages": ["quickstart"]
+      }
+    ]
+  }
+}
