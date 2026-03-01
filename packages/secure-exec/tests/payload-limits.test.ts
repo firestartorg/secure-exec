@@ -12,6 +12,31 @@ const DEFAULT_ISOLATE_JSON_PAYLOAD_BYTES = 4 * 1024 * 1024;
 const MAX_CONFIGURED_PAYLOAD_BYTES = 64 * 1024 * 1024;
 const PAYLOAD_LIMIT_ERROR_CODE = "ERR_SANDBOX_PAYLOAD_TOO_LARGE";
 
+type CapturedConsoleEvent = {
+	channel: "stdout" | "stderr";
+	message: string;
+};
+
+function formatConsoleChannel(
+	events: CapturedConsoleEvent[],
+	channel: CapturedConsoleEvent["channel"],
+): string {
+	const lines = events
+		.filter((event) => event.channel === channel)
+		.map((event) => event.message);
+	return lines.join("\n") + (lines.length > 0 ? "\n" : "");
+}
+
+function createConsoleCapture() {
+	const events: CapturedConsoleEvent[] = [];
+	return {
+		onConsoleLog: (event: CapturedConsoleEvent) => {
+			events.push(event);
+		},
+		stdout: () => formatConsoleChannel(events, "stdout"),
+	};
+}
+
 function bytesOverBase64Limit(limitBytes: number): number {
 	return Math.floor(limitBytes / 4) * 3 + 1;
 }
@@ -58,7 +83,12 @@ describe("NodeProcess payload limits", () => {
 		await fs.mkdir("/data");
 		await fs.writeFile("/data/source.bin", payload);
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.exec(`
       const fs = require('fs');
       const input = fs.readFileSync('/data/source.bin');
@@ -67,7 +97,8 @@ describe("NodeProcess payload limits", () => {
     `);
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("5\n");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("5\n");
 
 		const copied = await fs.readFile("/data/copy.bin");
 		expect(Array.from(copied)).toEqual(Array.from(payload));
@@ -112,9 +143,11 @@ describe("NodeProcess payload limits", () => {
 	});
 
 	it("preserves in-limit JSON bridge payload parsing behavior", async () => {
+		const capture = createConsoleCapture();
 		proc = new NodeProcess({
 			networkAdapter: createEchoNetworkAdapter(),
 			permissions: allowAllNetwork,
+			onConsoleLog: capture.onConsoleLog,
 		});
 		const result = await proc.exec(`
       (async () => {
@@ -127,7 +160,8 @@ describe("NodeProcess payload limits", () => {
     `);
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("ok\n");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("ok\n");
 	});
 
 	it("rejects oversized JSON payloads before host JSON.parse", async () => {
@@ -157,9 +191,11 @@ describe("NodeProcess payload limits", () => {
 		);
 		await fs.mkdir("/data");
 
+		const capture = createConsoleCapture();
 		proc = new NodeProcess({
 			filesystem: fs,
 			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
 			payloadLimits: {
 				base64TransferBytes: DEFAULT_BRIDGE_BASE64_TRANSFER_BYTES + 4096,
 			},
@@ -171,15 +207,18 @@ describe("NodeProcess payload limits", () => {
     `);
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("ok\n");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("ok\n");
 		const stored = await fs.readFile("/data/large-configured.bin");
 		expect(stored.byteLength).toBe(oversizedRawBytes);
 	});
 
 	it("allows larger JSON payloads with in-range configured limits", async () => {
+		const capture = createConsoleCapture();
 		proc = new NodeProcess({
 			networkAdapter: createEchoNetworkAdapter(),
 			permissions: allowAllNetwork,
+			onConsoleLog: capture.onConsoleLog,
 			payloadLimits: {
 				jsonPayloadBytes: DEFAULT_ISOLATE_JSON_PAYLOAD_BYTES + 4096,
 			},
@@ -193,7 +232,8 @@ describe("NodeProcess payload limits", () => {
     `);
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("ok\n");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("ok\n");
 	});
 
 	it("rejects out-of-range payload limit configuration", () => {

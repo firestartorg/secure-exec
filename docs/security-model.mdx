@@ -77,3 +77,9 @@ Two controls prevent runaway execution:
 - **`memoryLimit`** — Isolate memory cap in MB (default `128`).
 
 The bridge also enforces isolate-boundary payload limits so oversized base64 file transfers and oversized isolate-originated JSON payloads are rejected deterministically with `ERR_SANDBOX_PAYLOAD_TOO_LARGE` instead of exhausting host memory. Hosts can tune these limits within bounded safe ranges, but cannot disable enforcement.
+
+## Logging Contract
+
+- Console output is **not buffered** into runtime-managed `stdout`/`stderr` by default.
+- To consume logs, configure the optional `onConsoleLog` streaming hook and forward events to your own sink.
+- This avoids implicit host-memory growth from untrusted high-volume logging.

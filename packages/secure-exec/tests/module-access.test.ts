@@ -6,6 +6,33 @@ import { NodeProcess, createNodeDriver } from "../src/index.js";
 
 type PackageFiles = Record<string, string | Uint8Array>;
 
+type CapturedConsoleEvent = {
+	channel: "stdout" | "stderr";
+	message: string;
+};
+
+function formatConsoleChannel(
+	events: CapturedConsoleEvent[],
+	channel: CapturedConsoleEvent["channel"],
+): string {
+	const lines = events
+		.filter((event) => event.channel === channel)
+		.map((event) => event.message);
+	return lines.join("\n") + (lines.length > 0 ? "\n" : "");
+}
+
+function createConsoleCapture() {
+	const events: CapturedConsoleEvent[] = [];
+	return {
+		events,
+		onConsoleLog: (event: CapturedConsoleEvent) => {
+			events.push(event);
+		},
+		stdout: () => formatConsoleChannel(events, "stdout"),
+		stderr: () => formatConsoleChannel(events, "stderr"),
+	};
+}
+
 async function createTempProject(): Promise<string> {
 	const projectDir = await mkdtemp(
 		path.join(tmpdir(), "secure-exec-module-access-"),
@@ -93,14 +120,16 @@ describe("moduleAccess", () => {
 				allowPackages: ["allowed-root"],
 			},
 		});
-		proc = new NodeProcess({ driver });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ driver, onConsoleLog: capture.onConsoleLog });
 
 		const allowedResult = await proc.exec(
 			`const mod = require("allowed-root"); console.log(mod.value);`,
 			{ cwd: "/app", filePath: "/app/index.js" },
 		);
 		expect(allowedResult.code).toBe(0);
-		expect(allowedResult.stdout).toBe("42\n");
+		expect(allowedResult.stdout).toBe("");
+		expect(capture.stdout()).toBe("42\n");
 
 		const blockedResult = await proc.exec(`require("blocked-root")`, {
 			cwd: "/app",
@@ -142,14 +171,16 @@ describe("moduleAccess", () => {
 				allowPackages: ["pkg-a"],
 			},
 		});
-		proc = new NodeProcess({ driver });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ driver, onConsoleLog: capture.onConsoleLog });
 
 		const result = await proc.exec(
 			`const mod = require("pkg-a"); console.log(mod.value);`,
 			{ cwd: "/app", filePath: "/app/index.js" },
 		);
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("42\n");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("42\n");
 	});
 
 	it("keeps projected node_modules read-only", async () => {
@@ -168,7 +199,8 @@ describe("moduleAccess", () => {
 				allowPackages: ["read-only-pkg"],
 			},
 		});
-		proc = new NodeProcess({ driver });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ driver, onConsoleLog: capture.onConsoleLog });
 
 		const result = await proc.exec(
 			`
@@ -183,7 +215,8 @@ describe("moduleAccess", () => {
 			{ cwd: "/app", filePath: "/app/index.js" },
 		);
 		expect(result.code).toBe(0);
-		expect(result.stdout).toContain("EACCES: permission denied");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toContain("EACCES: permission denied");
 	});
 
 	it("rejects invalid moduleAccess configuration deterministically", async () => {

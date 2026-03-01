@@ -1,6 +1,7 @@
 import ivm from "isolated-vm";
 import { transformDynamicImport } from "./shared/esm-utils.js";
 import type {
+	ConsoleLogHook,
 	RunResult,
 	TimingMitigation,
 } from "./shared/api-types.js";
@@ -18,6 +19,7 @@ type ExecuteOptions = {
 	stdin?: string;
 	cpuTimeLimitMs?: number;
 	timingMitigation?: TimingMitigation;
+	onConsoleLog?: ConsoleLogHook;
 };
 
 type ExecutionRuntime = {
@@ -34,8 +36,7 @@ type ExecutionRuntime = {
 	setupConsole(
 		context: ivm.Context,
 		jail: ivm.Reference<Record<string, unknown>>,
-		stdout: string[],
-		stderr: string[],
+		onConsoleLog?: ConsoleLogHook,
 	): Promise<void>;
 	shouldRunAsESM(code: string, filePath?: string): Promise<boolean>;
 	setupESMGlobals(
@@ -105,7 +106,6 @@ export async function executeWithRuntime<T = unknown>(
 	runtime.activeHttpServerIds.clear();
 
 	const context = await runtime.isolate.createContext();
-	const stdout: string[] = [];
 	const stderr: string[] = [];
 	const timingMitigation = runtime.getTimingMitigation(options.timingMitigation);
 	const frozenTimeMs = Date.now();
@@ -117,7 +117,7 @@ export async function executeWithRuntime<T = unknown>(
 		const jail = context.global;
 		await jail.set("global", jail.derefInto());
 
-		await runtime.setupConsole(context, jail, stdout, stderr);
+		await runtime.setupConsole(context, jail, options.onConsoleLog);
 
 		let exports: T | undefined;
 		const transformedCode = transformDynamicImport(options.code);
@@ -232,7 +232,7 @@ export async function executeWithRuntime<T = unknown>(
 		})) as number;
 
 		return {
-			stdout: formatCapturedOutput(stdout),
+			stdout: "",
 			stderr: formatCapturedOutput(stderr),
 			code: exitCode,
 			exports,
@@ -242,7 +242,7 @@ export async function executeWithRuntime<T = unknown>(
 			recycleIsolateAfterTimeout = true;
 			stderr.push(runtime.timeoutErrorMessage);
 			return {
-				stdout: formatCapturedOutput(stdout),
+				stdout: "",
 				stderr: formatCapturedOutput(stderr),
 				code: runtime.timeoutExitCode,
 				exports: undefined as T,
@@ -255,7 +255,7 @@ export async function executeWithRuntime<T = unknown>(
 		if (exitMatch) {
 			const exitCode = parseInt(exitMatch[1], 10);
 			return {
-				stdout: formatCapturedOutput(stdout),
+				stdout: "",
 				stderr: formatCapturedOutput(stderr),
 				code: exitCode,
 				exports: undefined as T,
@@ -264,7 +264,7 @@ export async function executeWithRuntime<T = unknown>(
 
 		stderr.push(errMessage);
 		return {
-			stdout: formatCapturedOutput(stdout),
+			stdout: "",
 			stderr: formatCapturedOutput(stderr),
 			code: 1,
 			exports: undefined as T,

@@ -1,5 +1,14 @@
 export type TimingMitigation = "off" | "freeze";
 
+export type ConsoleLogChannel = "stdout" | "stderr";
+
+export interface ConsoleLogEvent {
+	channel: ConsoleLogChannel;
+	message: string;
+}
+
+export type ConsoleLogHook = (event: ConsoleLogEvent) => void;
+
 export interface ProcessConfig {
 	platform?: string;
 	arch?: string;
@@ -48,6 +57,8 @@ export interface ExecOptions {
 	cpuTimeLimitMs?: number;
 	/** Timing side-channel mitigation mode */
 	timingMitigation?: TimingMitigation;
+	/** Optional streaming hook for console output events */
+	onConsoleLog?: ConsoleLogHook;
 }
 
 export interface ExecResult {

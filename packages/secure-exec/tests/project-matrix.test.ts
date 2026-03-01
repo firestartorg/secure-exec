@@ -62,6 +62,21 @@ type ResultEnvelope = {
 	stderr: string;
 };
 
+type CapturedConsoleEvent = {
+	channel: "stdout" | "stderr";
+	message: string;
+};
+
+function formatConsoleChannel(
+	events: CapturedConsoleEvent[],
+	channel: CapturedConsoleEvent["channel"],
+): string {
+	const lines = events
+		.filter((event) => event.channel === channel)
+		.map((event) => event.message);
+	return lines.join("\n") + (lines.length > 0 ? "\n" : "");
+}
+
 const discoveredFixtures = await discoverFixtures();
 
 describe("compatibility project matrix", () => {
@@ -355,9 +370,13 @@ async function runSandboxExecution(
 	// Execute the same entrypoint code against secure-exec.
 	const entryPath = path.join(projectDir, entryRelativePath);
 	const entryCode = await readFile(entryPath, "utf8");
+	const capturedEvents: CapturedConsoleEvent[] = [];
 	const proc = new NodeProcess({
 		filesystem: new NodeFileSystem(),
 		permissions: fixturePermissions,
+		onConsoleLog: (event) => {
+			capturedEvents.push(event);
+		},
 		processConfig: {
 			cwd: projectDir,
 			env: {},
@@ -370,7 +389,15 @@ async function runSandboxExecution(
 			cwd: projectDir,
 			env: {},
 		});
-		return normalizeEnvelope(result, projectDir);
+		return normalizeEnvelope(
+			{
+				code: result.code,
+				stdout: formatConsoleChannel(capturedEvents, "stdout"),
+				stderr:
+					formatConsoleChannel(capturedEvents, "stderr") + result.stderr,
+			},
+			projectDir,
+		);
 	} finally {
 		proc.dispose();
 	}

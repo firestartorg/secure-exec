@@ -23,6 +23,33 @@ const allowFsNetworkEnv = {
 	...allowAllEnv,
 };
 
+type CapturedConsoleEvent = {
+	channel: "stdout" | "stderr";
+	message: string;
+};
+
+function formatConsoleChannel(
+	events: CapturedConsoleEvent[],
+	channel: CapturedConsoleEvent["channel"],
+): string {
+	const lines = events
+		.filter((event) => event.channel === channel)
+		.map((event) => event.message);
+	return lines.join("\n") + (lines.length > 0 ? "\n" : "");
+}
+
+function createConsoleCapture() {
+	const events: CapturedConsoleEvent[] = [];
+	return {
+		events,
+		onConsoleLog: (event: CapturedConsoleEvent) => {
+			events.push(event);
+		},
+		stdout: () => formatConsoleChannel(events, "stdout"),
+		stderr: () => formatConsoleChannel(events, "stderr"),
+	};
+}
+
 describe("NodeProcess", () => {
 	let proc: NodeProcess | undefined;
 
@@ -67,41 +94,122 @@ describe("NodeProcess", () => {
 		expect(result.exports).toEqual({ default: 99, named: "value" });
 	});
 
-	it("captures stdout and stderr", async () => {
+	it("drops console output by default without a hook", async () => {
 		proc = new NodeProcess();
 		const result = await proc.exec(`console.log('hello'); console.error('oops');`);
-		expect(result.stdout).toBe("hello\n");
-		expect(result.stderr).toBe("oops\n");
+		expect(result.stdout).toBe("");
+		expect(result.stderr).toBe("");
 		expect(result.code).toBe(0);
 	});
 
-	it("logs circular objects without throwing", async () => {
-		proc = new NodeProcess();
+	it("streams ordered stdout/stderr hook events", async () => {
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
+		const result = await proc.exec(`
+      console.log("first");
+      console.warn("second");
+      console.error("third");
+      console.log("fourth");
+    `);
+		expect(result.code).toBe(0);
+		expect(result.stdout).toBe("");
+		expect(result.stderr).toBe("");
+		expect(capture.events).toEqual([
+			{ channel: "stdout", message: "first" },
+			{ channel: "stderr", message: "second" },
+			{ channel: "stderr", message: "third" },
+			{ channel: "stdout", message: "fourth" },
+		]);
+	});
+
+	it("continues execution when the host log hook throws", async () => {
+		const seen: CapturedConsoleEvent[] = [];
+		proc = new NodeProcess({
+			onConsoleLog: (event) => {
+				seen.push(event);
+				throw new Error("hook-failure");
+			},
+		});
+		const result = await proc.exec(`console.log("keep-going");`);
+		expect(result.code).toBe(0);
+		expect(result.stdout).toBe("");
+		expect(result.stderr).toBe("");
+		expect(seen).toEqual([{ channel: "stdout", message: "keep-going" }]);
+	});
+
+	it("logs circular objects to hook without throwing", async () => {
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
 		const result = await proc.exec(`
       const value = { name: 'root' };
       value.self = value;
       console.log(value);
     `);
 		expect(result.code).toBe(0);
-		expect(result.stdout).toContain("[Circular]");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toContain("[Circular]");
 	});
 
-	it("logs null and undefined values", async () => {
-		proc = new NodeProcess();
+	it("logs null and undefined values to hook", async () => {
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
 		const result = await proc.exec(`console.log(null, undefined);`);
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("null undefined\n");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("null undefined\n");
 	});
 
-	it("logs circular objects to stderr without throwing", async () => {
-		proc = new NodeProcess();
+	it("logs circular objects to stderr hook without throwing", async () => {
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
 		const result = await proc.exec(`
       const value = { name: 'root' };
       value.self = value;
       console.error(value);
     `);
 		expect(result.code).toBe(0);
-		expect(result.stderr).toContain("[Circular]");
+		expect(result.stderr).toBe("");
+		expect(capture.stderr()).toContain("[Circular]");
+	});
+
+	it("bounds deep and large console payloads in hook mode", async () => {
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
+		const result = await proc.exec(`
+	      const deep = { level: 0 };
+	      let cursor = deep;
+	      for (let i = 1; i < 30; i += 1) {
+	        cursor.next = { level: i };
+	        cursor = cursor.next;
+	      }
+	      const bounded = { deep };
+	      for (let i = 0; i < 60; i += 1) {
+	        bounded["k" + i] = i;
+	      }
+	      const wide = {};
+	      for (let i = 0; i < 200; i += 1) {
+	        wide["w" + i] = i;
+	      }
+	      console.log(bounded);
+	      console.log(wide);
+	    `);
+		expect(result.code).toBe(0);
+		const stdout = capture.stdout();
+		expect(stdout).toContain("[MaxDepth]");
+		expect(stdout).toContain('"[Truncated]"');
+	});
+
+	it("drops high-volume logs by default without building stdout/stderr buffers", async () => {
+		proc = new NodeProcess();
+		const result = await proc.exec(`
+      for (let i = 0; i < 5000; i += 1) {
+        console.log("line-" + i);
+      }
+      console.error("done");
+    `);
+		expect(result.code).toBe(0);
+		expect(result.stdout).toBe("");
+		expect(result.stderr).toBe("");
 	});
 
 	it("loads node stdlib polyfills", async () => {
@@ -114,7 +222,8 @@ describe("NodeProcess", () => {
 	});
 
 	it("provides host-backed crypto randomness APIs", async () => {
-		proc = new NodeProcess();
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
 		const result = await proc.exec(`
 	      const bytes = new Uint8Array(16);
 	      crypto.getRandomValues(bytes);
@@ -124,11 +233,12 @@ describe("NodeProcess", () => {
 	      console.log(uuidV4Pattern.test(uuid), uuid.length, bytes.length);
 	    `);
 		expect(result.code).toBe(0);
-		expect(result.stdout.trim()).toBe("true 36 16");
+		expect(capture.stdout().trim()).toBe("true 36 16");
 	});
 
 	it("prevents sandbox override of host entropy bridge hooks", async () => {
-		proc = new NodeProcess();
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
 		const result = await proc.exec(`
 		      const originalFill = globalThis._cryptoRandomFill;
 		      const originalUuid = globalThis._cryptoRandomUUID;
@@ -153,7 +263,7 @@ describe("NodeProcess", () => {
 		      );
 		    `);
 		expect(result.code).toBe(0);
-		expect(result.stdout.trim()).toBe("true true 4 36");
+		expect(capture.stdout().trim()).toBe("true true 4 36");
 	});
 
 	it("does not shim third-party packages in require resolution", async () => {
@@ -216,7 +326,12 @@ describe("NodeProcess", () => {
 			"module.exports = { add: (a, b) => a + b };",
 		);
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.run(`
       const pkg = require('my-pkg');
       module.exports = pkg.add(2, 3);
@@ -229,7 +344,12 @@ describe("NodeProcess", () => {
 		await fs.mkdir("/data");
 		await fs.writeFile("/data/hello.txt", "hello world");
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.run(`
       const fs = require('fs');
       module.exports = fs.readFileSync('/data/hello.txt', 'utf8');
@@ -243,7 +363,12 @@ describe("NodeProcess", () => {
 		await fs.mkdir("/data/sub");
 		await fs.writeFile("/data/file.txt", "value");
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.run(`
       const fs = require('fs');
       const entries = fs.readdirSync('/data', { withFileTypes: true })
@@ -263,7 +388,12 @@ describe("NodeProcess", () => {
 		await fs.mkdir("/data");
 		await fs.writeFile("/data/large.txt", "x".repeat(1024 * 1024));
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.run(`
       const fs = require('fs');
       const before = fs.existsSync('/data/large.txt');
@@ -324,7 +454,12 @@ describe("NodeProcess", () => {
 			"export const feature = 'esm-feature';",
 		);
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 
 		const cjsResult = await proc.run(`
       const pkg = require('exported');
@@ -342,7 +477,8 @@ describe("NodeProcess", () => {
 			{ filePath: "/entry.mjs" },
 		);
 		expect(esmResult.code).toBe(0);
-		expect(esmResult.stdout).toContain("esm-entry:esm-feature");
+		expect(esmResult.stdout).toBe("");
+		expect(capture.stdout()).toContain("esm-entry:esm-feature");
 	});
 
 	it("treats .js entry files as ESM under package type module", async () => {
@@ -351,7 +487,12 @@ describe("NodeProcess", () => {
 		await fs.writeFile("/app/package.json", JSON.stringify({ type: "module" }));
 		await fs.writeFile("/app/value.js", "export const value = 42;");
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.exec(
 			`
 	      import { value } from './value.js';
@@ -361,7 +502,8 @@ describe("NodeProcess", () => {
 		);
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("42\n");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("42\n");
 	});
 
 	it("uses CommonJS semantics for .js under package type commonjs", async () => {
@@ -396,7 +538,12 @@ describe("NodeProcess", () => {
 			"export const value = 'module-entry';",
 		);
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 
 		const requireResult = await proc.run(`
 	      const pkg = require('entry-meta');
@@ -412,7 +559,8 @@ describe("NodeProcess", () => {
 			{ filePath: "/app/entry.mjs" },
 		);
 		expect(importResult.code).toBe(0);
-		expect(importResult.stdout).toBe("main-entry\n");
+		expect(importResult.stdout).toBe("");
+		expect(capture.stdout()).toBe("main-entry\n");
 	});
 
 	it("returns builtin identifiers from require.resolve helpers", async () => {
@@ -432,7 +580,8 @@ describe("NodeProcess", () => {
 	});
 
 	it("supports default and named ESM imports for node:fs and node:path", async () => {
-		proc = new NodeProcess();
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
 		const result = await proc.exec(
 			`
 	      import fs, { readFileSync } from 'node:fs';
@@ -448,7 +597,8 @@ describe("NodeProcess", () => {
 		);
 
 		expect(result.code).toBe(0);
-		expect(result.stdout.trim()).toBe("function true true true");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout().trim()).toBe("function true true true");
 	});
 
 	it("evaluates dynamic imports only when import() is reached", async () => {
@@ -462,7 +612,12 @@ describe("NodeProcess", () => {
     `,
 		);
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.exec(
 			`
       (async () => {
@@ -475,7 +630,8 @@ describe("NodeProcess", () => {
 		);
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("before\nside-effect\nafter\n");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("before\nside-effect\nafter\n");
 	});
 
 	it("does not evaluate dynamic imports in untaken branches", async () => {
@@ -489,7 +645,12 @@ describe("NodeProcess", () => {
     `,
 		);
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.exec(
 			`
       (async () => {
@@ -503,8 +664,9 @@ describe("NodeProcess", () => {
 		);
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("done\n");
-		expect(result.stdout).not.toContain("loaded");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("done\n");
+		expect(capture.stdout()).not.toContain("loaded");
 	});
 
 	it("returns cached namespace for repeated dynamic imports", async () => {
@@ -518,7 +680,12 @@ describe("NodeProcess", () => {
     `,
 		);
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.exec(
 			`
       (async () => {
@@ -539,14 +706,20 @@ describe("NodeProcess", () => {
 		);
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("ok\n");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("ok\n");
 	});
 
 	it("rejects dynamic import for missing modules with descriptive error", async () => {
 		const fs = createFs();
 		await fs.mkdir("/app");
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.exec(
 			`
       (async () => {
@@ -565,7 +738,12 @@ describe("NodeProcess", () => {
 		await fs.mkdir("/app");
 		await fs.writeFile("/app/broken.mjs", "export const broken = ;");
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.exec(
 			`
 	      (async () => {
@@ -609,7 +787,12 @@ describe("NodeProcess", () => {
 		await fs.writeFile("/app/primitive.cjs", "module.exports = 7;");
 		await fs.writeFile("/app/nullish.cjs", "module.exports = null;");
 
-		proc = new NodeProcess({ filesystem: fs, permissions: allowAllFs });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.exec(
 			`
 	      (async () => {
@@ -622,7 +805,8 @@ describe("NodeProcess", () => {
 		);
 
 		expect(result.code).toBe(0);
-		expect(result.stdout).toBe("7|null\n");
+		expect(result.stdout).toBe("");
+		expect(capture.stdout()).toBe("7|null\n");
 	});
 
 	it("uses frozen timing values by default", async () => {
@@ -644,7 +828,11 @@ describe("NodeProcess", () => {
 	});
 
 	it("restores advancing clocks when timing mitigation is off", async () => {
-		proc = new NodeProcess({ timingMitigation: "off" });
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({
+			timingMitigation: "off",
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.exec(`
       (async () => {
         const dateStart = Date.now();
@@ -656,10 +844,10 @@ describe("NodeProcess", () => {
           perfAdvanced: performance.now() > perfStart,
           hrtimeAdvanced: process.hrtime.bigint() > hrStart,
         }));
-      })();
-    `);
+	      })();
+	    `);
 		expect(result.code).toBe(0);
-		const metrics = JSON.parse(result.stdout.trim()) as {
+		const metrics = JSON.parse(capture.stdout().trim()) as {
 			dateAdvanced: boolean;
 			perfAdvanced: boolean;
 			hrtimeAdvanced: boolean;
@@ -706,7 +894,8 @@ describe("NodeProcess", () => {
 	});
 
 	it("hardens all custom globals as non-writable and non-configurable", async () => {
-		proc = new NodeProcess();
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
 		const result = await proc.exec(`
 		      const targets = ${JSON.stringify(HARDENED_NODE_CUSTOM_GLOBALS)};
 		      const failures = [];
@@ -734,9 +923,9 @@ describe("NodeProcess", () => {
 		        if (!redefineThrew) failures.push([name, "redefine-no-throw"]);
 		      }
 		      console.log(JSON.stringify({ checked: targets.length, failures }));
-		    `);
+			    `);
 		expect(result.code).toBe(0);
-		const summary = JSON.parse(result.stdout.trim()) as {
+		const summary = JSON.parse(capture.stdout().trim()) as {
 			checked: number;
 			failures: Array<[string, string]>;
 		};
@@ -745,7 +934,8 @@ describe("NodeProcess", () => {
 	});
 
 	it("keeps stdlib globals compatible and mutable runtime globals writable", async () => {
-		proc = new NodeProcess();
+		const capture = createConsoleCapture();
+		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
 		const result = await proc.exec(
 			`
 		      const processDescriptor = Object.getOwnPropertyDescriptor(globalThis, "process");
@@ -774,9 +964,9 @@ describe("NodeProcess", () => {
 		      }));
 		    `,
 			{ filePath: "/entry.js" },
-		);
+			);
 		expect(result.code).toBe(0);
-		const payload = JSON.parse(result.stdout.trim()) as {
+		const payload = JSON.parse(capture.stdout().trim()) as {
 			processDescriptor: { writable?: boolean; configurable?: boolean };
 			mutableDescriptors: Record<
 				string,

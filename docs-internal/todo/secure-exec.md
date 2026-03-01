@@ -80,6 +80,24 @@
   - Fix: active-handle lifecycle globals now install via `Object.defineProperty` with `writable: false` and `configurable: false`, preventing sandbox overwrite of `_registerHandle` / `_unregisterHandle` / `_waitForActiveHandles`.
   - `packages/secure-exec/src/bridge/active-handles.ts`, `packages/secure-exec/tests/index.test.ts`
 
+- [ ] Remove default host-side console buffering; drop logs by default and expose optional streaming hook.
+  - `packages/secure-exec/src/index.ts`, `packages/secure-exec/src/execution.ts`
+
+- [ ] Add global host resource budgets (output bytes, bridge-call rate, timer count, child-process count).
+  - `packages/secure-exec/src/index.ts`, `packages/secure-exec/src/bridge/process.ts`, `packages/secure-exec/src/shared/permissions.ts`
+
+- [ ] Cap and hard-fail child-process output buffering in sync APIs.
+  - `packages/secure-exec/src/index.ts` (`spawnSyncRef` / `execSyncRef`)
+
+- [ ] Ensure child-process sessions are always cleaned up on timeout/dispose/error paths.
+  - `packages/secure-exec/src/index.ts` (`sessions` map in child-process bridge)
+
+- [ ] Add request/response body limits for driver HTTP paths (including decompression).
+  - `packages/secure-exec/src/node/driver.ts` (`httpServerListen`, `fetch`, `httpRequest`)
+
+- [ ] Fix HTTP server lifecycle leaks when executions time out or are disposed.
+  - `packages/secure-exec/src/execution.ts`, `packages/secure-exec/src/index.ts`, `packages/secure-exec/src/node/driver.ts`
+
 ## Performance & Correctness
 
 - [ ] Add `stat` and `exists` methods to `VirtualFileSystem` interface.
@@ -101,3 +119,18 @@
 - [ ] Make `rename` atomic or document limitation.
   - `packages/secure-exec/src/fs-helpers.ts` (lines 90-92)
   - Currently read + write + delete; crash between steps can duplicate or lose data.
+
+- [ ] Make ESM module reverse-lookup O(1) to avoid O(n^2) resolver work on large import graphs.
+  - `packages/secure-exec/src/index.ts` (ESM resolver / module cache lookup)
+
+- [ ] Add resolver memoization (positive + negative) to avoid repeated miss probes across `require()`/`import()`.
+  - `packages/secure-exec/src/package-bundler.ts`, `packages/secure-exec/src/shared/require-setup.ts`, `packages/secure-exec/src/index.ts`
+
+- [ ] Cap and cache `package.json` parsing in resolver paths.
+  - `packages/secure-exec/src/package-bundler.ts`
+
+- [ ] Reduce module-access lookup overhead (prefix index + canonicalization memoization).
+  - `packages/secure-exec/src/node/module-access.ts`
+
+- [ ] Replace whole-file fd sync emulation with offset-based host read/write primitives.
+  - `packages/secure-exec/src/bridge/fs.ts`

@@ -45,38 +45,30 @@ The Node runtime SHALL wait for tracked active handles before finalizing executi
 - **THEN** `exec` MUST wait for handle completion before returning final output
 
 ### Requirement: Circular-Safe Console Output Capture
-The sandbox console capture SHALL handle circular object references without throwing, replacing circular references with a `[Circular]` marker in the serialized output.
+The runtime SHALL process console arguments without throwing on circular structures, and SHALL avoid retaining console output in execution-result buffers. If a log-stream hook is configured, serialized log events MUST be emitted to the hook without persistent runtime buffering.
 
-#### Scenario: Log object with circular reference
-- **WHEN** sandboxed code calls `console.log` with an object that contains a circular reference
-- **THEN** the captured stdout MUST contain the serialized object with `[Circular]` substituted for the circular reference, and execution MUST NOT throw
+#### Scenario: Circular console value with default logging mode
+- **WHEN** sandboxed code logs an object containing circular references and no log hook is configured
+- **THEN** execution MUST NOT throw due to log serialization and runtime result capture buffers MUST remain empty
 
-#### Scenario: Log deeply nested circular reference
-- **WHEN** sandboxed code calls `console.log` with an object where a circular reference occurs at depth > 1
-- **THEN** the captured stdout MUST contain the partially serialized object with `[Circular]` at the circular node
-
-#### Scenario: Log null and undefined values
-- **WHEN** sandboxed code calls `console.log` with `null` or `undefined` arguments
-- **THEN** the captured stdout MUST contain `"null"` or `"undefined"` respectively, without throwing
-
-#### Scenario: Console error and warn handle circular objects
-- **WHEN** sandboxed code calls `console.error` or `console.warn` with a circular object
-- **THEN** the captured stderr MUST contain the serialized object with `[Circular]` markers, and execution MUST NOT throw
+#### Scenario: Circular console value with streaming hook configured
+- **WHEN** sandboxed code logs an object containing circular references and a log hook is configured
+- **THEN** the hook MUST receive a serialized event containing circular-safe markers (for example `[Circular]`) and execution MUST continue
 
 ### Requirement: Bounded Console Serialization Work
-Console argument serialization SHALL enforce bounded work for very large or deeply nested payloads by applying depth, key-count, array-length, and output-length limits with deterministic truncation markers.
+Console argument serialization SHALL enforce bounded work before log emission, including the streaming-hook path, by applying depth/key/array/output limits with deterministic truncation markers.
 
-#### Scenario: Deep object logging is bounded
-- **WHEN** sandboxed code logs an object that exceeds the configured depth budget
-- **THEN** serialization MUST stop descending past the budget and emit a deterministic depth marker instead of unbounded traversal
+#### Scenario: Deep object logging is bounded for streaming hooks
+- **WHEN** sandboxed code logs an object exceeding configured depth limits and a log hook is configured
+- **THEN** emitted log payloads MUST include deterministic depth truncation markers instead of unbounded traversal
 
-#### Scenario: Large object or array logging is bounded
-- **WHEN** sandboxed code logs an object/array that exceeds key-count or element-count budgets
-- **THEN** serialization MUST truncate beyond the configured limits and emit a deterministic truncation marker
+#### Scenario: Large object logging is bounded for streaming hooks
+- **WHEN** sandboxed code logs an object/array exceeding configured key or element budgets and a log hook is configured
+- **THEN** emitted log payloads MUST include deterministic truncation markers and MUST NOT require unbounded host-runtime serialization work
 
-#### Scenario: Oversized output is bounded
-- **WHEN** serialized console output exceeds the maximum output-length budget
-- **THEN** the captured output MUST be truncated to the configured size with a deterministic suffix marker
+#### Scenario: Oversized serialized payload is bounded before emission
+- **WHEN** serialized console output exceeds configured output-length budgets
+- **THEN** emitted log payloads MUST be truncated with deterministic suffix markers and runtime MUST NOT accumulate full unbounded output in memory
 
 ### Requirement: Host-to-Sandbox HTTP Verification Path
 The Node runtime SHALL expose a host-side request path for sandboxed HTTP servers so loader/host code can verify server behavior externally.
@@ -89,12 +81,12 @@ The Node runtime SHALL expose a host-side request path for sandboxed HTTP server
 Dynamically imported modules (`import()`) SHALL be evaluated only when the import expression is reached during user code execution, not during the precompilation phase.
 
 #### Scenario: Side effects execute at import call time
-- **WHEN** user code contains `console.log("before"); const m = await import("./side-effect"); console.log("after")` where `./side-effect` logs "side-effect" on evaluation
-- **THEN** stdout MUST contain "before", "side-effect", "after" in that order
+- **WHEN** user code logs `before`, awaits `import("./side-effect")`, and then logs `after`, where `./side-effect` logs during evaluation, with a log hook configured
+- **THEN** hook events MUST show `before`, module side effects, and `after` in that order
 
 #### Scenario: Conditional dynamic import skips unused branch
-- **WHEN** user code contains `if (false) { await import("./unused"); }` where `./unused` logs "loaded" on evaluation
-- **THEN** stdout MUST NOT contain "loaded"
+- **WHEN** user code contains `if (false) { await import("./unused"); }` where `./unused` logs during evaluation, with a log hook configured
+- **THEN** no hook event from `./unused` evaluation MUST be emitted
 
 #### Scenario: Repeated dynamic import returns same module without re-evaluation
 - **WHEN** user code calls `await import("./mod")` twice, where `./mod` increments a global counter on evaluation
@@ -104,12 +96,12 @@ Dynamically imported modules (`import()`) SHALL be evaluated only when the impor
 The precompilation phase SHALL resolve and compile dynamic import targets but MUST NOT instantiate or evaluate them before user code reaches the corresponding `import()` expression.
 
 #### Scenario: Precompiled module has no side effects before user code
-- **WHEN** a module targeted by a static `import("./target")` specifier logs to console on evaluation
-- **THEN** no console output from that module SHALL appear before user code begins executing
+- **WHEN** a module targeted by a static `import("./target")` specifier logs during evaluation and a log hook is configured
+- **THEN** no hook event from that module SHALL be emitted before user code begins executing
 
 #### Scenario: Dynamic import side effects preserve surrounding user-code order
-- **WHEN** user code logs `before`, awaits `import("./side-effect")`, and then logs `after`, where `./side-effect` logs during evaluation
-- **THEN** stdout MUST contain `before`, module side effects, and `after` in that order
+- **WHEN** user code logs `before`, awaits `import("./side-effect")`, and then logs `after`, where `./side-effect` logs during evaluation, with a log hook configured
+- **THEN** hook events MUST preserve the order `before`, module side effects, `after`
 
 ### Requirement: Async Dynamic Import Resolution
 The `__dynamicImport` bridge function SHALL return a Promise that resolves to the module namespace, performing instantiation and evaluation on demand.
@@ -325,4 +317,55 @@ Module projection SHALL reject native addon artifacts (`.node`) so projected dep
 #### Scenario: Allowlisted dependency includes native addon file
 - **WHEN** projection encounters a `.node` artifact in an allowlisted package closure
 - **THEN** projection MUST fail deterministically and MUST NOT make that native addon loadable in sandbox runtime
+
+### Requirement: Isolate-Executed Bootstrap Sources MUST Be Static TypeScript Modules
+Any source code evaluated inside the isolate for runtime/bootstrap setup MUST originate from static files under `packages/secure-exec/isolate-runtime/` and MUST be tracked as normal TypeScript source.
+
+#### Scenario: Runtime injects require and bridge bootstrap code
+- **WHEN** secure-exec prepares isolate bootstrap code for `require` setup, bridge setup, or related runtime helpers
+- **THEN** the injected source MUST come from static isolate-runtime module files rather than ad-hoc inline source assembly in host runtime files
+
+#### Scenario: New isolate injection path is introduced
+- **WHEN** a change adds a new host-to-isolate code injection path
+- **THEN** the injected code MUST be added as a static `.ts` file under `packages/secure-exec/isolate-runtime/` in the same change
+
+### Requirement: Isolate-Runtime Compilation MUST Be a Build Prerequisite
+The secure-exec package build MUST execute isolate-runtime compilation before producing final runtime artifacts, and build orchestration MUST treat isolate-runtime compilation as an explicit dependency.
+
+#### Scenario: Package build runs with clean outputs
+- **WHEN** `packages/secure-exec` is built from a clean workspace
+- **THEN** the build MUST run a dedicated isolate-runtime compile step before final package build output is produced
+
+#### Scenario: Turbo build graph resolves secure-exec build dependencies
+- **WHEN** turbo runs `build` for secure-exec
+- **THEN** the task graph MUST enforce `build:isolate-runtime` as a dependency of secure-exec `build`
+
+### Requirement: Isolate Injection Assembly MUST Avoid Template-Literal Source Synthesis
+Host runtime code paths that inject executable source into the isolate MUST NOT construct those executable payloads via template-literal code generation.
+
+#### Scenario: Runtime passes execution-specific configuration into isolate
+- **WHEN** secure-exec needs to pass per-execution values (for example process, os, cwd, or module context) into isolate bootstrap logic
+- **THEN** it MUST pass values through structured data channels consumed by static isolate-runtime source rather than interpolating executable source templates
+
+#### Scenario: Isolate bootstrap helpers are updated
+- **WHEN** contributors modify helpers used to inject source into the isolate
+- **THEN** the resulting injected executable source MUST remain defined by static isolate-runtime files without template-literal-generated code bodies
+
+### Requirement: Runtime Default Logging Mode Drops Console Output
+Runtime logging SHALL be drop-on-floor by default: if no explicit log hook is configured, console emissions MUST NOT be retained in runtime-managed execution-result buffers.
+
+#### Scenario: Exec without log hook does not capture stdout or stderr
+- **WHEN** sandboxed code emits `console.log` and `console.error` and runtime executes without a configured log hook
+- **THEN** execution MUST complete without buffered log capture and runtime-managed stdout/stderr capture fields MUST remain empty
+
+### Requirement: Runtime Exposes Optional Streaming Log Hook
+The Node runtime SHALL expose an optional host hook for streaming console log events (`stdout` and `stderr` channels) in emission order, without retaining runtime-owned history.
+
+#### Scenario: Hook receives ordered events across stdout and stderr channels
+- **WHEN** sandboxed code emits interleaved `console.log`, `console.warn`, and `console.error` calls with a configured hook
+- **THEN** the hook MUST receive ordered events with channel metadata matching the original emission sequence
+
+#### Scenario: Hook-enabled runtime still avoids buffered accumulation
+- **WHEN** high-volume logging is emitted with a configured hook
+- **THEN** secure-exec runtime MUST stream events to the hook without accumulating unbounded per-execution log buffers in host memory
 

@@ -14,6 +14,21 @@ const COMMAND_TIMEOUT_MS = 45_000;
 const TESTS_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_SOURCE = path.join(TESTS_ROOT, "projects", "module-access-pass");
 
+type CapturedConsoleEvent = {
+	channel: "stdout" | "stderr";
+	message: string;
+};
+
+function formatConsoleChannel(
+	events: CapturedConsoleEvent[],
+	channel: CapturedConsoleEvent["channel"],
+): string {
+	const lines = events
+		.filter((event) => event.channel === channel)
+		.map((event) => event.message);
+	return lines.join("\n") + (lines.length > 0 ? "\n" : "");
+}
+
 describe("moduleAccess compatibility fixture", () => {
 	const tempDirs: string[] = [];
 	let proc: NodeProcess | undefined;
@@ -65,8 +80,12 @@ describe("moduleAccess compatibility fixture", () => {
 					allowPackages: ["entry-lib"],
 				},
 			});
+			const capturedEvents: CapturedConsoleEvent[] = [];
 			proc = new NodeProcess({
 				driver: sandboxDriver,
+				onConsoleLog: (event) => {
+					capturedEvents.push(event);
+				},
 				processConfig: {
 					cwd: "/app",
 					env: {},
@@ -80,8 +99,13 @@ describe("moduleAccess compatibility fixture", () => {
 			});
 
 			expect(sandboxResult.code).toBe(0);
-			expect(sandboxResult.stdout).toBe(hostResult.stdout);
-			expect(sandboxResult.stderr).toBe(hostResult.stderr);
+			expect(sandboxResult.stdout).toBe("");
+			expect(formatConsoleChannel(capturedEvents, "stdout")).toBe(
+				hostResult.stdout,
+			);
+			expect(
+				formatConsoleChannel(capturedEvents, "stderr") + sandboxResult.stderr,
+			).toBe(hostResult.stderr);
 		},
 		TEST_TIMEOUT_MS,
 	);

@@ -1,5 +1,12 @@
 # Sandboxed Node Friction Log
 
+## 2026-03-01
+
+1. **[resolved]** Default console capture buffered unbounded host memory.
+   - Symptom: runtime execution accumulated console output in host-managed `stdout`/`stderr` arrays by default, enabling memory amplification under high-volume logs.
+   - Fix: runtime now drops console output by default and exposes an explicit streaming hook (`onConsoleLog`) for host-controlled log handling.
+   - Compatibility trade-off: `exec()`/`run()` no longer mirror Node stdout/stderr buffering by default; consumers that need console output must opt into hook-based streaming.
+
 ## 2026-02-28
 
 1. **[resolved]** Reusing host `node_modules` lacked a bounded runtime contract.

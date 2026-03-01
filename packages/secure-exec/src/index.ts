@@ -55,6 +55,8 @@ import type {
 	VirtualFileSystem,
 } from "./types.js";
 import type {
+	ConsoleLogEvent,
+	ConsoleLogHook,
 	ExecOptions,
 	ExecResult,
 	OSConfig,
@@ -73,6 +75,9 @@ export type {
 } from "./types.js";
 export type { DirEntry, StatInfo } from "./fs-helpers.js";
 export type {
+	ConsoleLogChannel,
+	ConsoleLogEvent,
+	ConsoleLogHook,
 	ExecOptions,
 	ExecResult,
 	OSConfig,
@@ -109,6 +114,7 @@ export interface NodeProcessOptions {
 	networkAdapter?: NetworkAdapter; // For network support (fetch, http, https, dns)
 	osConfig?: OSConfig; // OS module configuration
 	timingMitigation?: TimingMitigation; // Timing side-channel mitigation mode
+	onConsoleLog?: ConsoleLogHook; // Optional streaming hook for console events
 	payloadLimits?: {
 		base64TransferBytes?: number; // Max isolate boundary base64 payload bytes
 		jsonPayloadBytes?: number; // Max isolate-originated JSON payload bytes
@@ -145,6 +151,7 @@ export class NodeProcess {
 	private timingMitigation: TimingMitigation;
 	private bridgeBase64TransferLimitBytes: number;
 	private isolateJsonPayloadLimitBytes: number;
+	private onConsoleLog?: ConsoleLogHook;
 	private filesystemEnabled: boolean = false;
 	private commandExecutorEnabled: boolean = false;
 	private networkEnabled: boolean = false;
@@ -190,6 +197,7 @@ export class NodeProcess {
 		this.cpuTimeLimitMs = options.cpuTimeLimitMs;
 		this.timingMitigation =
 			options.timingMitigation ?? DEFAULT_TIMING_MITIGATION;
+		this.onConsoleLog = options.onConsoleLog;
 		this.bridgeBase64TransferLimitBytes = this.normalizePayloadLimit(
 			options.payloadLimits?.base64TransferBytes,
 			DEFAULT_BRIDGE_BASE64_TRANSFER_BYTES,
@@ -257,12 +265,10 @@ export class NodeProcess {
 		const jail = context.global;
 		await jail.set("global", jail.derefInto());
 
-		const stdout: string[] = [];
-		const stderr: string[] = [];
 		const timingMitigation = this.getTimingMitigation(undefined);
 		const frozenTimeMs = Date.now();
 
-		await this.setupConsole(context, jail, stdout, stderr);
+		await this.setupConsole(context, jail, this.onConsoleLog);
 		await this.setupRequire(context, jail, timingMitigation, frozenTimeMs);
 		await this.setupDynamicImport(
 			context,
@@ -1504,8 +1510,7 @@ export class NodeProcess {
 
 	/**
 	 * Run code and return the value of module.exports (CJS) or the ESM namespace
-	 * object (including default and named exports), along with exit code and
-	 * captured stdout/stderr.
+	 * object (including default and named exports), along with exit code.
 	 */
 	async run<T = unknown>(
 		code: string,
@@ -1518,20 +1523,39 @@ export class NodeProcess {
 		});
 	}
 
+	private emitConsoleEvent(
+		onConsoleLog: ConsoleLogHook | undefined,
+		event: ConsoleLogEvent,
+	): void {
+		if (!onConsoleLog) {
+			return;
+		}
+		try {
+			onConsoleLog(event);
+		} catch {
+			// Keep runtime execution deterministic even when host hooks fail.
+		}
+	}
+
 	/**
-	 * Set up console with output capture
+	 * Set up console with optional streaming log hook.
 	 */
 	private async setupConsole(
 		context: ivm.Context,
 		jail: ivm.Reference<Record<string, unknown>>,
-		stdout: string[],
-		stderr: string[],
+		onConsoleLog?: ConsoleLogHook,
 	): Promise<void> {
 		const logRef = new ivm.Reference((msg: string) => {
-			stdout.push(String(msg));
+			this.emitConsoleEvent(onConsoleLog, {
+				channel: "stdout",
+				message: String(msg),
+			});
 		});
 		const errorRef = new ivm.Reference((msg: string) => {
-			stderr.push(String(msg));
+			this.emitConsoleEvent(onConsoleLog, {
+				channel: "stderr",
+				message: String(msg),
+			});
 		});
 
 		await jail.set("_log", logRef);
@@ -1541,7 +1565,7 @@ export class NodeProcess {
 	}
 
 	/**
-	 * Execute code like a script with console output capture
+	 * Execute code like a script.
 	 * Supports both CJS and ESM syntax
 	 */
 	async exec(code: string, options?: ExecOptions): Promise<ExecResult> {
@@ -1554,6 +1578,7 @@ export class NodeProcess {
 			stdin: options?.stdin,
 			cpuTimeLimitMs: options?.cpuTimeLimitMs,
 			timingMitigation: options?.timingMitigation,
+			onConsoleLog: options?.onConsoleLog,
 		});
 
 		return {
@@ -1575,6 +1600,7 @@ export class NodeProcess {
 		stdin?: string;
 		cpuTimeLimitMs?: number;
 		timingMitigation?: TimingMitigation;
+		onConsoleLog?: ConsoleLogHook;
 	}): Promise<RunResult<T>> {
 		return executeWithRuntime<T>(
 			{
@@ -1590,8 +1616,12 @@ export class NodeProcess {
 					this.getExecutionTimeoutMs(override),
 				getExecutionDeadlineMs: (timeoutMs) =>
 					this.getExecutionDeadlineMs(timeoutMs),
-				setupConsole: (context, jail, stdout, stderr) =>
-					this.setupConsole(context, jail, stdout, stderr),
+				setupConsole: (context, jail, onConsoleLog) =>
+					this.setupConsole(
+						context,
+						jail,
+						onConsoleLog ?? this.onConsoleLog,
+					),
 				shouldRunAsESM: (code, filePath) => this.shouldRunAsESM(code, filePath),
 				setupESMGlobals: (context, jail, timingMitigation, frozenTimeMs) =>
 					this.setupESMGlobals(context, jail, timingMitigation, frozenTimeMs),
