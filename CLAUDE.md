@@ -7,6 +7,7 @@
 - never mark work complete until typechecks pass and all tests pass in the current turn; if they fail, report the failing command and first concrete error
 - always add or update tests that cover plausible exploit/abuse paths introduced by each feature or behavior change
 - treat host memory buildup and CPU amplification as critical risks; avoid unbounded buffering/work (for example, default in-memory log buffering)
+- check GitHub Actions test/typecheck status per commit to identify when a failure first appeared
 
 ## Terminology
 

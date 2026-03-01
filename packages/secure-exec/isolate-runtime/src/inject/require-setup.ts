@@ -352,7 +352,9 @@
       function _resolveFrom(moduleName, fromDir) {
         const resolved = _resolveModule.applySyncPromise(undefined, [moduleName, fromDir]);
         if (resolved === null) {
-          throw new Error('Cannot find module: ' + moduleName + ' from ' + fromDir);
+          const err = new Error("Cannot find module '" + moduleName + "'");
+          err.code = 'MODULE_NOT_FOUND';
+          throw err;
         }
         return resolved;
       }
@@ -682,7 +684,9 @@
         // Load file content
         const source = _loadFile.applySyncPromise(undefined, [resolved]);
         if (source === null) {
-          throw new Error('Cannot load module: ' + resolved);
+          const err = new Error("Cannot find module '" + resolved + "'");
+          err.code = 'MODULE_NOT_FOUND';
+          throw err;
         }
 
 	        // Handle JSON files

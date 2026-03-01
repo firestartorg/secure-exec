@@ -266,7 +266,8 @@ async function resolvePackageEntryFromDir(
 			return null;
 		}
 		const targetPath = join(packageDir, normalizePackagePath(exportsTarget));
-		return resolvePath(targetPath, fs, mode);
+		const resolvedTarget = await resolvePath(targetPath, fs, mode);
+		return resolvedTarget ?? targetPath;
 	}
 
 	// Bare subpath import without exports map: package/sub/path
@@ -280,6 +281,9 @@ async function resolvePackageEntryFromDir(
 		const entryPath = join(packageDir, normalizePackagePath(entryField));
 		const resolved = await resolvePath(entryPath, fs, mode);
 		if (resolved) return resolved;
+		if (pkgJson) {
+			return entryPath;
+		}
 	}
 
 	// Default fallback

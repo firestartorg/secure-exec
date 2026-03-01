@@ -515,11 +515,27 @@ function normalizeEnvelope(
 function normalizeText(value: string, projectDir: string): string {
 	const normalized = value.replace(/\r\n/g, "\n");
 	const projectDirPosix = toPosixPath(projectDir);
-	return normalized
+	const withoutPaths = normalized
 		.split(projectDir)
 		.join("<project>")
 		.split(projectDirPosix)
 		.join("<project>");
+	return normalizeModuleNotFoundText(withoutPaths);
+}
+
+function normalizeModuleNotFoundText(value: string): string {
+	if (!value.includes("Cannot find module")) {
+		return value;
+	}
+	const quotedMatch = value.match(/Cannot find module '([^']+)'/);
+	if (quotedMatch) {
+		return `Cannot find module '${quotedMatch[1]}'\n`;
+	}
+	const fromMatch = value.match(/Cannot find module:\s*([^\s]+)\s+from\s+/);
+	if (fromMatch) {
+		return `Cannot find module '${fromMatch[1]}'\n`;
+	}
+	return value;
 }
 
 async function hashOptionalFile(

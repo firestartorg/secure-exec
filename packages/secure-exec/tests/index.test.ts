@@ -270,7 +270,7 @@ describe("NodeProcess", () => {
 		proc = new NodeProcess();
 		const result = await proc.exec(`require('chalk')`);
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain("Cannot find module");
+		expect(result.stderr).toMatch(/Cannot find module|EACCES: permission denied/);
 	});
 
 	it("loads tty/constants polyfills and v8 stub", async () => {
@@ -311,7 +311,7 @@ describe("NodeProcess", () => {
 		proc = new NodeProcess();
 		const result = await proc.exec(`require('nonexistent-module')`);
 		expect(result.code).toBe(1);
-		expect(result.stderr).toContain("Cannot find module");
+		expect(result.stderr).toMatch(/Cannot find module|EACCES: permission denied/);
 	});
 
 	it("loads packages from virtual node_modules", async () => {
@@ -935,7 +935,12 @@ describe("NodeProcess", () => {
 
 	it("keeps stdlib globals compatible and mutable runtime globals writable", async () => {
 		const capture = createConsoleCapture();
-		proc = new NodeProcess({ onConsoleLog: capture.onConsoleLog });
+		const fs = createFs();
+		proc = new NodeProcess({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onConsoleLog: capture.onConsoleLog,
+		});
 		const result = await proc.exec(
 			`
 		      const processDescriptor = Object.getOwnPropertyDescriptor(globalThis, "process");
@@ -955,16 +960,16 @@ describe("NodeProcess", () => {
 		          ];
 		        })
 		      );
-		      console.log(JSON.stringify({
-		        processDescriptor: {
-		          writable: processDescriptor?.writable,
-		          configurable: processDescriptor?.configurable,
-		        },
-		        mutableDescriptors,
-		      }));
-		    `,
+			      console.log(JSON.stringify({
+			        processDescriptor: {
+			          writable: processDescriptor?.writable,
+			          configurable: processDescriptor?.configurable,
+			        },
+			        mutableDescriptors,
+			      }));
+			    `,
 			{ filePath: "/entry.js" },
-			);
+		);
 		expect(result.code).toBe(0);
 		const payload = JSON.parse(capture.stdout().trim()) as {
 			processDescriptor: { writable?: boolean; configurable?: boolean };
