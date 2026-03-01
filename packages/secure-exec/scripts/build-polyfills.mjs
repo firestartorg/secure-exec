@@ -50,5 +50,6 @@ for (const name of Object.keys(stdLibBrowser)) {
 
 const output = `export const POLYFILL_CODE_MAP = ${JSON.stringify(polyfills, null, 2)};\n`;
 const outPath = path.join(process.cwd(), "src", "generated", "polyfills.ts");
+await fs.mkdir(path.dirname(outPath), { recursive: true });
 await fs.writeFile(outPath, output, "utf8");
 console.log(`Wrote ${Object.keys(polyfills).length} polyfills to ${outPath}`);

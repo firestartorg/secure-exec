@@ -165,10 +165,20 @@ async function resolveNodeModules(
 
 	let dir = fromDir;
 	while (dir !== "" && dir !== ".") {
-		const packageDir = join(dir, "node_modules", packageName);
-		const entry = await resolvePackageEntryFromDir(packageDir, subpath, fs, mode);
-		if (entry) {
-			return entry;
+		const candidatePackageDirs = getNodeModulesCandidatePackageDirs(
+			dir,
+			packageName,
+		);
+		for (const packageDir of candidatePackageDirs) {
+			const entry = await resolvePackageEntryFromDir(
+				packageDir,
+				subpath,
+				fs,
+				mode,
+			);
+			if (entry) {
+				return entry;
+			}
 		}
 
 		if (dir === "/") break;
@@ -188,6 +198,36 @@ async function resolveNodeModules(
 	}
 
 	return null;
+}
+
+function getNodeModulesCandidatePackageDirs(
+	dir: string,
+	packageName: string,
+): string[] {
+	const candidates = new Set<string>();
+	candidates.add(join(dir, "node_modules", packageName));
+
+	// Match Node's "parent node_modules" lookup when the current directory is
+	// already a node_modules folder.
+	if (dir === "/node_modules" || dir.endsWith("/node_modules")) {
+		candidates.add(join(dir, packageName));
+	}
+
+	// Support pnpm virtual-store layouts where transitive dependencies are linked
+	// under <root>/node_modules/.pnpm/node_modules.
+	const nodeModulesSegment = "/node_modules/";
+	const nodeModulesIndex = dir.lastIndexOf(nodeModulesSegment);
+	if (nodeModulesIndex !== -1) {
+		const nodeModulesRoot = dir.slice(
+			0,
+			nodeModulesIndex + nodeModulesSegment.length - 1,
+		);
+		candidates.add(
+			join(nodeModulesRoot, ".pnpm", "node_modules", packageName),
+		);
+	}
+
+	return Array.from(candidates);
 }
 
 async function resolvePackageEntryFromDir(
