@@ -57,7 +57,9 @@ describe("runtime driver specific: node", () => {
 	it("accepts Node-only exec options", async () => {
 		const runtime = createRuntime();
 		const result = await runtime.exec(`console.log("node-exec-options-ok");`, {
-			cpuTimeLimitMs: 50,
+			// Keep the limit low enough to exercise the node-only option path
+			// without coupling the test to machine-specific startup jitter.
+			cpuTimeLimitMs: 250,
 			timingMitigation: "off",
 		});
 		expect(result.code).toBe(0);
