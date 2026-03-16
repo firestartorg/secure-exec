@@ -1,7 +1,7 @@
 # Secure Exec TODOs
 
 This file tracks the active implementation backlog only.
-Resolved work should stay in OpenSpec archives and `docs-internal/friction.md` instead of remaining here as unchecked debt.
+Resolved work should stay in `docs-internal/friction.md` instead of remaining here as unchecked debt.
 
 Priority order is:
 1. Security and host-protection gaps

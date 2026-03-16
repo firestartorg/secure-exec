@@ -19,15 +19,15 @@
 - read `docs-internal/arch/overview.md` for the component map (NodeRuntime, RuntimeDriver, NodeDriver, NodeExecutionDriver, ModuleAccessFileSystem, Permissions)
 - keep it up to date when adding, removing, or significantly changing components
 
-## Specs Source of Truth
+## Contracts (CRITICAL)
 
-- bridge/runtime/governance requirements are canonical in `openspec/specs/`
+- `.agent/contracts/` contains behavioral contracts — these are the authoritative source of truth for runtime, bridge, permissions, stdlib, and governance requirements
+- ALWAYS read relevant contracts before implementing changes in contracted areas (runtime, bridge, permissions, stdlib, test structure, documentation)
+- when a change modifies contracted behavior, update the relevant contract in the same PR so contract changes are reviewed alongside code changes
 - for secure-exec runtime behavior, target Node.js semantics as close to 1:1 as practical
-- any intentional deviation from Node.js behavior must be explicitly documented in OpenSpec deltas and reflected in compatibility/friction docs
-- use `openspec/specs/README.md` for how to reference baseline capabilities in new change proposals
+- any intentional deviation from Node.js behavior must be explicitly documented in the relevant contract and reflected in compatibility/friction docs
 - track development friction in `docs-internal/friction.md` (mark resolved items with fix notes)
-- OpenSpec proposals/design/tasks MUST explicitly list the concrete tests to add or update for the change
-- when a request is scoped as `opsx` (propose/plan/apply/archive), always use OpenSpec workflow end-to-end (`opsx propose` -> `opsx apply`) before implementation; do not apply code changes outside an active OpenSpec change
+- see `.agent/contracts/README.md` for the full contract index
 
 ## Compatibility Project-Matrix Policy
 
