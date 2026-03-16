@@ -216,7 +216,7 @@ const CopyInstallButton = () => {
   return (
     <button
       onClick={handleCopy}
-      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-white/10 px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-white/20 hover:text-white font-mono"
+      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md btn-chrome-outline px-4 py-2.5 text-sm transition-all font-mono"
     >
       {copied ? <Check className="h-4 w-4 text-green-400" /> : <Terminal className="h-4 w-4 flex-shrink-0" />}
       <span>{installCommand}</span>
@@ -321,7 +321,7 @@ export function Hero() {
             >
               <a
                 href="/docs"
-                className="selection-dark inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md bg-white px-5 py-2.5 text-sm font-medium text-black transition-colors hover:bg-zinc-200"
+                className="selection-dark inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md btn-chrome px-5 py-2.5 text-sm transition-all"
               >
                 Get Started
                 <ArrowRight className="h-4 w-4" />
