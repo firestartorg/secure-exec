@@ -6,6 +6,7 @@ import {
 	type MockCommandConfig,
 } from "./helpers.js";
 import type { Kernel, Permissions } from "../src/types.js";
+import { FILETYPE_PIPE, FILETYPE_CHARACTER_DEVICE } from "../src/types.js";
 import { filterEnv } from "../src/permissions.js";
 
 describe("kernel + MockRuntimeDriver integration", () => {
@@ -600,6 +601,169 @@ describe("kernel + MockRuntimeDriver integration", () => {
 			// Child reads from its inherited read end
 			const data = await ki.fdRead(child.pid, readFd, 100);
 			expect(new TextDecoder().decode(data)).toBe("pipe data");
+
+			parent.kill(9);
+			child.kill(9);
+			await parent.wait();
+			await child.wait();
+		});
+	});
+
+	// -----------------------------------------------------------------------
+	// Stdio FD override wiring (US-009)
+	// -----------------------------------------------------------------------
+
+	describe("stdio FD override wiring", () => {
+		it("spawn with stdinFd: pipeReadEnd → child FD 0 points to pipe read description", async () => {
+			const driver = new MockRuntimeDriver(["parent-cmd", "child-cmd"], {
+				"parent-cmd": { neverExit: true },
+				"child-cmd": { neverExit: true },
+			});
+			const { kernel: k } = await createTestKernel({ drivers: [driver] });
+			kernel = k;
+			const ki = driver.kernelInterface!;
+
+			const parent = kernel.spawn("parent-cmd", []);
+			const { readFd, writeFd } = ki.pipe(parent.pid);
+
+			// Spawn child with stdinFd override — child's FD 0 wired to pipe read end
+			const child = ki.spawn("child-cmd", [], {
+				ppid: parent.pid,
+				stdinFd: readFd,
+			});
+
+			// Child's FD 0 should be a pipe
+			const stat = ki.fdStat(child.pid, 0);
+			expect(stat.filetype).toBe(FILETYPE_PIPE);
+
+			// Verify data flow: parent writes to pipe → child reads from FD 0
+			ki.fdWrite(parent.pid, writeFd, new TextEncoder().encode("stdin-data"));
+			const data = await ki.fdRead(child.pid, 0, 100);
+			expect(new TextDecoder().decode(data)).toBe("stdin-data");
+
+			parent.kill(9);
+			child.kill(9);
+			await parent.wait();
+			await child.wait();
+		});
+
+		it("spawn with stdoutFd: pipeWriteEnd → child FD 1 points to pipe write description", async () => {
+			const driver = new MockRuntimeDriver(["parent-cmd", "child-cmd"], {
+				"parent-cmd": { neverExit: true },
+				"child-cmd": { neverExit: true },
+			});
+			const { kernel: k } = await createTestKernel({ drivers: [driver] });
+			kernel = k;
+			const ki = driver.kernelInterface!;
+
+			const parent = kernel.spawn("parent-cmd", []);
+			const { readFd, writeFd } = ki.pipe(parent.pid);
+
+			// Spawn child with stdoutFd override — child's FD 1 wired to pipe write end
+			const child = ki.spawn("child-cmd", [], {
+				ppid: parent.pid,
+				stdoutFd: writeFd,
+			});
+
+			// Child's FD 1 should be a pipe
+			const stat = ki.fdStat(child.pid, 1);
+			expect(stat.filetype).toBe(FILETYPE_PIPE);
+
+			// Verify data flow: child writes to FD 1 → parent reads from pipe
+			ki.fdWrite(child.pid, 1, new TextEncoder().encode("stdout-data"));
+			const data = await ki.fdRead(parent.pid, readFd, 100);
+			expect(new TextDecoder().decode(data)).toBe("stdout-data");
+
+			parent.kill(9);
+			child.kill(9);
+			await parent.wait();
+			await child.wait();
+		});
+
+		it("spawn with all three overrides → FD 0, 1, 2 wired to correct pipe descriptions", async () => {
+			const driver = new MockRuntimeDriver(["parent-cmd", "child-cmd"], {
+				"parent-cmd": { neverExit: true },
+				"child-cmd": { neverExit: true },
+			});
+			const { kernel: k } = await createTestKernel({ drivers: [driver] });
+			kernel = k;
+			const ki = driver.kernelInterface!;
+
+			const parent = kernel.spawn("parent-cmd", []);
+
+			// Create 3 pipes: one for each stdio channel
+			const stdinPipe = ki.pipe(parent.pid);
+			const stdoutPipe = ki.pipe(parent.pid);
+			const stderrPipe = ki.pipe(parent.pid);
+
+			// Spawn child with all three overrides
+			const child = ki.spawn("child-cmd", [], {
+				ppid: parent.pid,
+				stdinFd: stdinPipe.readFd,
+				stdoutFd: stdoutPipe.writeFd,
+				stderrFd: stderrPipe.writeFd,
+			});
+
+			// All three child stdio FDs should be pipes
+			expect(ki.fdStat(child.pid, 0).filetype).toBe(FILETYPE_PIPE);
+			expect(ki.fdStat(child.pid, 1).filetype).toBe(FILETYPE_PIPE);
+			expect(ki.fdStat(child.pid, 2).filetype).toBe(FILETYPE_PIPE);
+
+			// Verify data flow on each channel
+			ki.fdWrite(parent.pid, stdinPipe.writeFd, new TextEncoder().encode("in"));
+			const stdinData = await ki.fdRead(child.pid, 0, 100);
+			expect(new TextDecoder().decode(stdinData)).toBe("in");
+
+			ki.fdWrite(child.pid, 1, new TextEncoder().encode("out"));
+			const stdoutData = await ki.fdRead(parent.pid, stdoutPipe.readFd, 100);
+			expect(new TextDecoder().decode(stdoutData)).toBe("out");
+
+			ki.fdWrite(child.pid, 2, new TextEncoder().encode("err"));
+			const stderrData = await ki.fdRead(parent.pid, stderrPipe.readFd, 100);
+			expect(new TextDecoder().decode(stderrData)).toBe("err");
+
+			parent.kill(9);
+			child.kill(9);
+			await parent.wait();
+			await child.wait();
+		});
+
+		it("parent FD table unchanged after child spawn with overrides", async () => {
+			const driver = new MockRuntimeDriver(["parent-cmd", "child-cmd"], {
+				"parent-cmd": { neverExit: true },
+				"child-cmd": { neverExit: true },
+			});
+			const { kernel: k } = await createTestKernel({ drivers: [driver] });
+			kernel = k;
+			const ki = driver.kernelInterface!;
+
+			const parent = kernel.spawn("parent-cmd", []);
+
+			// Record parent's original stdio filetypes before creating pipes
+			const parentStdin = ki.fdStat(parent.pid, 0);
+			const parentStdout = ki.fdStat(parent.pid, 1);
+			const parentStderr = ki.fdStat(parent.pid, 2);
+
+			expect(parentStdin.filetype).toBe(FILETYPE_CHARACTER_DEVICE);
+			expect(parentStdout.filetype).toBe(FILETYPE_CHARACTER_DEVICE);
+			expect(parentStderr.filetype).toBe(FILETYPE_CHARACTER_DEVICE);
+
+			// Create pipe and spawn child with override
+			const { readFd, writeFd } = ki.pipe(parent.pid);
+			const child = ki.spawn("child-cmd", [], {
+				ppid: parent.pid,
+				stdinFd: readFd,
+			});
+
+			// Parent's stdio FDs should still be character devices
+			expect(ki.fdStat(parent.pid, 0).filetype).toBe(FILETYPE_CHARACTER_DEVICE);
+			expect(ki.fdStat(parent.pid, 1).filetype).toBe(FILETYPE_CHARACTER_DEVICE);
+			expect(ki.fdStat(parent.pid, 2).filetype).toBe(FILETYPE_CHARACTER_DEVICE);
+
+			// Parent's pipe FDs should still work
+			ki.fdWrite(parent.pid, writeFd, new TextEncoder().encode("still works"));
+			const data = await ki.fdRead(child.pid, 0, 100);
+			expect(new TextDecoder().decode(data)).toBe("still works");
 
 			parent.kill(9);
 			child.kill(9);
