@@ -1,0 +1,12 @@
+[package]
+name = "shims"
+version.workspace = true
+edition.workspace = true
+description = "Shim implementations for commands requiring subprocess support"
+
+[lib]
+name = "shims"
+path = "src/lib.rs"
+
+[dependencies]
+wasi-ext = { path = "../wasi-ext" }

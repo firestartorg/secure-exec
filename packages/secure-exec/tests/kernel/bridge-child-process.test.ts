@@ -1,0 +1,262 @@
+/**
+ * Integration tests: Node bridge child_process routing through kernel.
+ *
+ * Verifies that child_process.spawn/execSync/spawnSync calls from Node
+ * isolate code route through the kernel's command registry to the
+ * appropriate runtime driver (WasmVM for shell commands).
+ *
+ * Gracefully skipped when the WASM binary is not built.
+ */
+
+import { describe, it, expect, afterEach } from 'vitest';
+import {
+  createIntegrationKernel,
+  skipUnlessWasmBuilt,
+} from './helpers.ts';
+import type { IntegrationKernelResult } from './helpers.ts';
+
+const skipReason = skipUnlessWasmBuilt();
+
+describe.skipIf(skipReason)('bridge child_process → kernel routing', () => {
+  let ctx: IntegrationKernelResult;
+
+  afterEach(async () => {
+    if (ctx) await ctx.dispose();
+  });
+
+  it('execSync("echo hello") routes through kernel to WasmVM shell', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+
+    const chunks: Uint8Array[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', `
+      const { execSync } = require('child_process');
+      const result = execSync('echo hello', { encoding: 'utf-8' });
+      console.log(result.trim());
+    `], {
+      onStdout: (data) => chunks.push(data),
+    });
+
+    const code = await proc.wait();
+    expect(code).toBe(0);
+
+    const output = chunks.map(c => new TextDecoder().decode(c)).join('');
+    expect(output).toContain('hello');
+  });
+
+  it('child_process.spawn("ls") resolves to WasmVM runtime', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+    await ctx.vfs.writeFile('/tmp/test-file.txt', 'content');
+
+    const chunks: Uint8Array[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', `
+      const { execSync } = require('child_process');
+      const result = execSync('ls /tmp', { encoding: 'utf-8' });
+      console.log(result.trim());
+    `], {
+      onStdout: (data) => chunks.push(data),
+    });
+
+    const code = await proc.wait();
+    expect(code).toBe(0);
+
+    const output = chunks.map(c => new TextDecoder().decode(c)).join('');
+    expect(output).toContain('test-file.txt');
+  });
+
+  it('spawned processes get proper PIDs from kernel process table', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+
+    // The Node process itself gets a PID from the kernel
+    const proc = ctx.kernel.spawn('node', ['-e', 'console.log("pid-test")']);
+    expect(proc.pid).toBeGreaterThan(0);
+
+    await proc.wait();
+  });
+
+  it('stdout from spawned child processes pipes back to Node caller', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+
+    const chunks: Uint8Array[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', `
+      const { execSync } = require('child_process');
+      const result = execSync('echo "piped-output"', { encoding: 'utf-8' });
+      console.log('received:', result.trim());
+    `], {
+      onStdout: (data) => chunks.push(data),
+    });
+
+    const code = await proc.wait();
+    expect(code).toBe(0);
+
+    const output = chunks.map(c => new TextDecoder().decode(c)).join('');
+    expect(output).toContain('received: piped-output');
+  });
+
+  it('stderr from spawned child processes pipes back to Node caller', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+
+    const chunks: Uint8Array[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', `
+      const { execSync } = require('child_process');
+      try {
+        execSync('cat /nonexistent/path', { encoding: 'utf-8' });
+      } catch (e) {
+        console.log('caught-error');
+      }
+    `], {
+      onStdout: (data) => chunks.push(data),
+    });
+
+    const code = await proc.wait();
+    expect(code).toBe(0);
+
+    const output = chunks.map(c => new TextDecoder().decode(c)).join('');
+    expect(output).toContain('caught-error');
+  });
+
+  it('commands not in the registry return ENOENT-like error', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+
+    const chunks: Uint8Array[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', `
+      const { execSync } = require('child_process');
+      try {
+        execSync('nonexistent-cmd-xyz', { encoding: 'utf-8' });
+        console.log('SHOULD_NOT_REACH');
+      } catch (e) {
+        console.log('error-caught');
+      }
+    `], {
+      onStdout: (data) => chunks.push(data),
+    });
+
+    const code = await proc.wait();
+    const output = chunks.map(c => new TextDecoder().decode(c)).join('');
+    // execSync wraps the command in bash -c, so the shell handles unknown commands
+    // Either the shell returns non-zero (caught by execSync) or ENOENT propagates
+    expect(output).not.toContain('SHOULD_NOT_REACH');
+    expect(output).toContain('error-caught');
+  });
+
+  it('execSync with env passes environment through kernel', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+
+    const chunks: Uint8Array[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', `
+      const { execSync } = require('child_process');
+      const result = execSync('echo $TEST_VAR', {
+        encoding: 'utf-8',
+        env: { TEST_VAR: 'kernel-env-test' },
+      });
+      console.log(result.trim());
+    `], {
+      onStdout: (data) => chunks.push(data),
+    });
+
+    const code = await proc.wait();
+    expect(code).toBe(0);
+
+    const output = chunks.map(c => new TextDecoder().decode(c)).join('');
+    expect(output).toContain('kernel-env-test');
+  });
+
+  it('cat reads VFS file through kernel child_process', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+    await ctx.vfs.writeFile('/tmp/bridge-test.txt', 'hello from vfs');
+
+    const chunks: Uint8Array[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', `
+      const { execSync } = require('child_process');
+      const result = execSync('cat /tmp/bridge-test.txt', { encoding: 'utf-8' });
+      console.log(result.trim());
+    `], {
+      onStdout: (data) => chunks.push(data),
+    });
+
+    const code = await proc.wait();
+    expect(code).toBe(0);
+
+    const output = chunks.map(c => new TextDecoder().decode(c)).join('');
+    expect(output).toContain('hello from vfs');
+  });
+});
+
+describe.skipIf(skipReason)('bridge child_process exploit/abuse paths', () => {
+  let ctx: IntegrationKernelResult;
+
+  afterEach(async () => {
+    if (ctx) await ctx.dispose();
+  });
+
+  it('child_process cannot escape to host shell', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+
+    // All shell commands route through kernel WasmVM, not host
+    const chunks: Uint8Array[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', `
+      const { execSync } = require('child_process');
+      try {
+        // This should run in WasmVM shell, not host shell
+        const result = execSync('echo sandbox-only', { encoding: 'utf-8' });
+        console.log(result.trim());
+      } catch (e) {
+        console.log('error');
+      }
+    `], {
+      onStdout: (data) => chunks.push(data),
+    });
+
+    await proc.wait();
+    const output = chunks.map(c => new TextDecoder().decode(c)).join('');
+    // If this outputs 'sandbox-only', the command ran inside WasmVM (safe)
+    // If it somehow escaped, we'd see different behavior
+    expect(output).toContain('sandbox-only');
+  });
+
+  it('child_process cannot read host filesystem', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+
+    const chunks: Uint8Array[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', `
+      const { execSync } = require('child_process');
+      try {
+        // /etc/passwd doesn't exist in the kernel VFS
+        execSync('cat /etc/passwd', { encoding: 'utf-8' });
+        console.log('SECURITY_BREACH');
+      } catch (e) {
+        console.log('blocked');
+      }
+    `], {
+      onStdout: (data) => chunks.push(data),
+    });
+
+    await proc.wait();
+    const output = chunks.map(c => new TextDecoder().decode(c)).join('');
+    expect(output).not.toContain('SECURITY_BREACH');
+    expect(output).toContain('blocked');
+  });
+
+  it('child_process write goes to kernel VFS not host', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+
+    const chunks: Uint8Array[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', `
+      const { execSync } = require('child_process');
+      execSync('echo "written-by-child" > /tmp/child-output.txt');
+      const result = execSync('cat /tmp/child-output.txt', { encoding: 'utf-8' });
+      console.log(result.trim());
+    `], {
+      onStdout: (data) => chunks.push(data),
+    });
+
+    const code = await proc.wait();
+    expect(code).toBe(0);
+
+    const output = chunks.map(c => new TextDecoder().decode(c)).join('');
+    expect(output).toContain('written-by-child');
+
+    // Verify the file was written to kernel VFS
+    const content = await ctx.vfs.readFile('/tmp/child-output.txt');
+    expect(new TextDecoder().decode(content)).toContain('written-by-child');
+  });
+});

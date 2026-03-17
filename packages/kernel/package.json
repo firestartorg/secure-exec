@@ -1,0 +1,20 @@
+{
+  "name": "@secure-exec/kernel",
+  "version": "0.1.0",
+  "description": "OS kernel — VFS, FD table, process table, device layer, pipes, command registry, permissions",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

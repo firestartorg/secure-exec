@@ -5,7 +5,8 @@ dist
 target/
 scratch/
 .ralph/
-packages/sandboxed-node/.cache/
+wasmvm/target/
+wasmvm/vendor/
 packages/secure-exec/src/generated/
 packages/playground/secure-exec-worker.js
 packages/playground/vendor/
