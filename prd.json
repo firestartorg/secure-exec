@@ -241,7 +241,7 @@
         "Typecheck passes"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "P3 — code-heavy style matching sandbox-agent/docs"
     },
     {

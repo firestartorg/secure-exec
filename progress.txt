@@ -253,3 +253,14 @@ PRD: ralph/kernel-hardening (46 stories)
   - The message format `"CODE: description"` is preserved for backward compatibility with bridge string matching
   - permissions.ts previously set `.code` manually via cast — KernelError makes this cleaner with typed constructor
 ---
+
+## 2026-03-17 - US-016
+- What was implemented: Kernel quickstart guide already existed from prior docs commit (10bb4f9); verified all acceptance criteria met and marked passes: true
+- Files changed:
+  - prd.json — marked US-016 as passes: true
+- **Learnings for future iterations:**
+  - docs/kernel/quickstart.mdx was committed as part of the initial docs scaffolding in 10bb4f9
+  - The guide covers all required topics: install, createKernel+VFS, mount drivers, exec(), spawn() streaming, cross-runtime example, VFS read/write, dispose()
+  - Follows Mintlify MDX style with Steps, Tabs, Info components and 50-70% code ratio
+  - docs.json already has the Kernel group with all 4 pages registered
+---
