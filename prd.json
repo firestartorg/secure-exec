@@ -394,11 +394,122 @@
         "Tests pass"
       ],
       "priority": 22,
-      "passes": false,
-      "notes": "Cross-runtime pipes require three pieces working together: (1) SpawnOptions FD overrides so spawnInternal wires pipe FDs instead of /dev/std*, (2) brush-shell using KernelInterface.pipe() + spawn() with FD overrides, (3) kernel fdRead/fdWrite routing pipe FDs through PipeManager. Issue: current spawnInternal always creates FDs pointing at /dev/stdin,stdout,stderr — it has no mechanism for pipe wiring."
+      "passes": true,
+      "notes": "Implemented: (1) SpawnOptions stdinFd/stdoutFd/stderrFd fields, (2) spawnInternal creates child FD table with pipe descriptions from caller's table, (3) fdRead routes pipes through PipeManager.read(), (4) KernelInterface.pipe(pid) installs FDs, (5) WasmVM proc_spawn/fd_pipe/proc_kill host imports match Rust FFI, (6) stdout writer redirected through kernel pipe when FD is overridden. Tests at packages/secure-exec/tests/kernel/cross-runtime-pipes.test.ts."
     },
     {
       "id": "US-023",
+      "title": "Harden runtime driver tests — remove escape hatches and fix fake assertions",
+      "description": "As a developer, I need the existing runtime driver tests to have real assertions so they actually catch regressions instead of silently passing when features don't work.",
+      "acceptanceCriteria": [
+        "packages/runtime/node/test/driver.test.ts 'child_process.spawn routes through kernel to other drivers': remove the `if (code === 0)` guard — assert unconditionally that code === 0 AND output contains 'mock-echo-output'. If child_process routing is broken, this test must FAIL not silently pass",
+        "packages/runtime/node/test/driver.test.ts 'cannot access host filesystem directly': replace `expect(stderr).not.toContain('SECURITY_BREACH')` with positive assertions — expect the catch block to execute (stderr contains 'blocked:'), verify stdout does NOT contain real /etc/passwd content like 'root:x:0:0'",
+        "packages/runtime/node/test/driver.test.ts 'cannot spawn unlimited processes via fork bomb': replace the placeholder `console.log('safe')` with a real test that spawns 5+ child processes from within Node via child_process.exec, verifies each gets a unique PID from the kernel process table, and all complete",
+        "packages/runtime/wasmvm/test/driver.test.ts: add new describe.skipIf(!hasWasmBinary) block 'real execution' with tests: exec('echo hello') stdout is 'hello\\n', exec('cat /dev/null') exits 0, exec('false') exits non-zero — tests actual WASM execution not just stub behavior with nonexistent binary",
+        "No test may pass when the feature it tests is broken — every assertion must be unconditional",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "Three categories of escape hatches to fix: (1) conditional assertions wrapped in `if (code === 0)` that silently pass on failure, (2) negative assertions checking absence of magic strings instead of asserting actual error behavior, (3) placeholder tests that don't exercise what they claim. All must be replaced with unconditional assertions."
+    },
+    {
+      "id": "US-024",
+      "title": "Test stdin streaming (writeStdin/closeStdin) through kernel",
+      "description": "As a developer, I need tests proving that writeStdin delivers data to spawned processes and closeStdin triggers EOF, since this critical path has zero test coverage.",
+      "acceptanceCriteria": [
+        "packages/kernel/test/kernel-integration.test.ts: new describe block 'stdin streaming' with MockRuntimeDriver. Test: spawn mock process, call proc.writeStdin(new TextEncoder().encode('test data')), verify MockRuntimeDriver's DriverProcess.writeStdin received the bytes",
+        "packages/runtime/node/test/driver.test.ts: new test 'writeStdin delivers data to Node process'. Spawn node -e that reads all stdin then echoes it: `let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(d.trim()))`. Call proc.writeStdin(encode('hello from stdin')), proc.closeStdin(). Verify stdout contains 'hello from stdin'",
+        "packages/runtime/node/test/driver.test.ts: new test 'closeStdin without write triggers empty EOF'. Spawn node -e that counts stdin bytes. Call closeStdin() immediately. Verify process exits 0 and reports 0 bytes",
+        "packages/runtime/wasmvm/test/driver.test.ts: new test (skipIf no binary) 'writeStdin to cat'. Spawn 'cat' via kernel, proc.writeStdin(encode('stdin-data\\n')), proc.closeStdin(). Verify stdout contains 'stdin-data'",
+        "All stdin tests use unconditional assertions — no escape hatches",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "writeStdin exists on ManagedProcess and routes to DriverProcess.writeStdin. This path has zero test coverage. It is critical for pipes (US-022) and interactive processes. Without working stdin, cross-runtime pipes cannot function."
+    },
+    {
+      "id": "US-025",
+      "title": "Test cross-runtime VFS consistency — writes visible across runtimes",
+      "description": "As a developer, I need tests proving that file writes in one runtime are immediately visible to reads in another runtime, since all runtimes share the kernel VFS.",
+      "acceptanceCriteria": [
+        "New test file packages/secure-exec/tests/kernel/vfs-consistency.test.ts using createIntegrationKernel({ runtimes: ['wasmvm', 'node'] })",
+        "Test 'kernel write visible to Node': kernel.writeFile('/tmp/test.txt', 'hello'), then exec node -e fs.readFileSync('/tmp/test.txt','utf8') — stdout contains 'hello'",
+        "Test 'Node write visible to WasmVM': exec node -e fs.writeFileSync('/tmp/node-wrote.txt','from-node'), then exec 'cat /tmp/node-wrote.txt' — stdout contains 'from-node'",
+        "Test 'Node write visible to kernel API': exec node -e fs.writeFileSync('/tmp/k.txt','data'), then kernel.readFile('/tmp/k.txt') returns 'data'",
+        "Test 'directory listing consistent across runtimes': kernel.writeFile creates 3 files in /tmp, exec 'ls /tmp' (WasmVM) and exec node -e readdirSync('/tmp') both list the same file names",
+        "Test 'ENOENT consistent across runtimes': exec 'cat /nonexistent' exits non-zero AND exec node -e readFileSync('/nonexistent') exits non-zero — both error on missing files",
+        "Gracefully skipped if WASM binary not built",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "This is a fundamental correctness property of the kernel model: since all runtimes share the kernel VFS, writes must be immediately visible across runtimes. Failure here means runtimes have independent filesystem state, which breaks the single-kernel-VFS invariant."
+    },
+    {
+      "id": "US-026",
+      "title": "Test kernel dispose with active processes across runtimes",
+      "description": "As a developer, I need tests proving that kernel.dispose() terminates all running processes and cleans up resources even when processes are actively running in multiple runtimes.",
+      "acceptanceCriteria": [
+        "packages/kernel/test/kernel-integration.test.ts: new describe block 'dispose with active processes'. Test: spawn 5 MockRuntimeDriver processes that never resolve their exit promise, call kernel.dispose(), verify all DriverProcess.kill() was called, verify dispose() resolves within 5s",
+        "packages/kernel/test/kernel-integration.test.ts: test 'spawn after dispose throws disposed'. Call dispose(), then attempt kernel.spawn() — verify it throws error containing 'disposed'",
+        "packages/kernel/test/kernel-integration.test.ts: test 'exec after dispose rejects with disposed'. Call dispose(), then attempt kernel.exec() — verify it rejects with error containing 'disposed'",
+        "New test file packages/secure-exec/tests/kernel/dispose-behavior.test.ts using createIntegrationKernel",
+        "Integration test: spawn WasmVM 'sleep 60', call dispose(), verify resolves within 5s timeout",
+        "Integration test: spawn Node `setTimeout(()=>{},60000)`, call dispose(), verify resolves within 5s timeout",
+        "Integration test: spawn processes in BOTH WasmVM and Node simultaneously, dispose, verify both terminated and dispose resolves",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "Current dispose tests only run on idle kernels. Real-world dispose must handle active processes without hanging forever. The kernel should send SIGTERM to all active processes, wait briefly, then SIGKILL any survivors."
+    },
+    {
+      "id": "US-027",
+      "title": "Test cross-runtime error and exit code propagation",
+      "description": "As a developer, I need tests proving that exit codes and stderr flow correctly across runtime boundaries when processes fail, including through nested cross-runtime spawns.",
+      "acceptanceCriteria": [
+        "New test file packages/secure-exec/tests/kernel/error-propagation.test.ts using createIntegrationKernel({ runtimes: ['wasmvm', 'node'] })",
+        "Test 'Node non-zero exit propagates': kernel.exec('node -e \"process.exit(42)\"') returns exitCode 42",
+        "Test 'WasmVM non-zero exit propagates': kernel.exec('sh -c \"exit 7\"') returns exitCode 7",
+        "Test 'Node stderr captured by kernel': kernel.exec('node -e \"console.error(\\\"err-msg\\\")\"') returns stderr containing 'err-msg'",
+        "Test 'WasmVM stderr captured by kernel': kernel.exec('echo error >&2') returns stderr containing 'error'",
+        "Test 'nested cross-runtime exit code propagation': kernel.exec('sh -c \"node -e \\\"process.exit(42)\\\"\"') — WasmVM shell spawns Node via kernel, Node exits 42, shell propagates exit code. This tests exit code flowing through TWO runtime boundary crossings: kernel→WasmVM→kernel→Node→exit(42)→kernel→WasmVM→kernel",
+        "Test 'Node captures WasmVM child failure': exec Node code that runs child_process.execSync('sh -c \"exit 3\"') in a try/catch and logs the exit code — verify stdout contains '3'",
+        "Gracefully skipped if WASM binary not built",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "The nested cross-runtime test is the hardest: it requires exit codes to propagate back through two runtime boundary crossings. The Node→WasmVM child failure test requires child_process routing (US-021) to correctly capture and return the shell's exit code. These are the tests that will catch subtle bugs in exit code handling at the DriverProcess↔kernel↔ManagedProcess boundaries."
+    },
+    {
+      "id": "US-028",
+      "title": "Test module resolution through kernel VFS",
+      "description": "As a developer, I need tests proving that Node's require() resolves modules through the kernel VFS so Node code can load project files, not just built-in modules.",
+      "acceptanceCriteria": [
+        "New test file packages/secure-exec/tests/kernel/module-resolution.test.ts using createIntegrationKernel({ runtimes: ['wasmvm', 'node'] })",
+        "Test 'require relative CJS module': write /app/lib/utils.js to VFS with `module.exports.add = (a,b) => a+b`, write /app/index.js that does `console.log(require('./lib/utils').add(1,2))`. Exec 'node /app/index.js' — stdout contains '3'",
+        "Test 'require from node_modules': write /app/node_modules/my-pkg/index.js to VFS with `module.exports.greet = () => 'hello'`, write /app/main.js that does `console.log(require('my-pkg').greet())`. Exec 'node /app/main.js' — stdout contains 'hello'",
+        "Test 'require missing module gives MODULE_NOT_FOUND': exec `node -e \"require('./nonexistent')\"` with cwd /app — exits non-zero, stderr contains 'Cannot find module' or 'MODULE_NOT_FOUND'",
+        "Test 'require nested relative path': write /app/src/handlers/index.js that does `console.log(require('../../lib/utils').add(3,4))` (reusing /app/lib/utils.js from above). Exec 'node /app/src/handlers/index.js' — stdout contains '7'",
+        "Test 'require JSON file': write /app/config.json to VFS with `{\"port\": 3000}`, exec `node -e \"console.log(require('./config.json').port)\"` with cwd /app — stdout contains '3000'",
+        "Gracefully skipped if WASM binary not built",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": "Module resolution is critical for real-world Node usage. If require() doesn't go through the kernel VFS, Node code can only use built-in modules. These tests verify the Node RuntimeDriver's module resolver uses kernel VFS for stat/readFile/readDir during the require resolution algorithm (checking package.json main field, index.js fallback, .js/.json extensions, node_modules traversal)."
+    },
+    {
+      "id": "US-029",
       "title": "Implement FD inheritance for child processes",
       "description": "As a developer, I need child processes to inherit their parent's file descriptor table so redirections and pipes work correctly across process boundaries.",
       "acceptanceCriteria": [
@@ -411,12 +522,12 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 23,
+      "priority": 29,
       "passes": false,
       "notes": "Two test layers: kernel unit tests with MockRuntimeDriver (packages/kernel/test/) for FD table mechanics, and integration tests with real runtimes (packages/secure-exec/tests/kernel/) for end-to-end redirections."
     },
     {
-      "id": "US-024",
+      "id": "US-030",
       "title": "Implement signal forwarding across runtimes",
       "description": "As a developer, I need kill(pid, signal) to work across runtimes so processes can be terminated regardless of which runtime owns them.",
       "acceptanceCriteria": [
@@ -430,12 +541,12 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 24,
+      "priority": 30,
       "passes": false,
       "notes": "Two test layers: MockRuntimeDriver tests verify kernel signal routing logic, integration tests verify real runtime drivers honor kill signals."
     },
     {
-      "id": "US-025",
+      "id": "US-031",
       "title": "E2e: run existing project-matrix fixtures through kernel",
       "description": "As a developer, I need the existing project-matrix fixture projects (semver-pass, dotenv-pass, module-access-pass, crypto-random-pass, fs-metadata-rename-pass, rivetkit, net-unsupported-fail) to run through the kernel with output parity against host Node.",
       "acceptanceCriteria": [
@@ -452,12 +563,12 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 25,
+      "priority": 31,
       "passes": false,
       "notes": "Reuse infrastructure from packages/secure-exec/tests/project-matrix.test.ts: discoverFixtures(), prepareFixtureProject(), runHostExecution(). The kernel side replaces runSandboxExecution() with kernel.exec('node <entry>'). Add one new ESM fixture to cover import syntax. KEY DECISION: use NodeFileSystem pointed at the prepared project dir (which has node_modules from host npm install) so that require() resolves naturally. The kernel VFS root IS the project dir, cwd is '/'. ModuleAccessFileSystem overlay is NOT needed when using NodeFileSystem because node_modules is already on disk. InMemoryFileSystem would require copying hundreds of MB — impractical."
     },
     {
-      "id": "US-026",
+      "id": "US-032",
       "title": "E2e: npm run scripts execute shell commands through kernel",
       "description": "As a developer, I need to verify that 'npm run <script>' works through the kernel, where npm reads package.json, finds the script, and executes it via the shell (routed through kernel command registry to WasmVM).",
       "acceptanceCriteria": [
@@ -472,12 +583,12 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 26,
+      "priority": 32,
       "passes": false,
       "notes": "This is the key cross-runtime integration test: Node (npm) reads package.json → spawns shell via child_process (routed through kernel to WasmVM) → WasmVM executes the shell command → output flows back through kernel pipes to npm → captured by kernel.exec(). Tests the full Node→kernel→WasmVM→kernel→Node round-trip."
     },
     {
-      "id": "US-027",
+      "id": "US-033",
       "title": "E2e: npm install a package through kernel",
       "description": "As a developer, I need to verify that 'npm install' works through the kernel with network access, proving the full package installation flow (download, extract, write to VFS) works end-to-end.",
       "acceptanceCriteria": [
@@ -491,12 +602,12 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 27,
+      "priority": 33,
       "passes": false,
       "notes": "Uses left-pad (tiny, no native deps) to keep install fast. KEY ISSUES: (1) Network: The kernel has no network layer. The Node RuntimeDriver must pass through network requests to the host runtime (Node.js native fetch/http). The kernel only provides the permission check via NetworkAccessRequest. Add a checkNetworkPermission() method to KernelInterface if not present. (2) Filesystem: Use NodeFileSystem so npm itself is available from the host Node installation. The project dir (with package.json) should be a temp dir on the host filesystem. npm writes node_modules into this real dir via the kernel VFS. (3) npm resolution: npm is a Node.js program installed with the host Node. The Node RuntimeDriver must locate npm's entry script from the host system when spawn('npm', args) is called."
     },
     {
-      "id": "US-028",
+      "id": "US-034",
       "title": "E2e: npx execution and pipe-based Node eval through kernel",
       "description": "As a developer, I need npx to work through the kernel and WasmVM-to-Node pipes to work for 'echo ... | node -e ...' patterns.",
       "acceptanceCriteria": [
@@ -510,12 +621,12 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 28,
+      "priority": 34,
       "passes": false,
       "notes": "npx tests verify the npm/npx command resolution chain through the kernel. Pipe tests exercise the WasmVM→kernel PipeManager→Node stdin path, complementing the unit-level pipe tests in US-022."
     },
     {
-      "id": "US-029",
+      "id": "US-035",
       "title": "E2e: npm postinstall lifecycle scripts through kernel",
       "description": "As a developer, I need npm postinstall lifecycle scripts to execute through the kernel, proving that npm's child_process.spawn for lifecycle hooks routes through the kernel command registry to WasmVM.",
       "acceptanceCriteria": [
@@ -529,12 +640,12 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 29,
+      "priority": 35,
       "passes": false,
       "notes": "Lifecycle scripts are the trickiest npm integration: npm spawns a shell to run each lifecycle script, that shell must route through the kernel to WasmVM. Tests: Node (npm) → child_process.spawn('sh', ['-c', 'echo ...']) → kernel command registry → WasmVM shell → writes to kernel VFS."
     },
     {
-      "id": "US-030",
+      "id": "US-036",
       "title": "E2e: concurrently package runs parallel processes through kernel",
       "description": "As a developer, I need the concurrently package to work through the kernel, testing that multiple concurrent child processes spawned via Node's child_process all route correctly through the kernel to WasmVM.",
       "acceptanceCriteria": [
@@ -549,12 +660,12 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 30,
+      "priority": 36,
       "passes": false,
       "notes": "concurrently spawns multiple child_process instances simultaneously. This tests: kernel process table concurrent PID allocation, kernel command registry handling multiple simultaneous resolves, WasmVM running multiple workers in parallel, kernel pipe multiplexing stdout from multiple processes."
     },
     {
-      "id": "US-031",
+      "id": "US-037",
       "title": "E2e: Next.js build runs through kernel",
       "description": "As a developer, I need 'next build' to complete successfully through the kernel on a minimal Next.js project, proving the kernel can handle a complex real-world build pipeline.",
       "acceptanceCriteria": [
@@ -568,12 +679,12 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 31,
+      "priority": 37,
       "passes": false,
       "notes": "KNOWN BLOCKERS: (1) SWC is a .node native addon — ModuleAccessFileSystem blocks .node files (ERR_MODULE_ACCESS_NATIVE_ADDON). Must set NEXT_DISABLE_SWC=1 to force Babel fallback or configure the kernel to allow native addons. (2) Next.js uses worker_threads for parallel compilation — not supported in V8 isolate sandbox. May need NEXT_EXPERIMENTAL_WORKERS=0 or similar config. (3) The build is slow with Babel (minutes). Ralph should attempt the build, document failure modes, and apply workarounds (disable SWC, single-threaded mode, output:'export' for static). If the build cannot complete due to sandbox limitations, document what fails and mark the story with the specific blockers for future resolution."
     },
     {
-      "id": "US-032",
+      "id": "US-038",
       "title": "E2e: Python + WasmVM basic integration through kernel",
       "description": "As a developer, I need basic Python code execution through the kernel and cross-runtime pipes between Python and WasmVM to work, proving the Python RuntimeDriver integrates with the kernel.",
       "acceptanceCriteria": [
@@ -589,12 +700,12 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 32,
+      "priority": 38,
       "passes": false,
       "notes": "Tests the Python RuntimeDriver + kernel integration. DEPENDENCY: os.system test depends on the kernelSpawn RPC and os.system monkey-patch added in US-019 (Python RuntimeDriver). Without that, os.system raises ENOSYS because Pyodide/WASI does not support libc system(). The WasmVM-to-Python pipe test depends on US-022 (SpawnOptions FD overrides) being complete. skipUnlessPyodide() checks for Pyodide availability since it requires downloading the runtime."
     },
     {
-      "id": "US-033",
+      "id": "US-039",
       "title": "Create kernel behavioral contracts",
       "description": "As a developer, I need behavioral contracts for the kernel package so future changes are reviewed against explicit requirements.",
       "acceptanceCriteria": [
@@ -604,12 +715,12 @@
         ".agent/contracts/README.md updated with new contract entries in the index table",
         "Typecheck passes"
       ],
-      "priority": 33,
+      "priority": 39,
       "passes": false,
       "notes": ""
     },
     {
-      "id": "US-034",
+      "id": "US-040",
       "title": "Update existing contracts for kernel model",
       "description": "As a developer, I need existing contracts updated to reflect the kernel-mediated execution model so contracts remain the authoritative source of truth.",
       "acceptanceCriteria": [
@@ -622,7 +733,7 @@
         "All contract changes are internally consistent and use existing WHEN/THEN format",
         "Typecheck passes"
       ],
-      "priority": 34,
+      "priority": 40,
       "passes": false,
       "notes": ""
     }

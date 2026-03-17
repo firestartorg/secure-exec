@@ -84,4 +84,10 @@ export interface WorkerInitData {
   cwd: string;
   signalBuf: SharedArrayBuffer;
   dataBuf: SharedArrayBuffer;
+  /** FD override for stdin (pipe read end in parent's table, or undefined). */
+  stdinFd?: number;
+  /** FD override for stdout (pipe write end in parent's table, or undefined). */
+  stdoutFd?: number;
+  /** FD override for stderr (pipe write end in parent's table, or undefined). */
+  stderrFd?: number;
 }

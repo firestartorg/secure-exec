@@ -254,7 +254,7 @@ function createKernelVfs(): WasiVFS {
 }
 
 // -------------------------------------------------------------------------
-// Host process imports — proc_spawn routes through kernel
+// Host process imports — proc_spawn, fd_pipe, proc_kill route through kernel
 // -------------------------------------------------------------------------
 
 function createHostProcessImports(getMemory: () => WebAssembly.Memory | null) {
@@ -262,10 +262,15 @@ function createHostProcessImports(getMemory: () => WebAssembly.Memory | null) {
     /**
      * proc_spawn routes through KernelInterface.spawn() so brush-shell
      * pipeline stages dispatch to the correct runtime driver.
+     *
+     * Matches Rust FFI: proc_spawn(argv_ptr, argv_len, envp_ptr, envp_len,
+     *   stdin_fd, stdout_fd, stderr_fd, cwd_ptr, cwd_len, ret_pid) -> errno
      */
     proc_spawn(
-      command_ptr: number, command_len: number,
-      argv_buf_ptr: number, argc: number,
+      argv_ptr: number, argv_len: number,
+      envp_ptr: number, envp_len: number,
+      stdin_fd: number, stdout_fd: number, stderr_fd: number,
+      cwd_ptr: number, cwd_len: number,
       ret_pid_ptr: number,
     ): number {
       const mem = getMemory();
@@ -273,38 +278,83 @@ function createHostProcessImports(getMemory: () => WebAssembly.Memory | null) {
 
       const bytes = new Uint8Array(mem.buffer);
       const decoder = new TextDecoder();
-      const command = decoder.decode(bytes.slice(command_ptr, command_ptr + command_len));
 
-      // Read argv (ptr+len pairs)
-      const args: string[] = [];
-      const view = new DataView(mem.buffer);
-      for (let i = 0; i < argc; i++) {
-        const ptr = view.getUint32(argv_buf_ptr + i * 8, true);
-        const len = view.getUint32(argv_buf_ptr + i * 8 + 4, true);
-        args.push(decoder.decode(bytes.slice(ptr, ptr + len)));
+      // Parse null-separated argv buffer — first entry is the command
+      const argvRaw = decoder.decode(bytes.slice(argv_ptr, argv_ptr + argv_len));
+      const argvParts = argvRaw.split('\0').filter(Boolean);
+      const command = argvParts[0] ?? '';
+      const args = argvParts.slice(1);
+
+      // Parse null-separated envp buffer (KEY=VALUE\0 pairs)
+      const env: Record<string, string> = {};
+      if (envp_len > 0) {
+        const envpRaw = decoder.decode(bytes.slice(envp_ptr, envp_ptr + envp_len));
+        for (const entry of envpRaw.split('\0')) {
+          if (!entry) continue;
+          const eq = entry.indexOf('=');
+          if (eq > 0) env[entry.slice(0, eq)] = entry.slice(eq + 1);
+        }
       }
 
-      // Route through kernel
+      // Parse cwd
+      const cwd = cwd_len > 0
+        ? decoder.decode(bytes.slice(cwd_ptr, cwd_ptr + cwd_len))
+        : init.cwd;
+
+      // Route through kernel with FD overrides for pipe wiring
       const res = rpcCall('spawn', {
         command,
         spawnArgs: args,
-        env: init.env,
-        cwd: init.cwd,
+        env,
+        cwd,
+        stdinFd: stdin_fd,
+        stdoutFd: stdout_fd,
+        stderrFd: stderr_fd,
       });
 
       if (res.errno !== 0) return res.errno;
-      view.setInt32(ret_pid_ptr, res.intResult, true);
+      new DataView(mem.buffer).setUint32(ret_pid_ptr, res.intResult, true);
       return ERRNO_SUCCESS;
     },
 
-    proc_wait(pid: number, ret_status_ptr: number): number {
+    /**
+     * proc_waitpid(pid, options, ret_status) -> errno
+     * options: 0 = blocking, 1 = WNOHANG
+     */
+    proc_waitpid(pid: number, _options: number, ret_status_ptr: number): number {
       const mem = getMemory();
       if (!mem) return ERRNO_EINVAL;
 
       const res = rpcCall('waitpid', { pid });
       if (res.errno !== 0) return res.errno;
 
-      new DataView(mem.buffer).setInt32(ret_status_ptr, res.intResult, true);
+      new DataView(mem.buffer).setUint32(ret_status_ptr, res.intResult, true);
+      return ERRNO_SUCCESS;
+    },
+
+    /** proc_kill(pid, signal) -> errno */
+    proc_kill(pid: number, signal: number): number {
+      const res = rpcCall('kill', { pid, signal });
+      return res.errno;
+    },
+
+    /**
+     * fd_pipe(ret_read_fd, ret_write_fd) -> errno
+     * Creates a kernel pipe and installs both ends in this process's FD table.
+     */
+    fd_pipe(ret_read_fd_ptr: number, ret_write_fd_ptr: number): number {
+      const mem = getMemory();
+      if (!mem) return ERRNO_EINVAL;
+
+      const res = rpcCall('pipe', {});
+      if (res.errno !== 0) return res.errno;
+
+      const view = new DataView(mem.buffer);
+      // Read/write FDs packed in intResult: read in low 16 bits, write in high 16 bits
+      const readFd = res.intResult & 0xFFFF;
+      const writeFd = (res.intResult >>> 16) & 0xFFFF;
+      view.setUint32(ret_read_fd_ptr, readFd, true);
+      view.setUint32(ret_write_fd_ptr, writeFd, true);
       return ERRNO_SUCCESS;
     },
   };
@@ -329,15 +379,34 @@ async function main(): Promise<void> {
     env: init.env,
   });
 
-  // Stream stdout/stderr to main thread
-  polyfill.setStdoutWriter((buf, offset, length) => {
-    port.postMessage({ type: 'stdout', data: buf.slice(offset, offset + length) });
-    return length;
-  });
-  polyfill.setStderrWriter((buf, offset, length) => {
-    port.postMessage({ type: 'stderr', data: buf.slice(offset, offset + length) });
-    return length;
-  });
+  // Stream stdout/stderr — route through kernel pipe when FD is overridden,
+  // otherwise stream to main thread via postMessage
+  if (init.stdoutFd !== undefined && init.stdoutFd !== 1) {
+    // Stdout is piped — route writes through kernel fdWrite on FD 1
+    polyfill.setStdoutWriter((buf, offset, length) => {
+      const data = buf.slice(offset, offset + length);
+      rpcCall('fdWrite', { fd: 1, data: Array.from(data) });
+      return length;
+    });
+  } else {
+    polyfill.setStdoutWriter((buf, offset, length) => {
+      port.postMessage({ type: 'stdout', data: buf.slice(offset, offset + length) });
+      return length;
+    });
+  }
+  if (init.stderrFd !== undefined && init.stderrFd !== 2) {
+    // Stderr is piped — route writes through kernel fdWrite on FD 2
+    polyfill.setStderrWriter((buf, offset, length) => {
+      const data = buf.slice(offset, offset + length);
+      rpcCall('fdWrite', { fd: 2, data: Array.from(data) });
+      return length;
+    });
+  } else {
+    polyfill.setStderrWriter((buf, offset, length) => {
+      port.postMessage({ type: 'stderr', data: buf.slice(offset, offset + length) });
+      return length;
+    });
+  }
 
   const userManager = new UserManager({
     getMemory,
@@ -366,18 +435,31 @@ async function main(): Promise<void> {
     const start = instance.exports._start as () => void;
     start();
 
-    // Normal exit — flush collected output
+    // Normal exit — flush collected output, close piped FDs for EOF
     flushOutput(polyfill);
+    closePipedFds();
     port.postMessage({ type: 'exit', code: 0 });
   } catch (err) {
     if (err instanceof WasiProcExit) {
       flushOutput(polyfill);
+      closePipedFds();
       port.postMessage({ type: 'exit', code: err.exitCode });
     } else {
       const errMsg = err instanceof Error ? err.message : String(err);
       port.postMessage({ type: 'stderr', data: new TextEncoder().encode(errMsg + '\n') });
+      closePipedFds();
       port.postMessage({ type: 'exit', code: 1 });
     }
+  }
+}
+
+/** Close piped stdio FDs so readers get EOF. */
+function closePipedFds(): void {
+  if (init.stdoutFd !== undefined && init.stdoutFd !== 1) {
+    rpcCall('fdClose', { fd: 1 });
+  }
+  if (init.stderrFd !== undefined && init.stderrFd !== 2) {
+    rpcCall('fdClose', { fd: 2 });
   }
 }
 

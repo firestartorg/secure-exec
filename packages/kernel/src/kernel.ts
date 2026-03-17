@@ -18,6 +18,7 @@ import type {
 	ProcessContext,
 	ProcessInfo,
 	FDStat,
+	FileDescription,
 } from "./types.js";
 import type { VirtualFileSystem, VirtualStat } from "./vfs.js";
 import { createDeviceLayer } from "./device-layer.js";
@@ -27,7 +28,13 @@ import { PipeManager } from "./pipe-manager.js";
 import { CommandRegistry } from "./command-registry.js";
 import { wrapFileSystem } from "./permissions.js";
 import { UserManager } from "./user.js";
-import { FILETYPE_REGULAR_FILE, FILETYPE_DIRECTORY, O_RDONLY } from "./types.js";
+import {
+	FILETYPE_REGULAR_FILE,
+	FILETYPE_DIRECTORY,
+	FILETYPE_PIPE,
+	O_RDONLY,
+	O_WRONLY,
+} from "./types.js";
 
 export function createKernel(options: KernelOptions): Kernel {
 	return new KernelImpl(options);
@@ -188,7 +195,8 @@ class KernelImpl implements Kernel {
 	private spawnInternal(
 		command: string,
 		args: string[],
-		options?: ExecOptions,
+		options?: SpawnOptions,
+		callerPid?: number,
 	): InternalProcess {
 		const driver = this.commandRegistry.resolve(command);
 		if (!driver) {
@@ -198,8 +206,12 @@ class KernelImpl implements Kernel {
 		// Allocate PID atomically
 		const pid = this.processTable.allocatePid();
 
-		// Create FD table for the new process
-		this.fdTableManager.create(pid);
+		// Create FD table — wire pipe FDs when overrides are provided
+		const table = this.createChildFDTable(pid, options, callerPid);
+
+		// Check which stdio channels are piped (data flows through kernel, not callbacks)
+		const stdoutPiped = this.isStdioPiped(table, 1);
+		const stderrPiped = this.isStdioPiped(table, 2);
 
 		// Buffer stdout/stderr — wired before spawn so nothing is lost
 		const stdoutBuf: Uint8Array[] = [];
@@ -208,20 +220,20 @@ class KernelImpl implements Kernel {
 		// Build process context with pre-wired callbacks
 		const ctx: ProcessContext = {
 			pid,
-			ppid: 0,
+			ppid: callerPid ?? 0,
 			env: { ...this.env, ...options?.env },
 			cwd: options?.cwd ?? this.cwd,
 			fds: { stdin: 0, stdout: 1, stderr: 2 },
-			onStdout: (data) => stdoutBuf.push(data),
-			onStderr: (data) => stderrBuf.push(data),
+			onStdout: stdoutPiped ? undefined : (data) => stdoutBuf.push(data),
+			onStderr: stderrPiped ? undefined : (data) => stderrBuf.push(data),
 		};
 
 		// Spawn via driver
 		const driverProcess = driver.spawn(command, args, ctx);
 
 		// Also buffer data emitted via DriverProcess callbacks after spawn returns
-		driverProcess.onStdout = (data) => stdoutBuf.push(data);
-		driverProcess.onStderr = (data) => stderrBuf.push(data);
+		if (!stdoutPiped) driverProcess.onStdout = (data) => stdoutBuf.push(data);
+		if (!stderrPiped) driverProcess.onStderr = (data) => stderrBuf.push(data);
 
 		// Register in process table
 		const entry = this.processTable.register(
@@ -260,8 +272,9 @@ class KernelImpl implements Kernel {
 		command: string,
 		args: string[],
 		options?: SpawnOptions,
+		callerPid?: number,
 	): ManagedProcess {
-		const internal = this.spawnInternal(command, args, options);
+		const internal = this.spawnInternal(command, args, options, callerPid);
 		let exitCode: number | null = null;
 
 		// Forward stdout/stderr callbacks from options (replays buffered data)
@@ -310,9 +323,10 @@ class KernelImpl implements Kernel {
 				const entry = table.get(fd);
 				if (!entry) throw new Error(`EBADF: bad file descriptor ${fd}`);
 
-				// Pipe reads handled separately by drivers
+				// Pipe reads route through PipeManager
 				if (this.pipeManager.isPipe(entry.description.id)) {
-					return new Uint8Array(0);
+					const data = await this.pipeManager.read(entry.description.id, length);
+					return data ?? new Uint8Array(0);
 				}
 
 				// Read from VFS at cursor position
@@ -368,7 +382,10 @@ class KernelImpl implements Kernel {
 					cwd: ctx.cwd,
 					onStdout: ctx.onStdout,
 					onStderr: ctx.onStderr,
-				});
+					stdinFd: ctx.stdinFd,
+					stdoutFd: ctx.stdoutFd,
+					stderrFd: ctx.stderrFd,
+				}, ctx.ppid);
 			},
 			waitpid: (pid) => {
 				return this.processTable.waitpid(pid);
@@ -382,14 +399,10 @@ class KernelImpl implements Kernel {
 			},
 
 			// Pipe operations
-			pipe: () => {
-				// Create pipe but don't assign to a specific process FD table
-				// The caller (driver) will manage FD assignment
-				const { read, write } = this.pipeManager.createPipe();
-				return {
-					readFd: read.description.id,
-					writeFd: write.description.id,
-				};
+			pipe: (pid) => {
+				// Create pipe and install both ends in the process's FD table
+				const table = this.getTable(pid);
+				return this.pipeManager.createPipeFDs(table);
 			},
 
 			// Environment
@@ -402,6 +415,67 @@ class KernelImpl implements Kernel {
 				return entry?.cwd ?? this.cwd;
 			},
 		};
+	}
+
+	/**
+	 * Create FD table for a child process, wiring pipe FD overrides when provided.
+	 *
+	 * When stdinFd/stdoutFd/stderrFd are set in options, looks up the
+	 * FileDescription from the caller's FD table and installs it as
+	 * FD 0/1/2 in the child's table. u32::MAX (4294967295) maps to /dev/null.
+	 */
+	private createChildFDTable(
+		childPid: number,
+		options?: SpawnOptions,
+		callerPid?: number,
+	): ProcessFDTable {
+		const hasFdOverrides =
+			options?.stdinFd !== undefined ||
+			options?.stdoutFd !== undefined ||
+			options?.stderrFd !== undefined;
+
+		if (!hasFdOverrides || !callerPid) {
+			return this.fdTableManager.create(childPid);
+		}
+
+		const callerTable = this.fdTableManager.get(callerPid);
+		if (!callerTable) {
+			return this.fdTableManager.create(childPid);
+		}
+
+		// Resolve FileDescriptions for each overridden FD
+		const stdinDesc = this.resolveStdioOverride(callerTable, options!.stdinFd, "/dev/stdin", O_RDONLY);
+		const stdoutDesc = this.resolveStdioOverride(callerTable, options!.stdoutFd, "/dev/stdout", O_WRONLY);
+		const stderrDesc = this.resolveStdioOverride(callerTable, options!.stderrFd, "/dev/stderr", O_WRONLY);
+
+		return this.fdTableManager.createWithStdio(childPid, stdinDesc, stdoutDesc, stderrDesc);
+	}
+
+	/** Resolve an FD override: look up in caller's table, or use default device path. */
+	private resolveStdioOverride(
+		callerTable: ProcessFDTable,
+		overrideFd: number | undefined,
+		defaultPath: string,
+		defaultFlags: number,
+	): { description: FileDescription; filetype: number } | null {
+		if (overrideFd === undefined) return null;
+
+		// u32::MAX = /dev/null sentinel from Rust Stdio::Null
+		if (overrideFd === 0xFFFFFFFF) {
+			return null; // Use default — device layer handles /dev/null
+		}
+
+		const entry = callerTable.get(overrideFd);
+		if (!entry) return null; // FD not found — fall back to default
+
+		return { description: entry.description, filetype: entry.filetype };
+	}
+
+	/** Check if a stdio FD (0/1/2) in a process's table is a pipe. */
+	private isStdioPiped(table: ProcessFDTable, fd: number): boolean {
+		const entry = table.get(fd);
+		if (!entry) return false;
+		return this.pipeManager.isPipe(entry.description.id);
 	}
 
 	private getTable(pid: number): ProcessFDTable {

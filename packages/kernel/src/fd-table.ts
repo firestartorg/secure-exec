@@ -68,6 +68,24 @@ export class ProcessFDTable {
 		});
 	}
 
+	/** Pre-allocate stdin, stdout, stderr with custom filetypes (for pipe wiring). */
+	initStdioWithTypes(
+		stdinDesc: FileDescription,
+		stdinType: number,
+		stdoutDesc: FileDescription,
+		stdoutType: number,
+		stderrDesc: FileDescription,
+		stderrType: number,
+	): void {
+		// Shared descriptions (from pipes) get refCount bumped
+		stdinDesc.refCount++;
+		stdoutDesc.refCount++;
+		stderrDesc.refCount++;
+		this.entries.set(0, { fd: 0, description: stdinDesc, rights: 0n, filetype: stdinType });
+		this.entries.set(1, { fd: 1, description: stdoutDesc, rights: 0n, filetype: stdoutType });
+		this.entries.set(2, { fd: 2, description: stderrDesc, rights: 0n, filetype: stderrType });
+	}
+
 	/** Open a new FD for the given path and flags */
 	open(path: string, flags: number, filetype?: number): number {
 		const fd = this.allocateFd();
@@ -203,6 +221,36 @@ export class FDTableManager {
 			createFileDescription("/dev/stdout", O_WRONLY),
 			createFileDescription("/dev/stderr", O_WRONLY),
 		);
+		this.tables.set(pid, table);
+		return table;
+	}
+
+	/**
+	 * Create a new FD table with custom stdio FileDescriptions.
+	 * Used for pipe wiring: pass a pipe read/write end as stdin/stdout/stderr.
+	 * Null entries fall back to default device nodes.
+	 */
+	createWithStdio(
+		pid: number,
+		stdinOverride: { description: FileDescription; filetype: number } | null,
+		stdoutOverride: { description: FileDescription; filetype: number } | null,
+		stderrOverride: { description: FileDescription; filetype: number } | null,
+	): ProcessFDTable {
+		const table = new ProcessFDTable();
+		const stdinDesc = stdinOverride
+			? stdinOverride.description
+			: createFileDescription("/dev/stdin", O_RDONLY);
+		const stdinType = stdinOverride?.filetype ?? FILETYPE_CHARACTER_DEVICE;
+		const stdoutDesc = stdoutOverride
+			? stdoutOverride.description
+			: createFileDescription("/dev/stdout", O_WRONLY);
+		const stdoutType = stdoutOverride?.filetype ?? FILETYPE_CHARACTER_DEVICE;
+		const stderrDesc = stderrOverride
+			? stderrOverride.description
+			: createFileDescription("/dev/stderr", O_WRONLY);
+		const stderrType = stderrOverride?.filetype ?? FILETYPE_CHARACTER_DEVICE;
+
+		table.initStdioWithTypes(stdinDesc, stdinType, stdoutDesc, stdoutType, stderrDesc, stderrType);
 		this.tables.set(pid, table);
 		return table;
 	}

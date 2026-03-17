@@ -161,6 +161,17 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
     this._kernel = null;
   }
 
+  /** Check if a process's FD is a pipe via kernel FD stat. */
+  private _isFdPiped(pid: number, fd: number): boolean {
+    if (!this._kernel) return false;
+    try {
+      const stat = this._kernel.fdStat(pid, fd);
+      return stat.filetype === 6; // FILETYPE_PIPE
+    } catch {
+      return false;
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Worker lifecycle
   // -------------------------------------------------------------------------
@@ -178,6 +189,11 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
     const signalBuf = new SharedArrayBuffer(SIGNAL_BUFFER_BYTES);
     const dataBuf = new SharedArrayBuffer(DATA_BUFFER_BYTES);
 
+    // Check if stdio FDs are piped by inspecting the kernel FD table
+    const stdinPiped = this._isFdPiped(ctx.pid, 0);
+    const stdoutPiped = this._isFdPiped(ctx.pid, 1);
+    const stderrPiped = this._isFdPiped(ctx.pid, 2);
+
     const workerData: WorkerInitData = {
       wasmBinaryPath: this._wasmBinaryPath,
       command,
@@ -188,6 +204,10 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
       cwd: ctx.cwd,
       signalBuf,
       dataBuf,
+      // Tell worker which stdio channels are piped so it routes writes correctly
+      stdinFd: stdinPiped ? 99 : undefined,
+      stdoutFd: stdoutPiped ? 99 : undefined,
+      stderrFd: stderrPiped ? 99 : undefined,
     };
 
     const workerUrl = new URL('./kernel-worker.ts', import.meta.url);
@@ -317,15 +337,28 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
         }
         case 'spawn': {
           // proc_spawn → kernel.spawn() — the critical cross-runtime routing
+          // Includes FD overrides for pipe wiring (brush-shell pipeline stages)
+          const spawnCtx: Record<string, unknown> = {
+            env: msg.args.env as Record<string, string>,
+            cwd: msg.args.cwd as string,
+            ppid: pid,
+          };
+          // Forward FD overrides — only pass non-default values
+          const stdinFd = msg.args.stdinFd as number | undefined;
+          const stdoutFd = msg.args.stdoutFd as number | undefined;
+          const stderrFd = msg.args.stderrFd as number | undefined;
+          if (stdinFd !== undefined && stdinFd !== 0) spawnCtx.stdinFd = stdinFd;
+          if (stdoutFd !== undefined && stdoutFd !== 1) spawnCtx.stdoutFd = stdoutFd;
+          if (stderrFd !== undefined && stderrFd !== 2) spawnCtx.stderrFd = stderrFd;
+
           const managed = kernel.spawn(
             msg.args.command as string,
             msg.args.spawnArgs as string[],
-            { env: msg.args.env as Record<string, string>, cwd: msg.args.cwd as string },
+            spawnCtx as Parameters<typeof kernel.spawn>[2],
           );
           intResult = managed.pid;
           // Wait for child and write exit code to data buffer
           managed.wait().then((code) => {
-            // Store exit code at offset 0 for future waitpid calls
             const view = new DataView(dataBuf);
             view.setInt32(0, code, true);
           });
@@ -334,6 +367,17 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
         case 'waitpid': {
           const result = await kernel.waitpid(msg.args.pid as number);
           intResult = result.status;
+          break;
+        }
+        case 'kill': {
+          kernel.kill(msg.args.pid as number, msg.args.signal as number);
+          break;
+        }
+        case 'pipe': {
+          // fd_pipe → create kernel pipe in this process's FD table
+          const pipeFds = kernel.pipe(pid);
+          // Pack read + write FDs: low 16 bits = readFd, high 16 bits = writeFd
+          intResult = (pipeFds.readFd & 0xFFFF) | ((pipeFds.writeFd & 0xFFFF) << 16);
           break;
         }
         case 'vfsStat': {

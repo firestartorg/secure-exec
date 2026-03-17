@@ -37,6 +37,14 @@ Started: 2026-03-16
 - Cannot add runtime packages as devDeps of secure-exec (cyclic dep via runtime-node → secure-exec); use relative imports in tests
 - KernelInterface.spawn must forward all ProcessContext callbacks (onStdout/onStderr) to SpawnOptions — adapter layers easily drop callbacks
 - Integration test helpers at packages/secure-exec/tests/kernel/helpers.ts — createIntegrationKernel(), skipUnlessWasmBuilt(), skipUnlessPyodide()
+- SpawnOptions has stdinFd/stdoutFd/stderrFd for pipe wiring — these reference FDs in the caller's table, resolved via callerPid
+- KernelInterface.pipe(pid) installs pipe FDs in the process's table (returns actual FD numbers, not description IDs)
+- FDTableManager.createWithStdio() creates child FD table with custom pipe descriptions for overridden stdio
+- fdRead for pipes now routes through PipeManager.read() (was returning empty array)
+- When stdout/stderr is piped, spawnInternal skips callback buffering — data flows through kernel pipe, not postMessage/callbacks
+- Rust FFI proc_spawn takes argv_ptr+len, envp_ptr+len, stdin/stdout/stderr FDs, cwd_ptr+len, ret_pid (10 params)
+- fd_pipe host import packs read+write FDs: low 16 bits = readFd, high 16 bits = writeFd in intResult
+- WasmVM stdout writer is redirected through fdWrite RPC when stdout is piped (init.stdoutFd !== undefined)
 
 ---
 
@@ -324,4 +332,27 @@ Started: 2026-03-16
   - Bridge execSync wraps commands in `bash -c '...'` — so the kernel needs 'bash' registered (WasmVM provides it)
   - Bridge host handler at execution-driver.ts:1212 uses CommandExecutor.spawn() — the executor is KernelCommandExecutor when running through the kernel
   - Python test failures (pyodide not installed) are pre-existing and not affected by kernel changes
+---
+
+## 2026-03-16 - US-022
+- Implemented cross-runtime pipe infrastructure for kernel-mediated pipelines
+- Kernel changes (packages/kernel/src/):
+  - types.ts: Added stdinFd/stdoutFd/stderrFd to SpawnOptions, updated KernelInterface.pipe(pid) and spawn() to accept FD overrides
+  - kernel.ts: Fixed fdRead for pipes (route to PipeManager.read() instead of returning empty), added createChildFDTable() for FD override wiring, isStdioPiped() to skip callback buffering for piped channels, updated pipe() to install FDs via createPipeFDs()
+  - fd-table.ts: Added initStdioWithTypes() and FDTableManager.createWithStdio() for custom pipe-backed stdio
+- WasmVM changes (packages/runtime/wasmvm/src/):
+  - kernel-worker.ts: Rewrote proc_spawn to match Rust FFI (10-param signature with argv/envp/FDs/cwd), added fd_pipe and proc_kill host imports, redirect stdout/stderr writers through kernel fdWrite RPC when piped, close piped FDs on exit for EOF propagation
+  - driver.ts: Added pipe/kill RPC cases, forward FD overrides in spawn RPC, check kernel FD table to detect piped stdio for WorkerInitData
+  - syscall-rpc.ts: Added stdinFd/stdoutFd/stderrFd to WorkerInitData
+- Tests (packages/secure-exec/tests/kernel/cross-runtime-pipes.test.ts):
+  - 9 kernel-level tests: pipe FD allocation, pipe read/write, EOF propagation, spawn with stdout/stdin FD overrides, cross-driver pipe, piped stdout isolation, EBADF exploit paths
+  - 4 integration tests (skipped when WASM not built): WasmVM echo|cat, echo|node, echo|wc, cat|python
+- 48 kernel tests pass, 358 WasmVM tests pass, 20 Node driver tests pass, 157 secure-exec tests pass, typecheck passes
+- **Learnings for future iterations:**
+  - SpawnOptions FD overrides use FD numbers from the CALLER's table (not the child's) — need callerPid to look them up
+  - Rust proc_spawn uses null-separated argv/envp buffers (not ptr+len arrays) — parse with split('\0')
+  - fd_pipe packs two FD numbers into one i32 via bit shifting (low 16 = read, high 16 = write)
+  - When stdout is piped, WasmVM polyfill stdout writer must be redirected through fdWrite RPC — postMessage path is only for non-piped output
+  - FDTableManager.createWithStdio increments refCount on shared FileDescriptions (pipe ends shared between parent and child)
+  - ProcessContext.fds is always {stdin:0, stdout:1, stderr:2} — the FD table entries behind those numbers differ (pipe vs device)
 ---

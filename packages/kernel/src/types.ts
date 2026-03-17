@@ -74,6 +74,12 @@ export interface ExecResult {
 
 export interface SpawnOptions extends ExecOptions {
 	stdio?: "pipe" | "inherit";
+	/** FD in caller's table to wire as child's stdin (pipe read end). */
+	stdinFd?: number;
+	/** FD in caller's table to wire as child's stdout (pipe write end). */
+	stdoutFd?: number;
+	/** FD in caller's table to wire as child's stderr (pipe write end). */
+	stderrFd?: number;
 }
 
 export interface ManagedProcess {
@@ -172,7 +178,11 @@ export interface KernelInterface {
 	spawn(
 		command: string,
 		args: string[],
-		ctx: Partial<ProcessContext>,
+		ctx: Partial<ProcessContext> & {
+			stdinFd?: number;
+			stdoutFd?: number;
+			stderrFd?: number;
+		},
 	): ManagedProcess;
 	waitpid(
 		pid: number,
@@ -183,7 +193,8 @@ export interface KernelInterface {
 	getppid(pid: number): number;
 
 	// Pipe operations
-	pipe(): { readFd: number; writeFd: number };
+	/** Create a pipe and install both ends in the given process's FD table. */
+	pipe(pid: number): { readFd: number; writeFd: number };
 
 	// Environment
 	getenv(pid: number): Record<string, string>;
