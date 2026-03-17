@@ -89,6 +89,7 @@ PRD: ralph/kernel-hardening (46 stories)
 - To test sandbox http.request() client behavior, create an external nodeHttp server in the test code and have the sandbox request to it
 - NodeExecutionDriver split into 5 modules in src/node/: isolate-bootstrap.ts (types+utilities), module-resolver.ts, esm-compiler.ts, bridge-setup.ts, execution-lifecycle.ts; facade is execution-driver.ts (<300 lines)
 - Source policy tests (isolate-runtime-injection-policy, bridge-registry-policy) read specific source files by path — update them when moving code between files
+- esmModuleCache has a sibling esmModuleReverseCache (Map<ivm.Module, string>) for O(1) module→path lookup — both must be updated together and cleared together in execution.ts
 
 ---
 
@@ -715,4 +716,22 @@ PRD: ralph/kernel-hardening (46 stories)
   - DriverDeps interface centralizes mutable state shared across extracted modules — modules use Pick<DriverDeps, ...> for narrow dependency declarations
   - Bridge-setup is the largest extracted module (779 lines) because all ivm.Reference creation for fs/child_process/network is a single cohesive unit
   - The execution.ts ExecutionRuntime interface already existed as a delegation pattern — the facade wires extracted functions into this interface via executeInternal
+---
+
+## 2026-03-17 - US-046
+- Replaced O(n) ESM module reverse lookup with O(1) Map-based bidirectional cache
+- Added `esmModuleReverseCache: Map<ivm.Module, string>` to DriverDeps, CompilerDeps, and ExecutionRuntime
+- Updated esm-compiler.ts to populate reverse cache on every esmModuleCache.set() and use Map.get() instead of for-loop
+- Updated execution.ts to clear reverse cache alongside forward cache
+- Files changed:
+  - packages/secure-exec/src/node/isolate-bootstrap.ts — added esmModuleReverseCache to DriverDeps
+  - packages/secure-exec/src/node/esm-compiler.ts — O(1) reverse lookup, populate reverse cache on set
+  - packages/secure-exec/src/node/execution-driver.ts — initialize and pass reverse cache
+  - packages/secure-exec/src/execution.ts — add to ExecutionRuntime type, clear on reset
+  - packages/secure-exec/tests/runtime-driver/node/index.test.ts — added deep chain (50-module) and wide (1000-module) ESM tests
+  - prd.json — marked US-046 as passes: true
+- **Learnings for future iterations:**
+  - esmModuleCache flows through 4 interfaces: DriverDeps, CompilerDeps (Pick), ExecutionRuntime, and the execution-driver executeInternal passthrough — adding a sibling cache requires updating all 4
+  - ivm.Module instances work as Map keys (reference identity)
+  - The reverse cache must be cleared in execution.ts executeWithRuntime alongside the forward cache
 ---

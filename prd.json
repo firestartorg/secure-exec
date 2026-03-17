@@ -774,7 +774,7 @@
         "Tests pass"
       ],
       "priority": 46,
-      "passes": false,
+      "passes": true,
       "notes": "P8 — packages/secure-exec/src/node/execution-driver.ts (or extracted module-resolver.ts after US-044)"
     },
     {

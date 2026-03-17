@@ -44,6 +44,7 @@ type ExecuteOptions = {
 type ExecutionRuntime = {
 	isolate: ivm.Isolate;
 	esmModuleCache: Map<string, ivm.Module>;
+	esmModuleReverseCache: Map<ivm.Module, string>;
 	dynamicImportCache: Map<string, ivm.Reference<unknown>>;
 	dynamicImportPending: Map<string, Promise<ivm.Reference<unknown> | null>>;
 	moduleFormatCache: Map<string, "esm" | "cjs" | "json">;
@@ -127,6 +128,7 @@ export async function executeWithRuntime<T = unknown>(
 	options: ExecuteOptions,
 ): Promise<RunResult<T>> {
 	runtime.esmModuleCache.clear();
+	runtime.esmModuleReverseCache.clear();
 	runtime.dynamicImportCache.clear();
 	runtime.dynamicImportPending.clear();
 	runtime.moduleFormatCache.clear();

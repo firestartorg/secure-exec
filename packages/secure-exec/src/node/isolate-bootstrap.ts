@@ -47,6 +47,7 @@ export interface DriverDeps {
 	budgetState: BudgetState;
 	activeHttpServerIds: Set<number>;
 	esmModuleCache: Map<string, ivm.Module>;
+	esmModuleReverseCache: Map<ivm.Module, string>;
 	moduleFormatCache: Map<string, "esm" | "cjs" | "json">;
 	packageTypeCache: Map<string, "module" | "commonjs" | null>;
 	dynamicImportCache: Map<string, ivm.Reference<unknown>>;

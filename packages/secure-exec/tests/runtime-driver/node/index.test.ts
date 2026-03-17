@@ -658,6 +658,71 @@ describe("NodeRuntime", () => {
 		expect(capture.stdout()).toContain("esm-entry:esm-feature");
 	});
 
+	it("resolves deep ESM import chains via O(1) reverse lookup", async () => {
+		const fs = createFs();
+		await fs.mkdir("/app");
+		// Create a chain: entry → m0 → m1 → ... → m49 → leaf
+		const depth = 50;
+		for (let i = 0; i < depth; i++) {
+			const next = i < depth - 1 ? `./m${i + 1}.mjs` : "./leaf.mjs";
+			await fs.writeFile(
+				`/app/m${i}.mjs`,
+				`import { value } from '${next}';\nexport { value };`,
+			);
+		}
+		await fs.writeFile("/app/leaf.mjs", "export const value = 'deep-chain-ok';");
+
+		const capture = createConsoleCapture();
+		proc = createTestNodeRuntime({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onStdio: capture.onStdio,
+		});
+
+		const result = await proc.exec(
+			`
+			import { value } from './m0.mjs';
+			console.log(value);
+			`,
+			{ filePath: "/app/entry.mjs" },
+		);
+
+		expect(result.code).toBe(0);
+		expect(capture.stdout()).toContain("deep-chain-ok");
+	});
+
+	it("resolves 1000-module ESM import graph within performance budget", async () => {
+		const fs = createFs();
+		await fs.mkdir("/app");
+		// Create a wide fan-out: entry imports m0..m999, each exports a constant
+		const moduleCount = 1000;
+		const imports: string[] = [];
+		const logs: string[] = [];
+		for (let i = 0; i < moduleCount; i++) {
+			await fs.writeFile(`/app/m${i}.mjs`, `export const v${i} = ${i};`);
+			imports.push(`import { v${i} } from './m${i}.mjs';`);
+			logs.push(`v${i}`);
+		}
+		const entryCode = `${imports.join("\n")}\nconsole.log(${logs.slice(0, 5).join(" + ")});`;
+
+		const capture = createConsoleCapture();
+		proc = createTestNodeRuntime({
+			filesystem: fs,
+			permissions: allowAllFs,
+			onStdio: capture.onStdio,
+		});
+
+		const start = performance.now();
+		const result = await proc.exec(entryCode, { filePath: "/app/entry.mjs" });
+		const elapsed = performance.now() - start;
+
+		expect(result.code).toBe(0);
+		// 0+1+2+3+4 = 10
+		expect(capture.stdout()).toContain("10");
+		// Generous budget — the reverse lookup itself should be <10ms; total includes compile time
+		expect(elapsed).toBeLessThan(30_000);
+	});
+
 	it("treats .js entry files as ESM under package type module", async () => {
 		const fs = createFs();
 		await fs.mkdir("/app");

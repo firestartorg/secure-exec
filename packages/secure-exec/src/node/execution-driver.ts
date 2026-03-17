@@ -81,6 +81,7 @@ export class NodeExecutionDriver implements RuntimeDriver {
 			budgetState: createBudgetState(),
 			activeHttpServerIds: new Set(),
 			esmModuleCache: new Map(),
+			esmModuleReverseCache: new Map(),
 			moduleFormatCache: new Map(),
 			packageTypeCache: new Map(),
 			dynamicImportCache: new Map(),
@@ -162,6 +163,7 @@ export class NodeExecutionDriver implements RuntimeDriver {
 			{
 				isolate: d.isolate,
 				esmModuleCache: d.esmModuleCache,
+				esmModuleReverseCache: d.esmModuleReverseCache,
 				dynamicImportCache: d.dynamicImportCache,
 				dynamicImportPending: d.dynamicImportPending,
 				moduleFormatCache: d.moduleFormatCache,

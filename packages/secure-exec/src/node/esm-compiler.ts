@@ -35,6 +35,7 @@ type CompilerDeps = Pick<
 	| "isolate"
 	| "filesystem"
 	| "esmModuleCache"
+	| "esmModuleReverseCache"
 	| "moduleFormatCache"
 	| "packageTypeCache"
 	| "isolateJsonPayloadLimitBytes"
@@ -133,8 +134,9 @@ export async function compileESMModule(
 		filename: filePath,
 	});
 
-	// Cache it
+	// Cache it (forward and reverse)
 	deps.esmModuleCache.set(filePath, module);
+	deps.esmModuleReverseCache.set(module, filePath);
 
 	return module;
 }
@@ -147,14 +149,8 @@ export function createESMResolver(
 	context: ivm.Context,
 ): (specifier: string, referrer: ivm.Module) => Promise<ivm.Module> {
 	return async (specifier: string, referrer: ivm.Module) => {
-		// Get the referrer's filename from our cache (reverse lookup)
-		let referrerPath = "/";
-		for (const [path, mod] of deps.esmModuleCache.entries()) {
-			if (mod === referrer) {
-				referrerPath = path;
-				break;
-			}
-		}
+		// O(1) reverse lookup via dedicated reverse cache
+		const referrerPath = deps.esmModuleReverseCache.get(referrer) ?? "/";
 
 		// Resolve the specifier
 		const resolved = await resolveESMPath(deps, specifier, referrerPath);
@@ -184,6 +180,7 @@ export async function runESM(
 		filename: filePath,
 	});
 	deps.esmModuleCache.set(filePath, entryModule);
+	deps.esmModuleReverseCache.set(entryModule, filePath);
 
 	// Instantiate with resolver (this resolves all dependencies)
 	await entryModule.instantiate(context, createESMResolver(deps, context));
