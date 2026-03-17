@@ -1,5 +1,5 @@
 {
 	"entry": "src/index.js",
 	"expectation": "pass",
-	"packageManager": "npm"
+	"packageManager": "bun"
 }

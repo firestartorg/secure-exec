@@ -44,7 +44,7 @@ const WASM_BINARY_PATH = path.resolve(
 // Types (same schema as project-matrix.test.ts)
 // ---------------------------------------------------------------------------
 
-type PackageManager = 'pnpm' | 'npm';
+type PackageManager = 'pnpm' | 'npm' | 'bun';
 type PassFixtureMetadata = { entry: string; expectation: 'pass'; packageManager?: PackageManager };
 type FailFixtureMetadata = {
   entry: string;
@@ -117,7 +117,9 @@ async function prepareFixtureProject(fixture: FixtureProject): Promise<PreparedF
   const installCmd =
     pm === 'npm'
       ? { cmd: 'npm', args: ['install', '--prefer-offline'] }
-      : { cmd: 'pnpm', args: ['install', '--ignore-workspace', '--prefer-offline'] };
+      : pm === 'bun'
+        ? { cmd: 'bun', args: ['install'] }
+        : { cmd: 'pnpm', args: ['install', '--ignore-workspace', '--prefer-offline'] };
   await execFileAsync(installCmd.cmd, installCmd.args, {
     cwd: staging,
     timeout: COMMAND_TIMEOUT_MS,
@@ -144,14 +146,15 @@ async function createFixtureCacheKey(fixture: FixtureProject): Promise<string> {
   const hash = createHash('sha256');
   const nodeMajor = process.versions.node.split('.')[0] ?? '0';
   const pm = fixture.metadata.packageManager ?? 'pnpm';
-  const pmVersion = pm === 'npm' ? await getNpmVersion() : await getPnpmVersion();
+  const pmVersion =
+    pm === 'npm' ? await getNpmVersion() : pm === 'bun' ? await getBunVersion() : await getPnpmVersion();
   hash.update(`node-major:${nodeMajor}\n`);
   hash.update(`pm:${pm}\n`);
   hash.update(`pm-version:${pmVersion}\n`);
   hash.update(`platform:${process.platform}\n`);
   hash.update(`arch:${process.arch}\n`);
 
-  const lockFile = pm === 'npm' ? 'package-lock.json' : 'pnpm-lock.yaml';
+  const lockFile = pm === 'npm' ? 'package-lock.json' : pm === 'bun' ? 'bun.lock' : 'pnpm-lock.yaml';
   for (const [label, filePath] of [
     ['workspace-lock', path.join(WORKSPACE_ROOT, 'pnpm-lock.yaml')],
     ['workspace-package', path.join(WORKSPACE_ROOT, 'package.json')],
@@ -193,6 +196,17 @@ function getNpmVersion(): Promise<string> {
     }).then((r) => r.stdout.trim());
   }
   return _npmVersionPromise;
+}
+
+let _bunVersionPromise: Promise<string> | undefined;
+function getBunVersion(): Promise<string> {
+  if (!_bunVersionPromise) {
+    _bunVersionPromise = execFileAsync('bun', ['--version'], {
+      cwd: WORKSPACE_ROOT,
+      timeout: COMMAND_TIMEOUT_MS,
+    }).then((r) => r.stdout.trim());
+  }
+  return _bunVersionPromise;
 }
 
 async function listFiles(root: string): Promise<string[]> {

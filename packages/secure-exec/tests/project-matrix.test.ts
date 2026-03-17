@@ -30,7 +30,7 @@ const fixturePermissions = {
 	...allowAllEnv,
 };
 
-type PackageManager = "pnpm" | "npm";
+type PackageManager = "pnpm" | "npm" | "bun";
 
 type PassFixtureMetadata = {
 	entry: string;
@@ -225,13 +225,13 @@ function parseFixtureMetadata(raw: unknown, fixtureName: string): FixtureMetadat
 	}
 
 	// Validate optional packageManager field.
-	const validPackageManagers = new Set(["pnpm", "npm"]);
+	const validPackageManagers = new Set(["pnpm", "npm", "bun"]);
 	if (
 		raw.packageManager !== undefined &&
 		(typeof raw.packageManager !== "string" || !validPackageManagers.has(raw.packageManager))
 	) {
 		throw new Error(
-			`Fixture "${fixtureName}" packageManager must be "pnpm" or "npm"`,
+			`Fixture "${fixtureName}" packageManager must be "pnpm", "npm", or "bun"`,
 		);
 	}
 	const packageManager = (raw.packageManager as PackageManager | undefined) ?? undefined;
@@ -313,7 +313,9 @@ async function prepareFixtureProject(fixture: FixtureProject): Promise<PreparedF
 	const installCmd =
 		pm === "npm"
 			? { cmd: "npm", args: ["install", "--prefer-offline"] }
-			: { cmd: "pnpm", args: ["install", "--ignore-workspace", "--prefer-offline"] };
+			: pm === "bun"
+				? { cmd: "bun", args: ["install"] }
+				: { cmd: "pnpm", args: ["install", "--ignore-workspace", "--prefer-offline"] };
 	await execFileAsync(installCmd.cmd, installCmd.args, {
 		cwd: stagingDir,
 		timeout: COMMAND_TIMEOUT_MS,
@@ -353,7 +355,8 @@ async function createFixtureCacheKey(fixture: FixtureProject): Promise<string> {
 	const hash = createHash("sha256");
 	const nodeMajor = process.versions.node.split(".")[0] ?? "0";
 	const pm = fixture.metadata.packageManager ?? "pnpm";
-	const pmVersion = pm === "npm" ? await getNpmVersion() : await getPnpmVersion();
+	const pmVersion =
+		pm === "npm" ? await getNpmVersion() : pm === "bun" ? await getBunVersion() : await getPnpmVersion();
 	hash.update(`node-major:${nodeMajor}\n`);
 	hash.update(`pm:${pm}\n`);
 	hash.update(`pm-version:${pmVersion}\n`);
@@ -375,7 +378,7 @@ async function createFixtureCacheKey(fixture: FixtureProject): Promise<string> {
 		"fixture-package",
 		path.join(fixture.sourceDir, "package.json"),
 	);
-	const lockFile = pm === "npm" ? "package-lock.json" : "pnpm-lock.yaml";
+	const lockFile = pm === "npm" ? "package-lock.json" : pm === "bun" ? "bun.lock" : "pnpm-lock.yaml";
 	await hashOptionalFile(
 		hash,
 		"fixture-lock",
@@ -421,6 +424,20 @@ function getNpmVersion(): Promise<string> {
 	}
 
 	return npmVersionPromise;
+}
+
+let bunVersionPromise: Promise<string> | undefined;
+
+function getBunVersion(): Promise<string> {
+	if (!bunVersionPromise) {
+		bunVersionPromise = execFileAsync("bun", ["--version"], {
+			cwd: WORKSPACE_ROOT,
+			timeout: COMMAND_TIMEOUT_MS,
+			maxBuffer: 1024 * 1024,
+		}).then((result) => result.stdout.trim());
+	}
+
+	return bunVersionPromise;
 }
 
 async function runHostExecution(
