@@ -553,3 +553,24 @@ Started: 2026-03-16
   - ModuleAccessFileSystem overlay only helps with bare module requires from node_modules, NOT relative requires like '../lib/cli/entry'
   - Host fallback must be applied BEFORE ModuleAccessFileSystem wrapping (passed as base filesystem to createNodeDriver)
 ---
+
+## 2026-03-16 - US-033
+- Created e2e-npm-install.test.ts with 1 test covering npm install of left-pad through kernel
+- Test architecture:
+  - Creates temp directory on host filesystem, writes package.json with left-pad 1.3.0 dependency
+  - Uses NodeFileSystem({ root: tempDir }) so npm's filesystem operations hit real host fs
+  - Creates kernel with WasmVM + Node drivers mounted
+  - Runs `npm install` through kernel (Node driver → npm CLI → network download → write to VFS)
+  - Verifies node_modules/left-pad/ exists via vfs.stat()
+  - Verifies installed package is usable: `node -e "require('left-pad')('hi', 10)"` outputs `'        hi'`
+  - Cleans up temp directory in finally block
+- Network availability check: skips test if npm registry unreachable (5s fetch timeout)
+- Gracefully skipped when WASM binary not built (describe.skipIf)
+- Files changed: packages/secure-exec/tests/kernel/e2e-npm-install.test.ts (new), prd.json
+- 159 secure-exec tests pass (81 skipped — WASM/pyodide), typecheck passes
+- **Learnings for future iterations:**
+  - NodeFileSystem({ root: tempDir }) is required for npm install — InMemoryFileSystem would need to handle all of npm's fs edge cases (symlinks, atomic renames, etc.)
+  - npm install through kernel follows: kernel.exec → WasmVM shell → proc_spawn('npm') → kernel → Node driver → npm CLI → network + VFS writes
+  - Top-level await `await checkNetwork()` works in vitest ESM modules for skip condition evaluation
+  - left-pad is a good test dependency: tiny, no native deps, no lifecycle scripts, fast to install
+---

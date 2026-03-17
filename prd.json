@@ -603,7 +603,7 @@
         "Tests pass"
       ],
       "priority": 33,
-      "passes": false,
+      "passes": true,
       "notes": "Uses left-pad (tiny, no native deps) to keep install fast. KEY ISSUES: (1) Network: The kernel has no network layer. The Node RuntimeDriver must pass through network requests to the host runtime (Node.js native fetch/http). The kernel only provides the permission check via NetworkAccessRequest. Add a checkNetworkPermission() method to KernelInterface if not present. (2) Filesystem: Use NodeFileSystem so npm itself is available from the host Node installation. The project dir (with package.json) should be a temp dir on the host filesystem. npm writes node_modules into this real dir via the kernel VFS. (3) npm resolution: npm is a Node.js program installed with the host Node. The Node RuntimeDriver must locate npm's entry script from the host system when spawn('npm', args) is called."
     },
     {
