@@ -496,7 +496,7 @@
         "Typecheck passes"
       ],
       "priority": 30,
-      "passes": false,
+      "passes": true,
       "notes": "P5 — update existing docs/kernel/api-reference.mdx. Depends on US-017 and P4 stories."
     },
     {

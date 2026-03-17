@@ -424,3 +424,27 @@ PRD: ralph/kernel-hardening (46 stories)
   - Both fdPread and fdPwrite are async (return Promise) since they need VFS readFile which is async
   - Existing tests use `driver.kernelInterface!` pattern to get KernelInterface, not the createTestKernel return value
 ---
+
+## 2026-03-17 - US-029
+- What was implemented: PTY and interactive shell documentation page (docs/kernel/interactive-shell.mdx)
+- Files changed:
+  - docs/kernel/interactive-shell.mdx — new doc covering openShell(), connectTerminal(), PTY internals, termios config, process groups/job control, terminal UI wiring, CLI example
+  - docs/docs.json — added "kernel/interactive-shell" to Kernel navigation group
+  - prd.json — marked US-029 as passes: true
+- **Learnings for future iterations:**
+  - Mintlify MDX docs use Tabs, Steps, Info, CardGroup, Card components — follow existing pattern in quickstart.mdx
+  - docs.json navigation pages are paths without extension (e.g., "kernel/interactive-shell" not "kernel/interactive-shell.mdx")
+  - Documentation-only stories don't need test runs — only typecheck is required per acceptance criteria
+---
+
+## 2026-03-17 - US-030
+- What was implemented: Updated kernel API reference with all P4 syscalls
+- Files changed:
+  - docs/kernel/api-reference.mdx — added: kernel.openShell()/connectTerminal() with OpenShellOptions/ShellHandle/ConnectTerminalOptions, ShellHandle type reference, fdPread/fdPwrite positional I/O, process group/session syscalls (setpgid/getpgid/setsid/getsid), PTY operations (openpty/isatty/ptySetDiscipline/ptySetForegroundPgid), termios operations (tcgetattr/tcsetattr/tcsetpgrp/tcgetpgrp), /dev/fd pseudo-directory operations (devFdReadDir/devFdStat), device layer notes (device nodes + pseudo-directories), Termios/TermiosCC type reference, KernelError/KernelErrorCode reference, signal constants table
+  - prd.json — marked US-030 as passes: true
+- **Learnings for future iterations:**
+  - API reference should mirror KernelInterface in types.ts — iterate all methods and ensure each has a corresponding doc entry
+  - Mintlify Info component useful for calling out PID context limitations on VFS-level device paths
+  - fdSeek is async (Promise<bigint>) — the prior doc showed it as sync; fixed to include await
+  - FDStat has `rights` (not `rightsBase`/`rightsInheriting`) — fixed stale comment in doc
+---
