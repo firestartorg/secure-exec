@@ -4,6 +4,10 @@ Started: 2026-03-16
 ## Codebase Patterns
 - Use `pnpm run check-types` (turbo) for typecheck, not bare `tsc`
 - WasmVM test files use `node:test`/`node:assert`; test script uses `node --test` (US-015 will convert to vitest)
+- WasmVM driver.ts exports createWasmVmRuntime() — worker-based with SAB RPC for sync/async bridge
+- Kernel VFS uses removeFile/removeDir (not unlink/rmdir), and VirtualStat has isDirectory/isSymbolicLink (not type)
+- WasiFiletype must be re-exported from wasi-types.ts since polyfill imports it from there
+- turbo task is `check-types` — add this script to package.json alongside `typecheck`
 - Kernel package tests already pass (36 tests across 5 files)
 - pnpm-workspace.yaml includes `packages/os/*` and `packages/runtime/*` globs
 - Adding a VFS method requires updating: interface (vfs.ts), all implementations (TestFileSystem, NodeFileSystem, InMemoryFileSystem), device-layer.ts, permissions.ts
@@ -186,4 +190,31 @@ Started: 2026-03-16
   - KernelInterface.fdRead is now async (Promise<Uint8Array>) due to VFS being async — downstream drivers need to handle this
   - ProcessTable.register() now requires a pre-allocated PID as first argument (breaking change from old API)
   - TestFileSystem works well for integration tests — write files via VFS, then exercise kernel FD operations
+---
+
+## 2026-03-16 - US-017
+- Created WasmVM RuntimeDriver with createWasmVmRuntime() factory
+- New source files:
+  - driver.ts — RuntimeDriver implementation with 90+ commands, Worker-based spawn, and kernel RPC handler
+  - syscall-rpc.ts — SharedArrayBuffer-based RPC protocol types for worker ↔ main-thread syscalls
+  - kernel-worker.ts — Worker entry that loads WASM binary, creates kernel-backed bridges, runs command
+- Architecture:
+  - spawn() creates a Worker thread with SAB signal/data buffers
+  - Worker makes synchronous kernel calls via Atomics.wait/notify RPC
+  - Main thread dispatches RPC to KernelInterface (fdRead, fdWrite, fdOpen, etc.)
+  - Kernel-backed VFS proxy routes all filesystem ops through RPC
+  - proc_spawn host import routes through KernelInterface.spawn() for cross-runtime dispatch
+  - Stdout/stderr stream back via postMessage
+- Fixed pre-existing bug: WasiFiletype not re-exported from wasi-types.ts
+- Added check-types script alias for turbo compatibility
+- Added @secure-exec/kernel as dependency
+- Files changed: driver.ts (new), syscall-rpc.ts (new), kernel-worker.ts (new), index.ts, package.json, wasi-types.ts, driver.test.ts (new)
+- 358 WasmVM tests pass (1 skipped — WASM binary needed), 48 kernel tests pass, typecheck passes
+- **Learnings for future iterations:**
+  - Kernel VFS interface uses removeFile/removeDir, not unlink/rmdir
+  - VirtualStat has isDirectory/isSymbolicLink booleans, not a type string
+  - HostUserImports needs `as unknown as WebAssembly.ModuleImports` cast for WebAssembly.instantiate
+  - WasiPolyfill expects synchronous WasiVFS — kernel VFS is async, bridged via SAB RPC in worker
+  - vitest describe.skipIf() takes a boolean, not a string (different from node:test skip option)
+  - FDTable from test/helpers/ is reusable in kernel-worker via relative import
 ---

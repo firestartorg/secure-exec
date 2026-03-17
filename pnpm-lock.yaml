@@ -120,6 +120,10 @@ importers:
         version: 5.9.3
 
   packages/runtime/wasmvm:
+    dependencies:
+      '@secure-exec/kernel':
+        specifier: workspace:*
+        version: link:../../kernel
     devDependencies:
       '@types/node':
         specifier: ^22.10.2

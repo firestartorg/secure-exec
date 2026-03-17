@@ -7,6 +7,7 @@
  */
 
 import type { WasiFiletype } from './wasi-constants.ts';
+export type { WasiFiletype } from './wasi-constants.ts';
 
 // ---------------------------------------------------------------------------
 // VFS error types

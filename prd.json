@@ -295,7 +295,7 @@
         "Tests pass"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "proc_spawn routing is the key architectural change: when brush-shell parses a pipeline, each stage calls proc_spawn which goes through the WASI polyfill → KernelInterface.spawn() → kernel command registry → correct runtime driver. This is what enables 'npm run greet' to work (npm spawns sh, sh spawns echo)."
     },
     {

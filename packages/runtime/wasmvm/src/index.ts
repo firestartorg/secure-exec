@@ -13,6 +13,8 @@ export type { WasiFileIO } from './wasi-file-io.ts';
 export type { WasiProcessIO } from './wasi-process-io.ts';
 export { UserManager } from './user.ts';
 export type { UserManagerOptions, HostUserImports } from './user.ts';
+export { createWasmVmRuntime, WASMVM_COMMANDS } from './driver.ts';
+export type { WasmVmRuntimeOptions } from './driver.ts';
 
 // Re-export WASI constants and types for downstream consumers
 export * from './wasi-constants.ts';
