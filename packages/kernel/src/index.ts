@@ -56,6 +56,7 @@ export type { UserConfig } from "./user.js";
 export {
 	wrapFileSystem,
 	filterEnv,
+	checkChildProcess,
 	allowAll,
 	allowAllFs,
 	allowAllNetwork,

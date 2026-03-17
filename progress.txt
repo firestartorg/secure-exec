@@ -50,6 +50,7 @@ PRD: ralph/kernel-hardening (46 stories)
 - WasmVM stdout writer redirected through fdWrite RPC when stdout is piped
 - WasmVM stdin pipe: kernel.pipe(pid) + fdDup2(pid, readFd, 0) + polyfill.setStdinReader()
 - Node driver stdin: buffer writeStdin data, closeStdin resolves Promise passed to exec({ stdin })
+- Permission-wrapped VFS affects mount() via populateBin() — fs deny tests must skip driver mounting; childProcess deny tests must include allowAllFs
 - Bridge process.stdin does NOT emit 'end' for empty stdin ("") — pass undefined for no-stdin case
 - E2E fixture tests: use NodeFileSystem({ root: projectDir }) for real npm package resolution
 - npm/npx in V8 isolate need host filesystem fallback — createHostFallbackVfs wraps kernel VFS
@@ -136,4 +137,20 @@ PRD: ralph/kernel-hardening (46 stories)
   - Making fdSeek async was required because SEEK_END needs VFS.readFile (async) to get file size
   - The WasmVM _handleSyscall is already async, so adding await to the fdSeek case was straightforward
   - KernelInterface.fdSeek callers: kernel.ts implementation, WasmVM driver.ts _handleSyscall, WasmVM kernel-worker.ts (sync RPC — blocked by SAB, unaffected by async driver side)
+---
+
+## 2026-03-17 - US-008
+- What was implemented: Added permission deny scenario tests covering fs deny-all, fs path-based filtering, childProcess deny-all, childProcess selective, and filterEnv (deny, allow-all, restricted keys)
+- Files changed:
+  - packages/kernel/src/permissions.ts — added checkChildProcess() function for spawn-time permission enforcement
+  - packages/kernel/src/kernel.ts — stored permissions, added checkChildProcess call in spawnInternal before PID allocation
+  - packages/kernel/src/index.ts — exported checkChildProcess
+  - packages/kernel/test/helpers.ts — added Permissions type import, added permissions option to createTestKernel
+  - packages/kernel/test/kernel-integration.test.ts — added 8 permission deny scenario tests
+  - prd.json — marked US-008 as passes: true
+- **Learnings for future iterations:**
+  - Permissions wrap the VFS at kernel construction time — mount() calls populateBin() which goes through the permission-wrapped VFS, so fs deny-all tests can't mount drivers
+  - For fs deny tests, skip driver mounting (test VFS directly). For childProcess deny tests, include fs: () => ({ allow: true }) so mount succeeds
+  - childProcess permission was defined in types but never enforced — added checkChildProcess in spawnInternal between command resolution and PID allocation
+  - filterEnv returns {} when no env permission is set (deny-by-default for missing permission checks)
 ---

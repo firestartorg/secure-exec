@@ -10,6 +10,7 @@ import type {
 	ProcessContext,
 	KernelInterface,
 	Kernel,
+	Permissions,
 } from "../src/types.js";
 import { createKernel } from "../src/kernel.js";
 
@@ -325,9 +326,10 @@ export interface TestKernelResult {
  */
 export async function createTestKernel(options?: {
 	drivers?: RuntimeDriver[];
+	permissions?: Permissions;
 }): Promise<TestKernelResult> {
 	const vfs = new TestFileSystem();
-	const kernel = createKernel({ filesystem: vfs });
+	const kernel = createKernel({ filesystem: vfs, permissions: options?.permissions });
 
 	if (options?.drivers) {
 		for (const driver of options.drivers) {

@@ -5,7 +5,8 @@ import {
 	createTestKernel,
 	type MockCommandConfig,
 } from "./helpers.js";
-import type { Kernel } from "../src/types.js";
+import type { Kernel, Permissions } from "../src/types.js";
+import { filterEnv } from "../src/permissions.js";
 
 describe("kernel + MockRuntimeDriver integration", () => {
 	let kernel: Kernel;
@@ -851,6 +852,116 @@ describe("kernel + MockRuntimeDriver integration", () => {
 			// Both FD tables should be gone
 			expect(() => ki.fdOpen(writer.pid, "/tmp/x", 0)).toThrow("ESRCH");
 			expect(() => ki.fdOpen(reader.pid, "/tmp/x", 0)).toThrow("ESRCH");
+		});
+	});
+
+	// -----------------------------------------------------------------------
+	// Permission deny scenarios (US-008)
+	// -----------------------------------------------------------------------
+
+	describe("permission deny scenarios", () => {
+		it("fs deny-all: writeFile throws EACCES", async () => {
+			// No drivers needed — testing VFS permission layer directly
+			const { kernel: k } = await createTestKernel({
+				permissions: { fs: () => ({ allow: false }) },
+			});
+			kernel = k;
+
+			await expect(kernel.writeFile("/tmp/data.txt", "content")).rejects.toThrow("EACCES");
+		});
+
+		it("fs deny-all: readFile throws EACCES", async () => {
+			const { kernel: k } = await createTestKernel({
+				permissions: { fs: () => ({ allow: false }) },
+			});
+			kernel = k;
+
+			await expect(kernel.readFile("/tmp/data.txt")).rejects.toThrow("EACCES");
+		});
+
+		it("fs path-based: /tmp allowed, /etc denied", async () => {
+			const { kernel: k } = await createTestKernel({
+				permissions: { fs: (req) => ({ allow: req.path.startsWith("/tmp") }) },
+			});
+			kernel = k;
+
+			// /tmp writes should succeed
+			await kernel.writeFile("/tmp/ok.txt", "allowed");
+			const data = await kernel.readFile("/tmp/ok.txt");
+			expect(new TextDecoder().decode(data)).toBe("allowed");
+
+			// /etc writes should be denied
+			await expect(kernel.writeFile("/etc/secret", "denied")).rejects.toThrow("EACCES");
+			await expect(kernel.readFile("/etc/secret")).rejects.toThrow("EACCES");
+		});
+
+		it("childProcess deny-all: spawn throws EACCES", async () => {
+			// Allow fs (mount needs it) but deny all child processes
+			const driver = new MockRuntimeDriver(["blocked-cmd"], {
+				"blocked-cmd": { exitCode: 0 },
+			});
+			const { kernel: k } = await createTestKernel({
+				drivers: [driver],
+				permissions: {
+					fs: () => ({ allow: true }),
+					childProcess: () => ({ allow: false }),
+				},
+			});
+			kernel = k;
+
+			expect(() => kernel.spawn("blocked-cmd", [])).toThrow("EACCES");
+		});
+
+		it("childProcess selective: allowed commands pass, denied commands throw", async () => {
+			const driver = new MockRuntimeDriver(["safe-cmd", "unsafe-cmd"], {
+				"safe-cmd": { exitCode: 0 },
+				"unsafe-cmd": { exitCode: 0 },
+			});
+			const { kernel: k } = await createTestKernel({
+				drivers: [driver],
+				permissions: {
+					fs: () => ({ allow: true }),
+					childProcess: (req) => ({ allow: req.command === "safe-cmd" }),
+				},
+			});
+			kernel = k;
+
+			// Allowed command succeeds
+			const proc = kernel.spawn("safe-cmd", []);
+			const code = await proc.wait();
+			expect(code).toBe(0);
+
+			// Denied command throws
+			expect(() => kernel.spawn("unsafe-cmd", [])).toThrow("EACCES");
+		});
+
+		it("filterEnv: restricted keys are filtered out", () => {
+			const env = { HOME: "/home/user", SECRET_KEY: "s3cret", PATH: "/usr/bin" };
+			const permissions: Permissions = {
+				env: (req) => ({ allow: req.key !== "SECRET_KEY" }),
+			};
+
+			const filtered = filterEnv(env, permissions);
+			expect(filtered).toEqual({ HOME: "/home/user", PATH: "/usr/bin" });
+			expect(filtered).not.toHaveProperty("SECRET_KEY");
+		});
+
+		it("filterEnv: no env permission means all keys denied", () => {
+			const env = { HOME: "/home/user", PATH: "/usr/bin" };
+			const permissions: Permissions = {};
+
+			const filtered = filterEnv(env, permissions);
+			expect(filtered).toEqual({});
+		});
+
+		it("filterEnv: allow-all env passes everything through", () => {
+			const env = { HOME: "/home/user", SECRET_KEY: "s3cret", PATH: "/usr/bin" };
+			const permissions: Permissions = {
+				env: () => ({ allow: true }),
+			};
+
+			const filtered = filterEnv(env, permissions);
+			expect(filtered).toEqual(env);
 		});
 	});
 });

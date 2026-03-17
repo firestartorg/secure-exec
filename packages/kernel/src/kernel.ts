@@ -25,7 +25,7 @@ import { FDTableManager, ProcessFDTable } from "./fd-table.js";
 import { ProcessTable } from "./process-table.js";
 import { PipeManager } from "./pipe-manager.js";
 import { CommandRegistry } from "./command-registry.js";
-import { wrapFileSystem } from "./permissions.js";
+import { wrapFileSystem, checkChildProcess } from "./permissions.js";
 import { UserManager } from "./user.js";
 import {
 	FILETYPE_REGULAR_FILE,
@@ -48,6 +48,7 @@ class KernelImpl implements Kernel {
 	private commandRegistry = new CommandRegistry();
 	private userManager: UserManager;
 	private drivers: RuntimeDriver[] = [];
+	private permissions?: import("./types.js").Permissions;
 	private env: Record<string, string>;
 	private cwd: string;
 	private disposed = false;
@@ -62,6 +63,7 @@ class KernelImpl implements Kernel {
 		}
 
 		this.vfs = fs;
+		this.permissions = options.permissions;
 		this.env = { ...options.env };
 		this.cwd = options.cwd ?? "/home/user";
 		this.userManager = new UserManager();
@@ -207,6 +209,9 @@ class KernelImpl implements Kernel {
 		if (!driver) {
 			throw new Error(`ENOENT: command not found: ${command}`);
 		}
+
+		// Check childProcess permission
+		checkChildProcess(this.permissions, command, args, options?.cwd);
 
 		// Allocate PID atomically
 		const pid = this.processTable.allocatePid();

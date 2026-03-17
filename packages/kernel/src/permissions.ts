@@ -94,6 +94,26 @@ export function filterEnv(
 	return result;
 }
 
+/**
+ * Check childProcess permission before spawning.
+ * No-op when no permissions or no childProcess check is configured.
+ */
+export function checkChildProcess(
+	permissions: Permissions | undefined,
+	command: string,
+	args: string[],
+	cwd?: string,
+): void {
+	if (!permissions?.childProcess) return;
+	const request = { command, args, cwd };
+	const decision = permissions.childProcess(request);
+	if (!decision?.allow) {
+		const err = new Error(`EACCES: permission denied, spawn '${command}'`);
+		(err as NodeJS.ErrnoException).code = "EACCES";
+		throw err;
+	}
+}
+
 // Permission presets
 export const allowAllFs: Pick<Permissions, "fs"> = {
 	fs: () => ({ allow: true }),
