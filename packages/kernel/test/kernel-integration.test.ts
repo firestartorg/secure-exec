@@ -2760,4 +2760,79 @@ describe("kernel + MockRuntimeDriver integration", () => {
 			await proc.wait();
 		});
 	});
+
+	// -----------------------------------------------------------------------
+	// Kernel maxProcesses budget
+	// -----------------------------------------------------------------------
+
+	describe("kernel maxProcesses budget", () => {
+		it("spawn succeeds within the limit", async () => {
+			const driver = new MockRuntimeDriver(["cmd"], { cmd: { neverExit: true } });
+			({ kernel } = await createTestKernel({ drivers: [driver], maxProcesses: 5 }));
+
+			const procs = [];
+			for (let i = 0; i < 5; i++) {
+				procs.push(kernel.spawn("cmd", []));
+			}
+			expect(procs).toHaveLength(5);
+
+			for (const p of procs) { p.kill(); await p.wait(); }
+		});
+
+		it("spawn throws EAGAIN when maxProcesses is exceeded", async () => {
+			const driver = new MockRuntimeDriver(["cmd"], { cmd: { neverExit: true } });
+			({ kernel } = await createTestKernel({ drivers: [driver], maxProcesses: 10 }));
+
+			const procs = [];
+			for (let i = 0; i < 10; i++) {
+				procs.push(kernel.spawn("cmd", []));
+			}
+
+			// 11th spawn should throw EAGAIN
+			expect(() => kernel.spawn("cmd", [])).toThrow("EAGAIN");
+
+			for (const p of procs) { p.kill(); await p.wait(); }
+		});
+
+		it("slots freed after process exit allow new spawns", async () => {
+			const driver = new MockRuntimeDriver(["cmd"], { cmd: { neverExit: true } });
+			({ kernel } = await createTestKernel({ drivers: [driver], maxProcesses: 3 }));
+
+			const p1 = kernel.spawn("cmd", []);
+			const p2 = kernel.spawn("cmd", []);
+			const p3 = kernel.spawn("cmd", []);
+
+			// Full — cannot spawn
+			expect(() => kernel.spawn("cmd", [])).toThrow("EAGAIN");
+
+			// Kill one process to free a slot
+			p1.kill();
+			await p1.wait();
+
+			// Now spawning should succeed
+			const p4 = kernel.spawn("cmd", []);
+			expect(p4.pid).toBeDefined();
+
+			p2.kill(); p3.kill(); p4.kill();
+			await Promise.all([p2.wait(), p3.wait(), p4.wait()]);
+		});
+
+		it("maxProcesses=10 with 15 spawns — first 10 succeed, rest throw EAGAIN", async () => {
+			const driver = new MockRuntimeDriver(["cmd"], { cmd: { neverExit: true } });
+			({ kernel } = await createTestKernel({ drivers: [driver], maxProcesses: 10 }));
+
+			const procs = [];
+			for (let i = 0; i < 10; i++) {
+				procs.push(kernel.spawn("cmd", []));
+			}
+			expect(procs).toHaveLength(10);
+
+			// Next 5 should all fail with EAGAIN
+			for (let i = 0; i < 5; i++) {
+				expect(() => kernel.spawn("cmd", [])).toThrow("EAGAIN");
+			}
+
+			for (const p of procs) { p.kill(); await p.wait(); }
+		});
+	});
 });

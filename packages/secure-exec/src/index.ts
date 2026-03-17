@@ -1,6 +1,7 @@
 // Re-export core runtime surface.
 export { NodeRuntime } from "./runtime.js";
 export type { NodeRuntimeOptions } from "./runtime.js";
+export type { ResourceBudgets } from "./runtime-driver.js";
 export { PythonRuntime } from "./python-runtime.js";
 export type { PythonRuntimeOptions } from "./python-runtime.js";
 

@@ -59,6 +59,7 @@ class KernelImpl implements Kernel {
 	private userManager: UserManager;
 	private drivers: RuntimeDriver[] = [];
 	private permissions?: import("./types.js").Permissions;
+	private maxProcesses?: number;
 	private env: Record<string, string>;
 	private cwd: string;
 	private disposed = false;
@@ -74,6 +75,7 @@ class KernelImpl implements Kernel {
 
 		this.vfs = fs;
 		this.permissions = options.permissions;
+		this.maxProcesses = options.maxProcesses;
 		this.env = { ...options.env };
 		this.cwd = options.cwd ?? "/home/user";
 		this.userManager = new UserManager();
@@ -331,6 +333,11 @@ class KernelImpl implements Kernel {
 
 		// Check childProcess permission
 		checkChildProcess(this.permissions, command, args, options?.cwd);
+
+		// Enforce maxProcesses budget
+		if (this.maxProcesses !== undefined && this.processTable.runningCount() >= this.maxProcesses) {
+			throw new KernelError("EAGAIN", "maximum process limit reached");
+		}
 
 		// Allocate PID atomically
 		const pid = this.processTable.allocatePid();

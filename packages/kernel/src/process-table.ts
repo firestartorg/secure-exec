@@ -68,6 +68,15 @@ export class ProcessTable {
 		return this.entries.get(pid);
 	}
 
+	/** Count running (non-exited) processes. */
+	runningCount(): number {
+		let count = 0;
+		for (const entry of this.entries.values()) {
+			if (entry.status === "running") count++;
+		}
+		return count;
+	}
+
 	/** Mark a process as exited with the given code. Notifies waiters. */
 	markExited(pid: number, exitCode: number): void {
 		const entry = this.entries.get(pid);

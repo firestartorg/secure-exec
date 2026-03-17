@@ -21,6 +21,8 @@ export interface KernelOptions {
 	permissions?: Permissions;
 	env?: Record<string, string>;
 	cwd?: string;
+	/** Maximum number of concurrent processes. Spawn beyond this limit throws EAGAIN. */
+	maxProcesses?: number;
 }
 
 export interface Kernel {
@@ -386,6 +388,7 @@ export interface ProcessInfo {
 /** POSIX error codes used by the kernel. */
 export type KernelErrorCode =
 	| "EACCES"
+	| "EAGAIN"
 	| "EBADF"
 	| "EEXIST"
 	| "EINVAL"

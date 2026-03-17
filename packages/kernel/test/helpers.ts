@@ -354,9 +354,10 @@ export interface TestKernelResult {
 export async function createTestKernel(options?: {
 	drivers?: RuntimeDriver[];
 	permissions?: Permissions;
+	maxProcesses?: number;
 }): Promise<TestKernelResult> {
 	const vfs = new TestFileSystem();
-	const kernel = createKernel({ filesystem: vfs, permissions: options?.permissions });
+	const kernel = createKernel({ filesystem: vfs, permissions: options?.permissions, maxProcesses: options?.maxProcesses });
 
 	if (options?.drivers) {
 		for (const driver of options.drivers) {

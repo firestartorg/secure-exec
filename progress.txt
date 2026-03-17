@@ -68,6 +68,13 @@ PRD: ralph/kernel-hardening (46 stories)
 - tcgetattr returns a deep copy — callers cannot mutate internal state
 - /dev/fd/N in fdOpen → dup(N); VFS-level readDir/stat for /dev/fd are PID-unaware; use devFdReadDir(pid) and devFdStat(pid, fd) on KernelInterface for PID-aware operations
 - Device layer has DEVICE_DIRS set (/dev/fd, /dev/pts) for pseudo-directories — stat returns directory mode 0o755, readDir returns empty (PID context required for dynamic content)
+- ResourceBudgets (maxOutputBytes, maxBridgeCalls, maxTimers, maxChildProcesses) flow: NodeRuntimeOptions → RuntimeDriverOptions → NodeExecutionDriver constructor
+- Bridge-side timer budget: inject `_maxTimers` number as global, bridge checks `_timers.size + _intervals.size >= _maxTimers` synchronously — host-side enforcement doesn't work because `_scheduleTimer.apply()` is async (Promise)
+- Bridge `_scheduleTimer.apply(undefined, [delay], { result: { promise: true } })` is async — host throws become unhandled Promise rejections, not catchable try/catch
+- Console output (logRef/errorRef) should NOT count against maxBridgeCalls — output has its own maxOutputBytes budget; counting it would exhaust the budget during error reporting
+- Per-execution budget state: `budgetState` object reset via `resetBudgetState()` before each context creation (executeInternal and __unsafeCreateContext)
+- Kernel maxProcesses: check `processTable.runningCount() >= maxProcesses` in spawnInternal before PID allocation; throws EAGAIN
+- ERR_RESOURCE_BUDGET_EXCEEDED is the error code for all bridge resource budget violations
 
 ---
 
@@ -447,4 +454,28 @@ PRD: ralph/kernel-hardening (46 stories)
   - Mintlify Info component useful for calling out PID context limitations on VFS-level device paths
   - fdSeek is async (Promise<bigint>) — the prior doc showed it as sync; fixed to include await
   - FDStat has `rights` (not `rightsBase`/`rightsInheriting`) — fixed stale comment in doc
+---
+
+## 2026-03-17 - US-031
+- What was implemented: Global host resource budgets — maxOutputBytes, maxBridgeCalls, maxTimers, maxChildProcesses on NodeRuntimeOptions, and maxProcesses on KernelOptions
+- Files changed:
+  - packages/kernel/src/types.ts — added EAGAIN to KernelErrorCode, maxProcesses to KernelOptions
+  - packages/kernel/src/kernel.ts — stored maxProcesses, enforce in spawnInternal before PID allocation
+  - packages/kernel/src/process-table.ts — added runningCount() method
+  - packages/secure-exec/src/runtime-driver.ts — added ResourceBudgets interface, resourceBudgets to RuntimeDriverOptions
+  - packages/secure-exec/src/runtime.ts — added resourceBudgets to NodeRuntimeOptions, pass through to factory
+  - packages/secure-exec/src/index.ts — exported ResourceBudgets type
+  - packages/secure-exec/src/node/execution-driver.ts — stored budget limits, added budgetState/resetBudgetState/checkBridgeBudget; enforced maxOutputBytes in logRef/errorRef, maxChildProcesses in spawnStartRef/spawnSyncRef, maxBridgeCalls in all fs/network/timer/child_process References; injected _maxTimers global for bridge-side timer enforcement
+  - packages/secure-exec/src/bridge/process.ts — added _checkTimerBudget() function, called from setTimeout and setInterval before creating timer entries
+  - packages/kernel/test/helpers.ts — added maxProcesses option to createTestKernel
+  - packages/kernel/test/kernel-integration.test.ts — added 4 kernel maxProcesses tests
+  - packages/secure-exec/tests/test-utils.ts — added resourceBudgets to LegacyNodeRuntimeOptions
+  - packages/secure-exec/tests/runtime-driver/node/resource-budgets.test.ts — new test file with 8 tests covering all 4 bridge budgets
+  - prd.json — marked US-031 as passes: true
+- **Learnings for future iterations:**
+  - Bridge _scheduleTimer.apply() is async — host-side throws become unhandled Promise rejections. Timer budget enforcement must be bridge-side (inject _maxTimers global, check _timers.size + _intervals.size synchronously)
+  - Console logRef/errorRef should NOT count against maxBridgeCalls — it would prevent error reporting after budget exhaustion
+  - Per-execution budget state must be reset before each context creation (both executeInternal and __unsafeCreateContext paths)
+  - Timer budget uses concurrent count (_timers.size + _intervals.size) — setTimeout entries are removed when they fire, setInterval entries persist until clearInterval
+  - Kernel maxProcesses uses processTable.runningCount() which counts only "running" status entries — exited processes don't consume slots
 ---

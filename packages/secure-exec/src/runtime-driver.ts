@@ -21,6 +21,17 @@ export interface DriverRuntimeConfig {
 	os: OSConfig;
 }
 
+export interface ResourceBudgets {
+	/** Maximum total stdout/stderr bytes before subsequent writes are silently dropped. */
+	maxOutputBytes?: number;
+	/** Maximum total bridge calls (fs, network, timers, child_process) before errors are returned. */
+	maxBridgeCalls?: number;
+	/** Maximum concurrent host-side timers (setTimeout/setInterval with delay > 0). */
+	maxTimers?: number;
+	/** Maximum child_process.spawn() invocations per execution. */
+	maxChildProcesses?: number;
+}
+
 export interface RuntimeDriverOptions {
 	system: SystemDriver;
 	runtime: DriverRuntimeConfig;
@@ -32,6 +43,7 @@ export interface RuntimeDriverOptions {
 		base64TransferBytes?: number;
 		jsonPayloadBytes?: number;
 	};
+	resourceBudgets?: ResourceBudgets;
 }
 
 export interface SharedRuntimeDriver {

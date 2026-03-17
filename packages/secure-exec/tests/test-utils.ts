@@ -19,6 +19,7 @@ import type {
 	TimingMitigation,
 } from "../src/shared/api-types.js";
 import type { ModuleAccessOptions } from "../src/node/driver.js";
+import type { ResourceBudgets } from "../src/runtime-driver.js";
 
 export function createTestFileSystem(): VirtualFileSystem {
 	return createInMemoryFileSystem();
@@ -44,6 +45,7 @@ export type LegacyNodeRuntimeOptions = {
 		base64TransferBytes?: number;
 		jsonPayloadBytes?: number;
 	};
+	resourceBudgets?: ResourceBudgets;
 };
 
 export function createTestNodeRuntime(

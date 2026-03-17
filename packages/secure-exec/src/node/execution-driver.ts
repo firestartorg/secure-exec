@@ -119,6 +119,7 @@ const DEFAULT_ISOLATE_JSON_PAYLOAD_BYTES = 4 * 1024 * 1024;
 const MIN_CONFIGURED_PAYLOAD_BYTES = 1024;
 const MAX_CONFIGURED_PAYLOAD_BYTES = 64 * 1024 * 1024;
 const PAYLOAD_LIMIT_ERROR_CODE = "ERR_SANDBOX_PAYLOAD_TOO_LARGE";
+const RESOURCE_BUDGET_ERROR_CODE = "ERR_RESOURCE_BUDGET_EXCEEDED";
 const DEFAULT_SANDBOX_CWD = "/root";
 const DEFAULT_SANDBOX_HOME = "/root";
 const DEFAULT_SANDBOX_TMPDIR = "/tmp";
@@ -145,10 +146,16 @@ export class NodeExecutionDriver implements RuntimeDriver {
 	private timingMitigation: TimingMitigation;
 	private bridgeBase64TransferLimitBytes: number;
 	private isolateJsonPayloadLimitBytes: number;
+	private maxOutputBytes?: number;
+	private maxBridgeCalls?: number;
+	private maxTimers?: number;
+	private maxChildProcesses?: number;
 	private onStdio?: StdioHook;
 	private runtimeCreateIsolate: (memoryLimit: number) => ivm.Isolate;
 	private activeHttpServerIds: Set<number> = new Set();
 	private disposed: boolean = false;
+	/** Per-execution budget counters, reset before each context setup. */
+	private budgetState = { outputBytes: 0, bridgeCalls: 0, activeTimers: 0, childProcesses: 0 };
 	// Cache for compiled ESM modules (per isolate)
 	private esmModuleCache: Map<string, ivm.Module> = new Map();
 	private moduleFormatCache: Map<string, "esm" | "cjs" | "json"> = new Map();
@@ -201,6 +208,13 @@ export class NodeExecutionDriver implements RuntimeDriver {
 			DEFAULT_ISOLATE_JSON_PAYLOAD_BYTES,
 			"payloadLimits.jsonPayloadBytes",
 		);
+
+		// Store resource budgets
+		const budgets = options.resourceBudgets;
+		this.maxOutputBytes = budgets?.maxOutputBytes;
+		this.maxBridgeCalls = budgets?.maxBridgeCalls;
+		this.maxTimers = budgets?.maxTimers;
+		this.maxChildProcesses = budgets?.maxChildProcesses;
 	}
 
 	/**
@@ -249,6 +263,8 @@ export class NodeExecutionDriver implements RuntimeDriver {
 		if (this.disposed) {
 			throw new Error("NodeRuntime has been disposed");
 		}
+
+		this.resetBudgetState();
 
 		const context = await this.isolate.createContext();
 		const jail = context.global;
@@ -331,6 +347,20 @@ export class NodeExecutionDriver implements RuntimeDriver {
 			this.getUtf8ByteLength(text),
 			maxBytes,
 		);
+	}
+
+	/** Reset budget counters before each execution context setup. */
+	private resetBudgetState(): void {
+		this.budgetState = { outputBytes: 0, bridgeCalls: 0, activeTimers: 0, childProcesses: 0 };
+	}
+
+	/** Check bridge call budget. Throws if exceeded. */
+	private checkBridgeBudget(): void {
+		if (this.maxBridgeCalls === undefined) return;
+		this.budgetState.bridgeCalls++;
+		if (this.budgetState.bridgeCalls > this.maxBridgeCalls) {
+			throw new Error(`${RESOURCE_BUDGET_ERROR_CODE}: maximum bridge calls exceeded`);
+		}
 	}
 
 	private parseJsonWithLimit<T>(payloadLabel: string, jsonText: string): T {
@@ -1001,14 +1031,18 @@ export class NodeExecutionDriver implements RuntimeDriver {
 		await jail.set(HOST_BRIDGE_GLOBAL_KEYS.loadFile, loadFileRef);
 
 		// Set up timer Reference for actual delays (not just microtasks)
-		// This allows setTimeout/setInterval to use real host-side timers
 		const scheduleTimerRef = new ivm.Reference((delayMs: number) => {
+			this.checkBridgeBudget();
 			return new Promise<void>((resolve) => {
-				// Use real host setTimeout with actual delay
 				globalThis.setTimeout(resolve, delayMs);
 			});
 		});
 		await jail.set(HOST_BRIDGE_GLOBAL_KEYS.scheduleTimer, scheduleTimerRef);
+
+		// Inject maxTimers limit for bridge-side enforcement (synchronous check)
+		if (this.maxTimers !== undefined) {
+			await jail.set("_maxTimers", this.maxTimers, { copy: true });
+		}
 
 		// Set up host crypto references for secure randomness.
 		const cryptoRandomFillRef = new ivm.Reference((byteLength: number) => {
@@ -1028,15 +1062,18 @@ export class NodeExecutionDriver implements RuntimeDriver {
 
 			// Create individual References for each fs operation
 			const readFileRef = new ivm.Reference(async (path: string) => {
+				this.checkBridgeBudget();
 				return fs.readTextFile(path);
 			});
 			const writeFileRef = new ivm.Reference(
 				async (path: string, content: string) => {
+					this.checkBridgeBudget();
 					await fs.writeFile(path, content);
 				},
 			);
 			// Binary file operations using base64 encoding
 			const readFileBinaryRef = new ivm.Reference(async (path: string) => {
+				this.checkBridgeBudget();
 				const data = await fs.readFile(path);
 					this.assertPayloadByteLength(
 						`fs.readFileBinary ${path}`,
@@ -1048,6 +1085,7 @@ export class NodeExecutionDriver implements RuntimeDriver {
 			});
 			const writeFileBinaryRef = new ivm.Reference(
 				async (path: string, base64Content: string) => {
+					this.checkBridgeBudget();
 						this.assertTextPayloadSize(
 							`fs.writeFileBinary ${path}`,
 							base64Content,
@@ -1059,20 +1097,25 @@ export class NodeExecutionDriver implements RuntimeDriver {
 				},
 			);
 			const readDirRef = new ivm.Reference(async (path: string) => {
+				this.checkBridgeBudget();
 				const entries = await fs.readDirWithTypes(path);
 				// Return as JSON string for transfer
 				return JSON.stringify(entries);
 			});
 			const mkdirRef = new ivm.Reference(async (path: string) => {
+				this.checkBridgeBudget();
 				await mkdir(fs, path);
 			});
 			const rmdirRef = new ivm.Reference(async (path: string) => {
+				this.checkBridgeBudget();
 				await fs.removeDir(path);
 			});
 			const existsRef = new ivm.Reference(async (path: string) => {
+				this.checkBridgeBudget();
 				return fs.exists(path);
 			});
 			const statRef = new ivm.Reference(async (path: string) => {
+				this.checkBridgeBudget();
 				const statInfo = await fs.stat(path);
 				// Return as JSON string for transfer
 				return JSON.stringify({
@@ -1086,10 +1129,12 @@ export class NodeExecutionDriver implements RuntimeDriver {
 				});
 			});
 			const unlinkRef = new ivm.Reference(async (path: string) => {
+				this.checkBridgeBudget();
 				await fs.removeFile(path);
 			});
 			const renameRef = new ivm.Reference(
 				async (oldPath: string, newPath: string) => {
+					this.checkBridgeBudget();
 					await fs.rename(oldPath, newPath);
 				},
 			);
@@ -1149,6 +1194,11 @@ export class NodeExecutionDriver implements RuntimeDriver {
 			// Start a spawn - returns session ID
 			const spawnStartRef = new ivm.Reference(
 				(command: string, argsJson: string, optionsJson: string): number => {
+					this.checkBridgeBudget();
+					if (this.maxChildProcesses !== undefined && this.budgetState.childProcesses >= this.maxChildProcesses) {
+						throw new Error(`${RESOURCE_BUDGET_ERROR_CODE}: maximum child processes exceeded`);
+					}
+					this.budgetState.childProcesses++;
 					const args = this.parseJsonWithLimit<string[]>(
 						"child_process.spawn args",
 						argsJson,
@@ -1215,6 +1265,11 @@ export class NodeExecutionDriver implements RuntimeDriver {
 					argsJson: string,
 					optionsJson: string,
 				): Promise<string> => {
+					this.checkBridgeBudget();
+					if (this.maxChildProcesses !== undefined && this.budgetState.childProcesses >= this.maxChildProcesses) {
+						throw new Error(`${RESOURCE_BUDGET_ERROR_CODE}: maximum child processes exceeded`);
+					}
+					this.budgetState.childProcesses++;
 					const args = this.parseJsonWithLimit<string[]>(
 						"child_process.spawnSync args",
 						argsJson,
@@ -1265,6 +1320,7 @@ export class NodeExecutionDriver implements RuntimeDriver {
 			// Reference for fetch - returns JSON string for transfer
 			const networkFetchRef = new ivm.Reference(
 				(url: string, optionsJson: string): Promise<string> => {
+					this.checkBridgeBudget();
 					const options = this.parseJsonWithLimit<{
 						method?: string;
 						headers?: Record<string, string>;
@@ -1279,6 +1335,7 @@ export class NodeExecutionDriver implements RuntimeDriver {
 			// Reference for DNS lookup - returns JSON string for transfer
 			const networkDnsLookupRef = new ivm.Reference(
 				async (hostname: string): Promise<string> => {
+					this.checkBridgeBudget();
 					const result = await adapter.dnsLookup(hostname);
 					return JSON.stringify(result);
 				},
@@ -1287,6 +1344,7 @@ export class NodeExecutionDriver implements RuntimeDriver {
 			// Reference for HTTP request - returns JSON string for transfer
 			const networkHttpRequestRef = new ivm.Reference(
 				(url: string, optionsJson: string): Promise<string> => {
+					this.checkBridgeBudget();
 					const options = this.parseJsonWithLimit<{
 						method?: string;
 						headers?: Record<string, string>;
@@ -1475,16 +1533,23 @@ export class NodeExecutionDriver implements RuntimeDriver {
 		onStdio?: StdioHook,
 	): Promise<void> {
 		const logRef = new ivm.Reference((msg: string) => {
-			this.emitConsoleEvent(onStdio, {
-				channel: "stdout",
-				message: String(msg),
-			});
+			const str = String(msg);
+			// Enforce output byte budget — silently drop writes that exceed the limit
+			if (this.maxOutputBytes !== undefined) {
+				const bytes = Buffer.byteLength(str, "utf8");
+				if (this.budgetState.outputBytes >= this.maxOutputBytes) return;
+				this.budgetState.outputBytes += bytes;
+			}
+			this.emitConsoleEvent(onStdio, { channel: "stdout", message: str });
 		});
 		const errorRef = new ivm.Reference((msg: string) => {
-			this.emitConsoleEvent(onStdio, {
-				channel: "stderr",
-				message: String(msg),
-			});
+			const str = String(msg);
+			if (this.maxOutputBytes !== undefined) {
+				const bytes = Buffer.byteLength(str, "utf8");
+				if (this.budgetState.outputBytes >= this.maxOutputBytes) return;
+				this.budgetState.outputBytes += bytes;
+			}
+			this.emitConsoleEvent(onStdio, { channel: "stderr", message: str });
 		});
 
 		await jail.set(HOST_BRIDGE_GLOBAL_KEYS.log, logRef);
@@ -1530,6 +1595,7 @@ export class NodeExecutionDriver implements RuntimeDriver {
 		timingMitigation?: TimingMitigation;
 		onStdio?: StdioHook;
 	}): Promise<RunResult<T>> {
+		this.resetBudgetState();
 		return executeWithRuntime<T>(
 			{
 				isolate: this.isolate,

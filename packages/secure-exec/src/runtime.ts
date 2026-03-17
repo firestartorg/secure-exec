@@ -12,6 +12,7 @@ import type {
 	RunResult,
 	TimingMitigation,
 } from "./shared/api-types.js";
+import type { ResourceBudgets } from "./runtime-driver.js";
 
 const DEFAULT_SANDBOX_CWD = "/root";
 const DEFAULT_SANDBOX_HOME = "/root";
@@ -28,6 +29,7 @@ export interface NodeRuntimeOptions {
 		base64TransferBytes?: number;
 		jsonPayloadBytes?: number;
 	};
+	resourceBudgets?: ResourceBudgets;
 }
 
 type UnsafeRuntimeDriver = NodeRuntimeDriver & {
@@ -68,6 +70,7 @@ export class NodeRuntime {
 			timingMitigation: options.timingMitigation,
 			onStdio: options.onStdio,
 			payloadLimits: options.payloadLimits,
+			resourceBudgets: options.resourceBudgets,
 		}) as UnsafeRuntimeDriver;
 	}
 

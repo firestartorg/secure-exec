@@ -847,6 +847,13 @@ let _timerId = 0;
 const _timers = new Map<number, TimerHandle>();
 const _intervals = new Map<number, TimerHandle>();
 
+/** Check timer budget. _maxTimers is injected by the host when resourceBudgets.maxTimers is set. */
+function _checkTimerBudget(): void {
+  if (typeof _maxTimers !== "undefined" && (_timers.size + _intervals.size) >= _maxTimers) {
+    throw new Error("ERR_RESOURCE_BUDGET_EXCEEDED: maximum number of timers exceeded");
+  }
+}
+
 // queueMicrotask fallback
 const _queueMicrotask =
   typeof queueMicrotask === "function"
@@ -889,6 +896,7 @@ export function setTimeout(
   delay?: number,
   ...args: unknown[]
 ): TimerHandle {
+  _checkTimerBudget();
   const id = ++_timerId;
   const handle = new TimerHandle(id);
   _timers.set(id, handle);
@@ -942,6 +950,7 @@ export function setInterval(
   delay?: number,
   ...args: unknown[]
 ): TimerHandle {
+  _checkTimerBudget();
   const id = ++_timerId;
   const handle = new TimerHandle(id);
   _intervals.set(id, handle);
