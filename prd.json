@@ -742,7 +742,7 @@
         "Typecheck passes"
       ],
       "priority": 44,
-      "passes": false,
+      "passes": true,
       "notes": "P7 — demonstrates primary use case: running untrusted/generated code safely"
     },
     {
