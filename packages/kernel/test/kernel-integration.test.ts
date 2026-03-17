@@ -1582,4 +1582,195 @@ describe("kernel + MockRuntimeDriver integration", () => {
 			expect(() => ki.kill(-9999, 15)).toThrow(/ESRCH/);
 		});
 	});
+
+	// -------------------------------------------------------------------
+	// PTY device layer
+	// -------------------------------------------------------------------
+
+	describe("PTY device layer", () => {
+		it("write to master → read from slave", async () => {
+			const driver = new MockRuntimeDriver(["proc"], {
+				proc: { neverExit: true },
+			});
+			({ kernel } = await createTestKernel({ drivers: [driver] }));
+
+			const ki = driver.kernelInterface!;
+			const proc = kernel.spawn("proc", []);
+			const { masterFd, slaveFd } = ki.openpty(proc.pid);
+
+			const msg = new TextEncoder().encode("hello\n");
+			ki.fdWrite(proc.pid, masterFd, msg);
+
+			const data = await ki.fdRead(proc.pid, slaveFd, 1024);
+			expect(new TextDecoder().decode(data)).toBe("hello\n");
+
+			proc.kill();
+		});
+
+		it("write to slave → read from master", async () => {
+			const driver = new MockRuntimeDriver(["proc"], {
+				proc: { neverExit: true },
+			});
+			({ kernel } = await createTestKernel({ drivers: [driver] }));
+
+			const ki = driver.kernelInterface!;
+			const proc = kernel.spawn("proc", []);
+			const { masterFd, slaveFd } = ki.openpty(proc.pid);
+
+			const msg = new TextEncoder().encode("hello\n");
+			ki.fdWrite(proc.pid, slaveFd, msg);
+
+			const data = await ki.fdRead(proc.pid, masterFd, 1024);
+			expect(new TextDecoder().decode(data)).toBe("hello\n");
+
+			proc.kill();
+		});
+
+		it("isatty returns true for slave FD, false for pipe FD", async () => {
+			const driver = new MockRuntimeDriver(["proc"], {
+				proc: { neverExit: true },
+			});
+			({ kernel } = await createTestKernel({ drivers: [driver] }));
+
+			const ki = driver.kernelInterface!;
+			const proc = kernel.spawn("proc", []);
+			const { masterFd, slaveFd } = ki.openpty(proc.pid);
+			const { readFd } = ki.pipe(proc.pid);
+
+			expect(ki.isatty(proc.pid, slaveFd)).toBe(true);
+			expect(ki.isatty(proc.pid, masterFd)).toBe(false);
+			expect(ki.isatty(proc.pid, readFd)).toBe(false);
+
+			proc.kill();
+		});
+
+		it("multiple PTY pairs coexist with separate paths", async () => {
+			const driver = new MockRuntimeDriver(["proc"], {
+				proc: { neverExit: true },
+			});
+			({ kernel } = await createTestKernel({ drivers: [driver] }));
+
+			const ki = driver.kernelInterface!;
+			const proc = kernel.spawn("proc", []);
+
+			const pty0 = ki.openpty(proc.pid);
+			const pty1 = ki.openpty(proc.pid);
+
+			// Distinct paths
+			expect(pty0.path).not.toBe(pty1.path);
+			expect(pty0.path).toMatch(/^\/dev\/pts\/\d+$/);
+			expect(pty1.path).toMatch(/^\/dev\/pts\/\d+$/);
+
+			// Data is isolated between PTYs
+			const msg0 = new TextEncoder().encode("pty0");
+			const msg1 = new TextEncoder().encode("pty1");
+			ki.fdWrite(proc.pid, pty0.masterFd, msg0);
+			ki.fdWrite(proc.pid, pty1.masterFd, msg1);
+
+			const data0 = await ki.fdRead(proc.pid, pty0.slaveFd, 1024);
+			const data1 = await ki.fdRead(proc.pid, pty1.slaveFd, 1024);
+			expect(new TextDecoder().decode(data0)).toBe("pty0");
+			expect(new TextDecoder().decode(data1)).toBe("pty1");
+
+			proc.kill();
+		});
+
+		it("master close → slave reads get null (hangup)", async () => {
+			const driver = new MockRuntimeDriver(["proc"], {
+				proc: { neverExit: true },
+			});
+			({ kernel } = await createTestKernel({ drivers: [driver] }));
+
+			const ki = driver.kernelInterface!;
+			const proc = kernel.spawn("proc", []);
+			const { masterFd, slaveFd } = ki.openpty(proc.pid);
+
+			// Close master
+			ki.fdClose(proc.pid, masterFd);
+
+			// Slave read returns empty (hangup / null mapped to empty Uint8Array)
+			const data = await ki.fdRead(proc.pid, slaveFd, 1024);
+			expect(data.length).toBe(0);
+
+			proc.kill();
+		});
+
+		it("slave close → master reads get null (hangup)", async () => {
+			const driver = new MockRuntimeDriver(["proc"], {
+				proc: { neverExit: true },
+			});
+			({ kernel } = await createTestKernel({ drivers: [driver] }));
+
+			const ki = driver.kernelInterface!;
+			const proc = kernel.spawn("proc", []);
+			const { masterFd, slaveFd } = ki.openpty(proc.pid);
+
+			// Close slave
+			ki.fdClose(proc.pid, slaveFd);
+
+			// Master read returns empty (hangup)
+			const data = await ki.fdRead(proc.pid, masterFd, 1024);
+			expect(data.length).toBe(0);
+
+			proc.kill();
+		});
+
+		it("bidirectional multi-chunk exchange", async () => {
+			const driver = new MockRuntimeDriver(["proc"], {
+				proc: { neverExit: true },
+			});
+			({ kernel } = await createTestKernel({ drivers: [driver] }));
+
+			const ki = driver.kernelInterface!;
+			const proc = kernel.spawn("proc", []);
+			const { masterFd, slaveFd } = ki.openpty(proc.pid);
+
+			// Write multiple chunks master→slave
+			ki.fdWrite(proc.pid, masterFd, new TextEncoder().encode("ab"));
+			ki.fdWrite(proc.pid, masterFd, new TextEncoder().encode("cd"));
+
+			const slaveData = await ki.fdRead(proc.pid, slaveFd, 1024);
+			expect(new TextDecoder().decode(slaveData)).toBe("abcd");
+
+			// Write multiple chunks slave→master
+			ki.fdWrite(proc.pid, slaveFd, new TextEncoder().encode("12"));
+			ki.fdWrite(proc.pid, slaveFd, new TextEncoder().encode("34"));
+
+			const masterData = await ki.fdRead(proc.pid, masterFd, 1024);
+			expect(new TextDecoder().decode(masterData)).toBe("1234");
+
+			proc.kill();
+		});
+
+		it("openpty returns path matching /dev/pts/N", async () => {
+			const driver = new MockRuntimeDriver(["proc"], {
+				proc: { neverExit: true },
+			});
+			({ kernel } = await createTestKernel({ drivers: [driver] }));
+
+			const ki = driver.kernelInterface!;
+			const proc = kernel.spawn("proc", []);
+			const { path } = ki.openpty(proc.pid);
+
+			expect(path).toMatch(/^\/dev\/pts\/\d+$/);
+
+			proc.kill();
+		});
+
+		it("PTY FDs are not seekable (ESPIPE)", async () => {
+			const driver = new MockRuntimeDriver(["proc"], {
+				proc: { neverExit: true },
+			});
+			({ kernel } = await createTestKernel({ drivers: [driver] }));
+
+			const ki = driver.kernelInterface!;
+			const proc = kernel.spawn("proc", []);
+			const { masterFd, slaveFd } = ki.openpty(proc.pid);
+
+			await expect(ki.fdSeek(proc.pid, masterFd, 0n, 0)).rejects.toThrow(/ESPIPE/);
+			await expect(ki.fdSeek(proc.pid, slaveFd, 0n, 0)).rejects.toThrow(/ESPIPE/);
+
+			proc.kill();
+		});
+	});
 });

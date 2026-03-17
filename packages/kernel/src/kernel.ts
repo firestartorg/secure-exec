@@ -24,6 +24,7 @@ import { createDeviceLayer } from "./device-layer.js";
 import { FDTableManager, ProcessFDTable } from "./fd-table.js";
 import { ProcessTable } from "./process-table.js";
 import { PipeManager } from "./pipe-manager.js";
+import { PtyManager } from "./pty.js";
 import { CommandRegistry } from "./command-registry.js";
 import { wrapFileSystem, checkChildProcess } from "./permissions.js";
 import { UserManager } from "./user.js";
@@ -46,6 +47,7 @@ class KernelImpl implements Kernel {
 	private fdTableManager = new FDTableManager();
 	private processTable = new ProcessTable();
 	private pipeManager = new PipeManager();
+	private ptyManager = new PtyManager();
 	private commandRegistry = new CommandRegistry();
 	private userManager: UserManager;
 	private drivers: RuntimeDriver[] = [];
@@ -340,6 +342,12 @@ class KernelImpl implements Kernel {
 					return data ?? new Uint8Array(0);
 				}
 
+				// PTY reads route through PtyManager
+				if (this.ptyManager.isPty(entry.description.id)) {
+					const data = await this.ptyManager.read(entry.description.id, length);
+					return data ?? new Uint8Array(0);
+				}
+
 				// Read from VFS at cursor position
 				const content = await this.vfs.readFile(entry.description.path);
 				const cursor = Number(entry.description.cursor);
@@ -358,6 +366,10 @@ class KernelImpl implements Kernel {
 					return this.pipeManager.write(entry.description.id, data);
 				}
 
+				if (this.ptyManager.isPty(entry.description.id)) {
+					return this.ptyManager.write(entry.description.id, data);
+				}
+
 				return data.length;
 			},
 			fdClose: (pid, fd) => {
@@ -367,13 +379,17 @@ class KernelImpl implements Kernel {
 
 				const descId = entry.description.id;
 				const isPipe = this.pipeManager.isPipe(descId);
+				const isPty = this.ptyManager.isPty(descId);
 
 				// Close FD first (decrements refCount on shared FileDescription)
 				table.close(fd);
 
-				// Only signal pipe closure when last reference is dropped
+				// Only signal pipe/pty closure when last reference is dropped
 				if (isPipe && entry.description.refCount <= 0) {
 					this.pipeManager.close(descId);
+				}
+				if (isPty && entry.description.refCount <= 0) {
+					this.ptyManager.close(descId);
 				}
 			},
 			fdSeek: async (pid, fd, offset, whence) => {
@@ -381,8 +397,8 @@ class KernelImpl implements Kernel {
 				const entry = table.get(fd);
 				if (!entry) throw new KernelError("EBADF", `bad file descriptor ${fd}`);
 
-				// Pipes are not seekable
-				if (this.pipeManager.isPipe(entry.description.id)) {
+				// Pipes and PTYs are not seekable
+				if (this.pipeManager.isPipe(entry.description.id) || this.ptyManager.isPty(entry.description.id)) {
 					throw new KernelError("ESPIPE", "illegal seek");
 				}
 
@@ -462,6 +478,18 @@ class KernelImpl implements Kernel {
 				return this.pipeManager.createPipeFDs(table);
 			},
 
+			// PTY operations
+			openpty: (pid) => {
+				const table = this.getTable(pid);
+				return this.ptyManager.createPtyFDs(table);
+			},
+			isatty: (pid, fd) => {
+				const table = this.getTable(pid);
+				const entry = table.get(fd);
+				if (!entry) return false;
+				return this.ptyManager.isSlave(entry.description.id);
+			},
+
 			// Environment
 			getenv: (pid) => {
 				const entry = this.processTable.get(pid);
@@ -527,33 +555,36 @@ class KernelImpl implements Kernel {
 		childTable.openWith(entry.description, entry.filetype, targetFd);
 	}
 
-	/** Check if a stdio FD (0/1/2) in a process's table is a pipe. */
+	/** Check if a stdio FD (0/1/2) in a process's table is a pipe or PTY. */
 	private isStdioPiped(table: ProcessFDTable, fd: number): boolean {
 		const entry = table.get(fd);
 		if (!entry) return false;
-		return this.pipeManager.isPipe(entry.description.id);
+		return this.pipeManager.isPipe(entry.description.id) || this.ptyManager.isPty(entry.description.id);
 	}
 
-	/** Clean up all FDs for a process, closing pipe ends when last reference drops. */
+	/** Clean up all FDs for a process, closing pipe/PTY ends when last reference drops. */
 	private cleanupProcessFDs(pid: number): void {
 		const table = this.fdTableManager.get(pid);
 		if (!table) return;
 
-		// Collect pipe descriptions before closing so we can check refCounts after
-		const pipeDescs: { id: number; description: { refCount: number } }[] = [];
+		// Collect pipe/PTY descriptions before closing so we can check refCounts after
+		const managedDescs: { id: number; description: { refCount: number }; type: "pipe" | "pty" }[] = [];
 		for (const entry of table) {
 			if (this.pipeManager.isPipe(entry.description.id)) {
-				pipeDescs.push({ id: entry.description.id, description: entry.description });
+				managedDescs.push({ id: entry.description.id, description: entry.description, type: "pipe" });
+			} else if (this.ptyManager.isPty(entry.description.id)) {
+				managedDescs.push({ id: entry.description.id, description: entry.description, type: "pty" });
 			}
 		}
 
 		// Close all FDs and remove the table
 		this.fdTableManager.remove(pid);
 
-		// Signal pipe closure for descriptions whose last reference was dropped
-		for (const { id, description } of pipeDescs) {
+		// Signal closure for descriptions whose last reference was dropped
+		for (const { id, description, type } of managedDescs) {
 			if (description.refCount <= 0) {
-				this.pipeManager.close(id);
+				if (type === "pipe") this.pipeManager.close(id);
+				else this.ptyManager.close(id);
 			}
 		}
 	}

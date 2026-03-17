@@ -59,6 +59,9 @@ PRD: ralph/kernel-hardening (46 stories)
 - WasmVM _handleSyscall fdRead case MUST call data.set(result, 0) to write to SAB — without this, worker reads garbage
 - SAB overflow guard: check responseData.length > DATA_BUFFER_BYTES before writing, return errno 76 (EIO)
 - Bridge execSync wraps as `bash -c 'cmd'`; spawnSync passes command/args directly — use spawnSync for precise routing tests
+- PtyManager description IDs start at 200,000 (pipes at 100,000, regular FDs at 1) — avoid collisions between managers
+- PTY is bidirectional: master write→slave read (input), slave write→master read (output); isatty() is true only for slave FDs
+- Adding a new FD-managed resource (like PTY) requires updating: fdRead, fdWrite, fdClose, fdSeek, isStdioPiped, cleanupProcessFDs in kernel.ts
 
 ---
 
@@ -292,4 +295,23 @@ PRD: ralph/kernel-hardening (46 stories)
   - setsid fails with EPERM if process is already a group leader (pgid === pid) — POSIX constraint
   - setpgid validates target group exists (at least one running process with that pgid)
   - MockRuntimeDriver.killSignals config is essential for verifying signal delivery in process group tests
+---
+
+## 2026-03-17 - US-022
+- What was implemented: PTY device layer with master/slave FD pairs and bidirectional I/O
+- Files changed:
+  - packages/kernel/src/pty.ts — new PtyManager class following PipeManager pattern: createPty(), createPtyFDs(), read/write/close, isPty/isSlave
+  - packages/kernel/src/types.ts — added openpty() and isatty() to KernelInterface
+  - packages/kernel/src/kernel.ts — wired PtyManager into fdRead/fdWrite/fdClose/fdSeek, added openpty/isatty implementations, PTY cleanup in cleanupProcessFDs
+  - packages/kernel/src/index.ts — exported PtyManager
+  - packages/kernel/test/kernel-integration.test.ts — added 9 PTY tests: master→slave, slave→master, isatty, multiple PTYs, master close hangup, slave close hangup, bidirectional multi-chunk, path format, ESPIPE rejection
+  - prd.json — marked US-022 as passes: true
+- **Learnings for future iterations:**
+  - PtyManager follows same FileDescription/refCount pattern as PipeManager — description IDs start at 200,000 (pipes at 100,000, regular FDs at 1)
+  - PTY is bidirectional unlike pipes: master write→slave read (input buffer), slave write→master read (output buffer)
+  - isatty() returns true only for slave FDs — master FDs are not terminals (matches POSIX: master is the controlling side)
+  - PTY FDs use FILETYPE_CHARACTER_DEVICE (same as /dev/stdin) since terminals are character devices
+  - Hangup semantics: closing one end causes reads on the other to return null (mapped to empty Uint8Array by kernel fdRead)
+  - isStdioPiped() check was extended to include PTY FDs so kernel skips callback buffering for PTY-backed stdio
+  - cleanupProcessFDs needed updating to handle PTY descriptions alongside pipe descriptions
 ---

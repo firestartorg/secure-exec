@@ -202,6 +202,12 @@ export interface KernelInterface {
 	/** Create a pipe and install both ends in the given process's FD table. */
 	pipe(pid: number): { readFd: number; writeFd: number };
 
+	// PTY operations
+	/** Allocate a PTY master/slave pair and install FDs in the process's table. */
+	openpty(pid: number): { masterFd: number; slaveFd: number; path: string };
+	/** Check if an FD refers to a terminal (PTY slave). */
+	isatty(pid: number, fd: number): boolean;
+
 	// Environment
 	getenv(pid: number): Record<string, string>;
 	getcwd(pid: number): string;

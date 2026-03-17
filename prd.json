@@ -339,7 +339,7 @@
         "Tests pass"
       ],
       "priority": 22,
-      "passes": false,
+      "passes": true,
       "notes": "P4 — new packages/kernel/src/pty.ts. Core infrastructure; line discipline in next story."
     },
     {
