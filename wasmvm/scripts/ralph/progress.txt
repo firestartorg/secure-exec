@@ -1,0 +1,24 @@
+## Codebase Patterns
+- Workspace root is `wasmcore/` — all Rust crates and the Makefile live there
+- `rust-toolchain.toml` pins nightly-2026-03-01; toolchain auto-installs on first cargo command
+- `cargo check --target wasm32-wasip1` validates WASM compilation without full build
+- wasi-ext is a library crate, multicall is a binary crate, shims is a library crate
+- Makefile targets: all, wasm, wasm-opt, host, test, clean, patch-check
+
+# Ralph Progress Log
+Started: Sun Mar 15 03:31:10 PM PDT 2026
+---
+
+## 2026-03-15 - US-001
+- Created wasmcore/ directory structure: crates/{wasi-ext,multicall,shims}, host/{src,test}, patches/, scripts/, test/
+- Created Cargo.toml workspace with 3 member crates
+- Created rust-toolchain.toml pinning nightly-2026-03-01 with rust-src component and wasm32-wasip1 target
+- Created Makefile skeleton with all, wasm, wasm-opt, host, test, clean, patch-check targets
+- Created empty crate stubs: wasi-ext (lib), multicall (bin with dispatch.rs), shims (lib)
+- cargo check passes for both native and wasm32-wasip1 targets
+- Files changed: wasmcore/Cargo.toml, wasmcore/rust-toolchain.toml, wasmcore/Makefile, crates/*/Cargo.toml, crates/*/src/*.rs
+- **Learnings for future iterations:**
+  - Toolchain auto-downloads on first use — first cargo check takes longer
+  - Profile release settings (opt-level='z', lto=true, etc.) are in workspace Cargo.toml
+  - dispatch.rs has a dead_code warning for the stub — expected, will resolve in US-003
+---

@@ -10,6 +10,11 @@
     "build:isolate-runtime": {
       "outputs": ["dist/isolate-runtime/**", "src/generated/isolate-runtime.ts"]
     },
+    "build:wasm": {
+      "dependsOn": [],
+      "inputs": ["wasmvm/**/*.rs", "wasmvm/Cargo.toml", "wasmvm/patches/**"],
+      "outputs": ["wasmvm/target/wasm32-wasip1/release/multicall.opt.wasm"]
+    },
     "build": {
       "dependsOn": ["^build", "build:bridge", "build:polyfills", "build:isolate-runtime"],
       "outputs": ["dist/**"]

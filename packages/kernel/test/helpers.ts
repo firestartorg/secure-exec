@@ -1,0 +1,187 @@
+/**
+ * Test helpers for kernel tests.
+ * Provides a minimal in-memory VFS that implements the kernel's VirtualFileSystem.
+ */
+
+import type { VirtualFileSystem, VirtualStat, VirtualDirEntry } from "../src/vfs.js";
+
+const S_IFREG = 0o100000;
+const S_IFDIR = 0o040000;
+const S_IFLNK = 0o120000;
+
+function normalizePath(path: string): string {
+	if (!path) return "/";
+	let normalized = path.startsWith("/") ? path : `/${path}`;
+	normalized = normalized.replace(/\/+/g, "/");
+	if (normalized.length > 1 && normalized.endsWith("/")) {
+		normalized = normalized.slice(0, -1);
+	}
+	const parts = normalized.split("/");
+	const resolved: string[] = [];
+	for (const part of parts) {
+		if (part === "." || part === "") continue;
+		if (part === "..") { resolved.pop(); } else { resolved.push(part); }
+	}
+	return "/" + resolved.join("/") || "/";
+}
+
+function dirname(path: string): string {
+	const parts = normalizePath(path).split("/").filter(Boolean);
+	if (parts.length <= 1) return "/";
+	return "/" + parts.slice(0, -1).join("/");
+}
+
+let nextIno = 1;
+
+/** Minimal in-memory VFS for kernel unit tests. */
+export class TestFileSystem implements VirtualFileSystem {
+	private files = new Map<string, { data: Uint8Array; mode: number; uid: number; gid: number; ino: number }>();
+	private dirs = new Set<string>(["/"]);
+	private symlinks = new Map<string, string>();
+
+	async readFile(path: string): Promise<Uint8Array> {
+		const n = normalizePath(path);
+		const f = this.files.get(n);
+		if (!f) throw new Error(`ENOENT: no such file or directory, open '${n}'`);
+		return f.data;
+	}
+
+	async readTextFile(path: string): Promise<string> {
+		return new TextDecoder().decode(await this.readFile(path));
+	}
+
+	async readDir(path: string): Promise<string[]> {
+		return (await this.readDirWithTypes(path)).map((e) => e.name);
+	}
+
+	async readDirWithTypes(path: string): Promise<VirtualDirEntry[]> {
+		const n = normalizePath(path);
+		if (!this.dirs.has(n)) throw new Error(`ENOENT: no such directory '${n}'`);
+		const prefix = n === "/" ? "/" : n + "/";
+		const entries = new Map<string, VirtualDirEntry>();
+		for (const fp of this.files.keys()) {
+			if (fp.startsWith(prefix)) {
+				const rest = fp.slice(prefix.length);
+				if (rest && !rest.includes("/")) entries.set(rest, { name: rest, isDirectory: false });
+			}
+		}
+		for (const dp of this.dirs) {
+			if (dp.startsWith(prefix)) {
+				const rest = dp.slice(prefix.length);
+				if (rest && !rest.includes("/")) entries.set(rest, { name: rest, isDirectory: true });
+			}
+		}
+		return Array.from(entries.values());
+	}
+
+	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+		const n = normalizePath(path);
+		await this.mkdir(dirname(n));
+		const data = typeof content === "string" ? new TextEncoder().encode(content) : content;
+		this.files.set(n, { data, mode: S_IFREG | 0o644, uid: 1000, gid: 1000, ino: nextIno++ });
+	}
+
+	async createDir(path: string): Promise<void> {
+		const n = normalizePath(path);
+		if (!this.dirs.has(dirname(n))) throw new Error(`ENOENT: ${n}`);
+		this.dirs.add(n);
+	}
+
+	async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
+		const parts = normalizePath(path).split("/").filter(Boolean);
+		let cur = "";
+		for (const p of parts) { cur += "/" + p; this.dirs.add(cur); }
+	}
+
+	async exists(path: string): Promise<boolean> {
+		const n = normalizePath(path);
+		return this.files.has(n) || this.dirs.has(n) || this.symlinks.has(n);
+	}
+
+	async stat(path: string): Promise<VirtualStat> {
+		const n = normalizePath(path);
+		const now = Date.now();
+		const f = this.files.get(n);
+		if (f) return { mode: f.mode, size: f.data.length, isDirectory: false, isSymbolicLink: false, atimeMs: now, mtimeMs: now, ctimeMs: now, birthtimeMs: now, ino: f.ino, nlink: 1, uid: f.uid, gid: f.gid };
+		if (this.dirs.has(n)) return { mode: S_IFDIR | 0o755, size: 4096, isDirectory: true, isSymbolicLink: false, atimeMs: now, mtimeMs: now, ctimeMs: now, birthtimeMs: now, ino: 0, nlink: 2, uid: 1000, gid: 1000 };
+		throw new Error(`ENOENT: ${n}`);
+	}
+
+	async removeFile(path: string): Promise<void> {
+		const n = normalizePath(path);
+		if (!this.files.delete(n)) throw new Error(`ENOENT: ${n}`);
+	}
+
+	async removeDir(path: string): Promise<void> {
+		const n = normalizePath(path);
+		if (!this.dirs.has(n)) throw new Error(`ENOENT: ${n}`);
+		this.dirs.delete(n);
+	}
+
+	async rename(oldPath: string, newPath: string): Promise<void> {
+		const o = normalizePath(oldPath);
+		const n = normalizePath(newPath);
+		const f = this.files.get(o);
+		if (f) { this.files.set(n, f); this.files.delete(o); return; }
+		if (this.dirs.has(o)) { this.dirs.delete(o); this.dirs.add(n); return; }
+		throw new Error(`ENOENT: ${o}`);
+	}
+
+	async symlink(target: string, linkPath: string): Promise<void> {
+		this.symlinks.set(normalizePath(linkPath), target);
+	}
+
+	async readlink(path: string): Promise<string> {
+		const n = normalizePath(path);
+		const t = this.symlinks.get(n);
+		if (!t) throw new Error(`ENOENT: ${n}`);
+		return t;
+	}
+
+	async lstat(path: string): Promise<VirtualStat> {
+		const n = normalizePath(path);
+		const now = Date.now();
+		if (this.symlinks.has(n)) {
+			return { mode: S_IFLNK | 0o777, size: 0, isDirectory: false, isSymbolicLink: true, atimeMs: now, mtimeMs: now, ctimeMs: now, birthtimeMs: now, ino: 0, nlink: 1, uid: 1000, gid: 1000 };
+		}
+		return this.stat(path);
+	}
+
+	async link(oldPath: string, newPath: string): Promise<void> {
+		const o = normalizePath(oldPath);
+		const n = normalizePath(newPath);
+		const f = this.files.get(o);
+		if (!f) throw new Error(`ENOENT: ${o}`);
+		this.files.set(n, f);
+	}
+
+	async chmod(path: string, mode: number): Promise<void> {
+		const n = normalizePath(path);
+		const f = this.files.get(n);
+		if (f) { f.mode = (f.mode & 0o170000) | (mode & 0o7777); return; }
+		if (!this.dirs.has(n)) throw new Error(`ENOENT: ${n}`);
+	}
+
+	async chown(path: string, uid: number, gid: number): Promise<void> {
+		const n = normalizePath(path);
+		const f = this.files.get(n);
+		if (f) { f.uid = uid; f.gid = gid; return; }
+		if (!this.dirs.has(n)) throw new Error(`ENOENT: ${n}`);
+	}
+
+	async utimes(_path: string, _atime: number, _mtime: number): Promise<void> {
+		// No-op for test VFS
+	}
+
+	async truncate(path: string, length: number): Promise<void> {
+		const n = normalizePath(path);
+		const f = this.files.get(n);
+		if (!f) throw new Error(`ENOENT: ${n}`);
+		if (length < f.data.length) f.data = f.data.slice(0, length);
+		else if (length > f.data.length) {
+			const nd = new Uint8Array(length);
+			nd.set(f.data);
+			f.data = nd;
+		}
+	}
+}

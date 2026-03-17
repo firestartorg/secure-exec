@@ -1,0 +1,25 @@
+{
+  "name": "@secure-exec/runtime-wasmvm",
+  "version": "0.1.0",
+  "description": "WasmVM runtime driver — BusyBox-style WASM binary with Unix userland",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": {
+      "browser": "./src/worker-entry.browser.ts",
+      "import": "./src/worker-entry.ts",
+      "default": "./src/worker-entry.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

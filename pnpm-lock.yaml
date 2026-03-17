@@ -62,6 +62,47 @@ importers:
         specifier: ^4.19.2
         version: 4.21.0
 
+  packages/kernel:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
+
+  packages/os/browser:
+    dependencies:
+      '@secure-exec/kernel':
+        specifier: workspace:*
+        version: link:../../kernel
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
+
+  packages/os/node:
+    dependencies:
+      '@secure-exec/kernel':
+        specifier: workspace:*
+        version: link:../../kernel
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
+
   packages/playground:
     dependencies:
       secure-exec:
@@ -77,6 +118,18 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+
+  packages/runtime/wasmvm:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
 
   packages/secure-exec:
     dependencies:
