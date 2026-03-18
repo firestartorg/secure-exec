@@ -2421,7 +2421,7 @@
         "Tests pass"
       ],
       "priority": 141,
-      "passes": false,
+      "passes": true,
       "notes": "CLI E2E Phase 6 \u2014 final phase. Depends on US-080 (TerminalHarness), US-095 (isTTY). Claude Code uses Ink (React-based TUI) with cursor movement, screen clearing, and color codes. Known spawn stall risk. API tokens (ANTHROPIC_API_KEY, OPENAI_API_KEY) available at ~/misc/env.txt \u2014 source it before running tests that need real or mock-pointed API keys."
     },
     {

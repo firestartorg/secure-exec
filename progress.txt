@@ -1834,3 +1834,17 @@ PRD: ralph/kernel-hardening (46 stories)
   - --dangerously-skip-permissions and --no-session-persistence are essential for CI-friendly headless runs
   - Claude -p mode with --output-format json returns { type: "result", result: "...", ... } format
 ---
+
+## 2026-03-18 - US-103
+- What was implemented: Claude Code interactive PTY TUI tests with mock LLM server
+- Files changed:
+  - packages/secure-exec/tests/cli-tools/claude-interactive.test.ts — new test file with 6 tests
+- **Learnings for future iterations:**
+  - Claude interactive mode shows workspace trust dialog for new directories — need to auto-dismiss with Enter
+  - Claude's prompt indicator is ❯ (Unicode right-pointing triangle), not ASCII >
+  - Model name displays as "Haiku 4.5" (capitalized) in status bar, not "haiku"
+  - --no-session-persistence only works with --print mode, not interactive
+  - Must use real HOME for credentials — temp HOME triggers OAuth login flow
+  - Mock server queue must be padded (3+ responses) — Claude may make title/metadata requests
+  - /exit command works for clean exit from interactive mode
+---
