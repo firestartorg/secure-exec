@@ -455,16 +455,16 @@ export class PtyManager {
 		}
 	}
 
-	/** Echo data to output (master reads it back for display). */
+	/** Echo data to output (master reads it back for display). Throws EAGAIN when buffer is full. */
 	private echoOutput(state: PtyState, data: Uint8Array): void {
 		if (state.outputWaiters.length > 0) {
 			const waiter = state.outputWaiters.shift()!;
 			waiter(data);
 		} else {
-			// Best-effort: drop echo if output buffer is full
-			if (this.bufferBytes(state.outputBuffer) + data.length <= MAX_PTY_BUFFER_BYTES) {
-				state.outputBuffer.push(new Uint8Array(data));
+			if (this.bufferBytes(state.outputBuffer) + data.length > MAX_PTY_BUFFER_BYTES) {
+				throw new KernelError("EAGAIN", "PTY output buffer full (echo backpressure)");
 			}
+			state.outputBuffer.push(new Uint8Array(data));
 		}
 	}
 

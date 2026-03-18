@@ -180,6 +180,28 @@ describe("PTY buffer limit", () => {
 			manager.write(slave.description.id, new Uint8Array(1024)),
 		).not.toThrow();
 	});
+
+	it("echo throws EAGAIN when output buffer is full", async () => {
+		const manager = new PtyManager();
+		const { master, slave } = manager.createPty();
+
+		// Echo is on by default (canonical + echo). Fill output buffer via slave write.
+		const chunk = new Uint8Array(MAX_PTY_BUFFER_BYTES);
+		manager.write(slave.description.id, chunk);
+
+		// Master write with echo enabled — echo can't fit in full output buffer → EAGAIN
+		expect(() =>
+			manager.write(master.description.id, new Uint8Array([0x41])), // 'A'
+		).toThrowError(expect.objectContaining({ code: "EAGAIN" }));
+
+		// Drain master (output buffer) and verify echo resumes
+		await manager.read(master.description.id, MAX_PTY_BUFFER_BYTES);
+
+		// Now echo should work — write input, read echo back from master
+		manager.write(master.description.id, new Uint8Array([0x42])); // 'B'
+		const echo = await manager.read(master.description.id, 1);
+		expect(echo[0]).toBe(0x42);
+	});
 });
 
 describe("ID counter isolation", () => {
