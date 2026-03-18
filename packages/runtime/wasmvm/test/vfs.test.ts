@@ -511,6 +511,114 @@ describe('VFS', () => {
     });
   });
 
+  describe('snapshot / fromSnapshot / applySnapshot', () => {
+    it('snapshot() captures current filesystem state', () => {
+      const vfs = new VFS();
+      vfs.mkdirp('/app/src');
+      vfs.writeFile('/app/src/index.js', 'console.log("hello")');
+      vfs.writeFile('/tmp/data.txt', 'some data');
+      vfs.symlink('/tmp/data.txt', '/tmp/link.txt');
+
+      const snap = vfs.snapshot();
+
+      // Should contain our custom entries
+      const paths = snap.map(e => e.path);
+      expect(paths).toContain('/app');
+      expect(paths).toContain('/app/src');
+      expect(paths).toContain('/app/src/index.js');
+      expect(paths).toContain('/tmp/data.txt');
+      expect(paths).toContain('/tmp/link.txt');
+
+      // Verify file content is captured
+      const fileEntry = snap.find(e => e.path === '/app/src/index.js');
+      expect(fileEntry!.type).toBe('file');
+      expect(new TextDecoder().decode(fileEntry!.data!)).toBe('console.log("hello")');
+
+      // Verify symlink target is captured
+      const linkEntry = snap.find(e => e.path === '/tmp/link.txt');
+      expect(linkEntry!.type).toBe('symlink');
+      expect(linkEntry!.target).toBe('/tmp/data.txt');
+    });
+
+    it('fromSnapshot() restores from snapshot correctly', () => {
+      const original = new VFS();
+      original.mkdirp('/app/lib');
+      original.writeFile('/app/lib/util.js', 'export default 42');
+      original.writeFile('/app/index.js', 'import util from "./lib/util.js"');
+      original.chmod('/app/lib/util.js', 0o755);
+
+      const snap = original.snapshot();
+      const restored = VFS.fromSnapshot(snap);
+
+      // All files and dirs restored
+      expect(restored.exists('/app/lib')).toBe(true);
+      expect(restored.exists('/app/lib/util.js')).toBe(true);
+      expect(restored.exists('/app/index.js')).toBe(true);
+
+      // Content preserved
+      expect(new TextDecoder().decode(restored.readFile('/app/lib/util.js'))).toBe('export default 42');
+      expect(new TextDecoder().decode(restored.readFile('/app/index.js'))).toBe('import util from "./lib/util.js"');
+
+      // Permissions preserved
+      expect(restored.stat('/app/lib/util.js').mode).toBe(0o755);
+
+      // Default layout still present
+      expect(restored.exists('/bin')).toBe(true);
+      expect(restored.exists('/tmp')).toBe(true);
+      expect(restored.exists('/dev/null')).toBe(true);
+    });
+
+    it('fromSnapshot() with empty array returns default VFS', () => {
+      const vfs = VFS.fromSnapshot([]);
+      expect(vfs.exists('/')).toBe(true);
+      expect(vfs.exists('/bin')).toBe(true);
+      expect(vfs.exists('/tmp')).toBe(true);
+    });
+
+    it('applySnapshot() replaces VFS contents in place', () => {
+      const vfs = new VFS();
+      vfs.writeFile('/tmp/old.txt', 'old data');
+
+      // Create snapshot from a different VFS
+      const source = new VFS();
+      source.writeFile('/tmp/new.txt', 'new data');
+      const snap = source.snapshot();
+
+      // Apply to original — replaces, not merges
+      vfs.applySnapshot(snap);
+
+      expect(vfs.exists('/tmp/new.txt')).toBe(true);
+      expect(new TextDecoder().decode(vfs.readFile('/tmp/new.txt'))).toBe('new data');
+      // Old file gone after reset
+      expect(vfs.exists('/tmp/old.txt')).toBe(false);
+    });
+
+    it('applySnapshot() preserves reference identity', () => {
+      const vfs = new VFS();
+      const ref = vfs; // same object
+
+      const source = new VFS();
+      source.writeFile('/tmp/applied.txt', 'applied');
+      vfs.applySnapshot(source.snapshot());
+
+      // ref still points to same instance with updated state
+      expect(ref.exists('/tmp/applied.txt')).toBe(true);
+      expect(new TextDecoder().decode(ref.readFile('/tmp/applied.txt'))).toBe('applied');
+    });
+
+    it('snapshot round-trip preserves symlinks', () => {
+      const vfs = new VFS();
+      vfs.writeFile('/tmp/target.txt', 'target content');
+      vfs.symlink('/tmp/target.txt', '/tmp/sym.txt');
+
+      const restored = VFS.fromSnapshot(vfs.snapshot());
+
+      expect(restored.lstat('/tmp/sym.txt').type).toBe('symlink');
+      expect(restored.readlink('/tmp/sym.txt')).toBe('/tmp/target.txt');
+      expect(new TextDecoder().decode(restored.readFile('/tmp/sym.txt'))).toBe('target content');
+    });
+  });
+
   describe('VfsError', () => {
     it('should be an instance of Error', () => {
       const err = new VfsError('ENOENT', 'no such file');

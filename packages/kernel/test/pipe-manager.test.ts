@@ -78,4 +78,47 @@ describe("PipeManager", () => {
 		const result = await manager.read(read.description.id, 1024);
 		expect(new TextDecoder().decode(result!)).toBe("hello world");
 	});
+
+	it("partial read returns only requested bytes, preserves remainder", async () => {
+		const manager = new PipeManager();
+		const { read, write } = manager.createPipe();
+
+		// Write 100 bytes
+		const data = new Uint8Array(100);
+		for (let i = 0; i < 100; i++) data[i] = i;
+		manager.write(write.description.id, data);
+
+		// Read only 10 bytes
+		const first = await manager.read(read.description.id, 10);
+		expect(first!.length).toBe(10);
+		expect(Array.from(first!)).toEqual(Array.from(data.subarray(0, 10)));
+
+		// Remaining 90 bytes still available
+		const rest = await manager.read(read.description.id, 1024);
+		expect(rest!.length).toBe(90);
+		expect(Array.from(rest!)).toEqual(Array.from(data.subarray(10)));
+	});
+
+	it("multiple partial reads drain pipe incrementally", async () => {
+		const manager = new PipeManager();
+		const { read, write } = manager.createPipe();
+
+		const data = new Uint8Array(50);
+		for (let i = 0; i < 50; i++) data[i] = i + 100;
+		manager.write(write.description.id, data);
+
+		// Drain in 10-byte increments
+		const collected: number[] = [];
+		for (let i = 0; i < 5; i++) {
+			const chunk = await manager.read(read.description.id, 10);
+			expect(chunk!.length).toBe(10);
+			collected.push(...chunk!);
+		}
+		expect(collected).toEqual(Array.from(data));
+
+		// Buffer now empty — close write end so next read returns EOF
+		manager.close(write.description.id);
+		const eof = await manager.read(read.description.id, 10);
+		expect(eof).toBeNull();
+	});
 });
