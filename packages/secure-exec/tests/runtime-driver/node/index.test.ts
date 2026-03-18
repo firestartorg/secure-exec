@@ -1228,6 +1228,30 @@ describe("NodeRuntime", () => {
 		expect(summary.failures).toEqual([]);
 	});
 
+	it("fetch API globals remain functional after hardening", async () => {
+		const capture = createConsoleCapture();
+		proc = createTestNodeRuntime({
+			onStdio: capture.onStdio,
+			driver: createNodeDriver({ useDefaultNetwork: true }),
+		});
+		const result = await proc.exec(`
+			const results = {};
+			results.fetchType = typeof fetch;
+			results.headersOk = typeof new Headers() === "object";
+			results.requestOk = new Request("http://localhost") instanceof Request;
+			results.responseOk = new Response("ok") instanceof Response;
+			results.blobType = typeof Blob;
+			console.log(JSON.stringify(results));
+		`);
+		expect(result.code).toBe(0);
+		const results = JSON.parse(capture.stdout().trim()) as Record<string, unknown>;
+		expect(results.fetchType).toBe("function");
+		expect(results.headersOk).toBe(true);
+		expect(results.requestOk).toBe(true);
+		expect(results.responseOk).toBe(true);
+		expect(results.blobType).toBe("function");
+	});
+
 	it("keeps stdlib globals compatible and mutable runtime globals writable", async () => {
 		const capture = createConsoleCapture();
 		const fs = createFs();
