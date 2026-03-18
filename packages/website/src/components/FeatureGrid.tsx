@@ -18,7 +18,7 @@ const features = [
     description:
       "fs, child_process, http, dns, process, os — bridged to real host capabilities, not stubbed. Run Express, Hono, Next.js, and any npm package.",
     hoverColor: "group-hover:text-green-400",
-    link: { href: "/docs/node-compatability", label: "Compatibility matrix" },
+    link: { href: "/docs/nodejs-compatibility", label: "Compatibility matrix" },
     chromeAngle: "200deg",
   },
   {

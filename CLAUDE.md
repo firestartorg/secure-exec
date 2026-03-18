@@ -5,6 +5,8 @@
 - website: https://secureexec.dev
 - docs: https://secureexec.dev/docs
 - GitHub: https://github.com/rivet-dev/secure-exec
+- GitHub org is `rivet-dev` — NEVER use `anthropics` or any other org in GitHub URLs for this repo
+- the docs slug for Node.js compatibility is `nodejs-compatibility` (not `node-compatability` or other variants)
 
 ## NPM Packages
 

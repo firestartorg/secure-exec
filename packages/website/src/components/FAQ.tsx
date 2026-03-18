@@ -117,7 +117,7 @@ const faqs: { question: string; answer: React.ReactNode }[] = [
       <>
         Yes. Most Node.js core modules work — including fs, child_process, http, dns, process, and os. These are
         bridged to real host capabilities, not stubbed.{" "}
-        <a href="/docs/node-compatability" className="text-red-400 hover:text-red-300">
+        <a href="/docs/nodejs-compatibility" className="text-red-400 hover:text-red-300">
           Compatibility matrix →
         </a>
       </>
