@@ -1648,7 +1648,7 @@
         "Tests pass"
       ],
       "priority": 97,
-      "passes": false,
+      "passes": true,
       "notes": "HIGH — process.ts:554-556 and process.ts:983-1034. chdir accepts any path without validation; setInterval(0) creates infinite microtask loop blocking event loop."
     },
     {

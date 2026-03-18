@@ -1491,3 +1491,17 @@ PRD: ralph/kernel-hardening (46 stories)
   - Testing FD exhaustion requires pre-populating VFS with files (InMemoryFileSystem starts empty, no /tmp or /app directories)
   - createInMemoryFileSystem().writeFile() auto-creates parent directories
 ---
+
+## 2026-03-18 - US-127
+- Validated process.chdir against VFS: stat the target, throw ENOENT if missing, ENOTDIR if not a directory
+- Enforced minimum 1ms delay for setInterval to prevent microtask CPU spin (Math.max(1, delay ?? 0))
+- Added 3 tests: chdir non-existent throws ENOENT, chdir existing directory succeeds, setInterval(0) counter is bounded
+- Files changed:
+  - `packages/secure-exec-core/src/bridge/process.ts` — added _fs declaration, chdir validation with stat+isDirectory, setInterval minimum delay
+  - `packages/secure-exec/tests/runtime-driver/node/bridge-hardening.test.ts` — added chdir validation and setInterval minimum delay test sections
+- **Learnings for future iterations:**
+  - Bridge process.ts needs `declare const _fs: FsFacadeBridge` to access the VFS bridge for chdir validation — _fs is a host-injected global
+  - stat bridge returns JSON with `isDirectory` boolean field (not a method) — parsed.isDirectory, not parsed.isDirectory()
+  - setInterval(0) without minimum delay causes infinite microtask loop in the else branch when _scheduleTimer is available but actualDelay is 0 — the condition `actualDelay > 0` skips the host timer path
+  - setTimeout(0) does NOT need the same fix since it's one-shot (no infinite loop)
+---
