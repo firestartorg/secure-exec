@@ -665,6 +665,7 @@ export async function setupRequire(
 					method?: string;
 					headers?: Record<string, string>;
 					body?: string | null;
+					rejectUnauthorized?: boolean;
 				}>("network.httpRequest options", optionsJson, jsonPayloadLimit);
 				return adapter
 					.httpRequest(url, options)

@@ -447,6 +447,9 @@ export function createDefaultNetworkAdapter(): NetworkAdapter {
 					path: urlObj.pathname + urlObj.search,
 					method: options?.method || "GET",
 					headers: options?.headers || {},
+					...(isHttps && options?.rejectUnauthorized !== undefined && {
+						rejectUnauthorized: options.rejectUnauthorized,
+					}),
 				};
 
 				const req = transport.request(reqOptions, (res) => {

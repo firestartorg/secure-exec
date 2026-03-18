@@ -710,10 +710,15 @@ export class ClientRequest {
       }
 
       const url = this._buildUrl();
+      const tls: Record<string, unknown> = {};
+      if ((this._options as Record<string, unknown>).rejectUnauthorized !== undefined) {
+        tls.rejectUnauthorized = (this._options as Record<string, unknown>).rejectUnauthorized;
+      }
       const optionsJson = JSON.stringify({
         method: this._options.method || "GET",
         headers: this._options.headers || {},
         body: this._body || null,
+        ...tls,
       });
 
       const responseJson = await _networkHttpRequestRaw.apply(undefined, [url, optionsJson], {
@@ -1554,10 +1559,17 @@ ServerResponseCallable.prototype = Object.create(ServerResponseBridge.prototype,
 });
 
 // Create HTTP module
-function createHttpModule(_protocol: string): Record<string, unknown> {
+function createHttpModule(protocol: string): Record<string, unknown> {
+  const defaultProtocol = protocol === "https" ? "https:" : "http:";
   const moduleAgent = new Agent({ keepAlive: false });
   // Set module-level globalAgent so ClientRequest defaults to it
   _moduleGlobalAgent = moduleAgent;
+
+  // Ensure protocol is set on request options (defaults to module protocol)
+  function ensureProtocol(opts: nodeHttp.RequestOptions): nodeHttp.RequestOptions {
+    if (!opts.protocol) return { ...opts, protocol: defaultProtocol };
+    return opts;
+  }
 
   return {
     request(options: string | URL | nodeHttp.RequestOptions, callback?: (res: IncomingMessage) => void): ClientRequest {
@@ -1580,7 +1592,7 @@ function createHttpModule(_protocol: string): Record<string, unknown> {
       } else {
         opts = options;
       }
-      return new ClientRequest(opts, callback as (res: IncomingMessage) => void);
+      return new ClientRequest(ensureProtocol(opts), callback as (res: IncomingMessage) => void);
     },
 
     get(options: string | URL | nodeHttp.RequestOptions, callback?: (res: IncomingMessage) => void): ClientRequest {
@@ -1605,7 +1617,7 @@ function createHttpModule(_protocol: string): Record<string, unknown> {
       } else {
         opts = { ...options, method: "GET" };
       }
-      const req = new ClientRequest(opts, callback as (res: IncomingMessage) => void);
+      const req = new ClientRequest(ensureProtocol(opts), callback as (res: IncomingMessage) => void);
       req.end();
       return req;
     },
