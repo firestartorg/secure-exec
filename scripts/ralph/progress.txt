@@ -1793,3 +1793,26 @@ PRD: ralph/kernel-hardening (46 stories)
   - PTY slave refCount tracking across fork + applyStdioOverride can be complex (5 refs at peak for 3 stdio FDs + inherited fork copy + controller copy) but the cleanup chain correctly decrements all
   - poll_oneoff always reports FD_READ as ready immediately — brush-shell handles this correctly
 ---
+
+## 2026-03-18 - US-095
+- Implemented controllable isTTY and setRawMode under PTY for bridge process module
+- Added stdinIsTTY/stdoutIsTTY/stderrIsTTY fields to ProcessConfig (api-types.ts and bridge/process.ts)
+- Added _ptySetRawMode bridge ref to bridge-contract.ts and global-exposure.ts inventory
+- Bridge process.ts reads isTTY from _processConfig and sets on stdin/stdout/stderr streams
+- Bridge process.stdin.setRawMode(mode) calls _ptySetRawMode bridge ref; throws when !isTTY
+- bridge-setup.ts creates _ptySetRawMode ref when stdinIsTTY is true, delegates to deps.onPtySetRawMode callback
+- Added onPtySetRawMode optional callback to DriverDeps for kernel-level PTY integration
+- Files changed:
+  - packages/secure-exec-core/src/shared/api-types.ts
+  - packages/secure-exec-core/src/shared/bridge-contract.ts
+  - packages/secure-exec-core/src/shared/global-exposure.ts
+  - packages/secure-exec-core/src/bridge/process.ts
+  - packages/secure-exec-node/src/isolate-bootstrap.ts
+  - packages/secure-exec-node/src/bridge-setup.ts
+  - packages/secure-exec/tests/runtime-driver/node/runtime.test.ts
+- **Learnings for future iterations:**
+  - ProcessConfig fields flow: api-types.ts (shared type) → bridge/process.ts (bridge-side ProcessConfig) → _processConfig global → runtime code
+  - Bridge refs for optional features (like PTY) should only be installed when the feature is active (stdinIsTTY=true) — bridge code checks typeof for optional refs
+  - DriverDeps optional callback pattern (onPtySetRawMode) allows kernel-level integration without coupling execution driver to kernel internals
+  - The 6 failing tests in index.test.ts (SSE, upgrade, HTTP server) are pre-existing and not related to PTY changes
+---
