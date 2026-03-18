@@ -16,7 +16,8 @@ describe("DeviceLayer", () => {
 	it("/dev/null write is discarded", async () => {
 		const vfs = createTestVfs();
 		await vfs.writeFile("/dev/null", "data");
-		// No error, data discarded
+		const readBack = await vfs.readFile("/dev/null");
+		expect(readBack.length).toBe(0);
 	});
 
 	it("/dev/zero reads as zeros", async () => {

@@ -1075,3 +1075,19 @@ PRD: ralph/kernel-hardening (46 stories)
   - MockRuntimeDriver stdout doesn't flow through kernel pipes for proc_spawned processes — spy.calls assertions are the reliable way to verify routing
   - brush-shell proc_spawn dispatches any command not in WASMVM_COMMANDS through the kernel — mount a spy driver for an unlisted command name to test routing
 ---
+
+## 2026-03-17 - US-065
+- Fixed /dev/null write test: added read-back assertion verifying data is discarded (returns empty)
+- Fixed ESRCH signal test: verify error.code === "ESRCH" instead of string-match on message; use PID 99999
+- Fixed worker-adapter onError test: replaced fallback `new Error()` (which passed `toBeInstanceOf(Error)`) with reject + handlerFired sentinel
+- Fixed worker-adapter onExit test: replaced fallback `-1` (which passed `typeof === 'number'`) with reject + handlerFired sentinel
+- Fixed fd-table stdio test: assert FILETYPE_CHARACTER_DEVICE for all 3 FDs and correct flags (O_RDONLY for stdin, O_WRONLY for stdout/stderr)
+- Files changed:
+  - packages/kernel/test/device-layer.test.ts
+  - packages/kernel/test/kernel-integration.test.ts
+  - packages/kernel/test/fd-table.test.ts
+  - packages/runtime/wasmvm/test/worker-adapter.test.ts
+- **Learnings for future iterations:**
+  - Timeout-based fallback values in tests are a common pattern for weak assertions — if the fallback satisfies the assertion, the test passes even when the handler never fires
+  - Always verify error.code (structured) rather than string-matching on error.message for KernelError assertions
+---

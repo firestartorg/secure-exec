@@ -1132,7 +1132,12 @@ describe("kernel + MockRuntimeDriver integration", () => {
 
 			// KernelInterface.kill for a PID that was never spawned
 			const ki = driver.kernelInterface!;
-			expect(() => ki.kill(9999, 15)).toThrow("ESRCH");
+			try {
+				ki.kill(99999, 15);
+				expect.unreachable("should have thrown");
+			} catch (err: unknown) {
+				expect((err as { code: string }).code).toBe("ESRCH");
+			}
 		});
 
 		it("kill on already-exited process is a no-op", async () => {

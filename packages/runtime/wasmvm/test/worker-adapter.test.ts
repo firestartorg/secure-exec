@@ -193,14 +193,17 @@ describe('WorkerAdapter', () => {
       // Spawn a non-existent script to trigger an error
       const worker = await adapter.spawn(join(__dirname, 'fixtures', 'nonexistent.js'));
 
-      const error = await new Promise<Error>((resolve) => {
-        const timeout = setTimeout(() => resolve(new Error('No error received')), 5000);
+      let handlerFired = false;
+      const error = await new Promise<Error>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('error handler never fired')), 5000);
         worker.onError((err) => {
+          handlerFired = true;
           clearTimeout(timeout);
           resolve(err);
         });
       });
 
+      expect(handlerFired).toBe(true);
       expect(error).toBeInstanceOf(Error);
       await (worker.terminate() as Promise<number>).catch(() => {});
     });
@@ -211,9 +214,11 @@ describe('WorkerAdapter', () => {
       const adapter = new WorkerAdapter();
       const worker = await adapter.spawn(ECHO_WORKER);
 
-      const exitCode = new Promise<number>((resolve) => {
-        const timeout = setTimeout(() => resolve(-1), 5000);
+      let handlerFired = false;
+      const exitCode = new Promise<number>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('exit handler never fired')), 5000);
         worker.onExit((code) => {
+          handlerFired = true;
           clearTimeout(timeout);
           resolve(code);
         });
@@ -221,6 +226,7 @@ describe('WorkerAdapter', () => {
 
       await worker.terminate();
       const code = await exitCode;
+      expect(handlerFired).toBe(true);
       expect(typeof code).toBe('number');
     });
 

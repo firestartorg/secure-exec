@@ -7,10 +7,17 @@ describe("ProcessFDTable", () => {
 		const manager = new FDTableManager();
 		const table = manager.create(1);
 
-		expect(table.get(0)).toBeDefined();
-		expect(table.get(1)).toBeDefined();
-		expect(table.get(2)).toBeDefined();
-		expect(table.get(0)!.filetype).toBe(FILETYPE_CHARACTER_DEVICE);
+		const stdin = table.get(0)!;
+		const stdout = table.get(1)!;
+		const stderr = table.get(2)!;
+
+		expect(stdin.filetype).toBe(FILETYPE_CHARACTER_DEVICE);
+		expect(stdout.filetype).toBe(FILETYPE_CHARACTER_DEVICE);
+		expect(stderr.filetype).toBe(FILETYPE_CHARACTER_DEVICE);
+
+		expect(stdin.description.flags).toBe(O_RDONLY);
+		expect(stdout.description.flags).toBe(O_WRONLY);
+		expect(stderr.description.flags).toBe(O_WRONLY);
 	});
 
 	it("opens new FDs starting at 3", () => {
