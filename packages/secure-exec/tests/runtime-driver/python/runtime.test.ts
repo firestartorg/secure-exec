@@ -5,8 +5,8 @@ import {
 	PythonRuntime,
 	createInMemoryFileSystem,
 	createNodeDriver,
-	createPyodideRuntimeDriverFactory,
 } from "../../../src/index.js";
+import { createPyodideRuntimeDriverFactory } from "@secure-exec/python";
 import type { PythonRuntimeOptions } from "../../../src/index.js";
 
 type RuntimeOptions = Omit<

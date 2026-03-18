@@ -48,24 +48,24 @@ export type {
 	NodeRuntimeDriverFactoryOptions,
 } from "@secure-exec/node";
 
-// Re-export Python runtime-driver factories.
-export {
-	createPyodideRuntimeDriverFactory,
-	PyodideRuntimeDriver,
-} from "@secure-exec/python";
+// TODO: Re-enable once @secure-exec/python is a reliable optional dependency
+// export {
+// 	createPyodideRuntimeDriverFactory,
+// 	PyodideRuntimeDriver,
+// } from "@secure-exec/python";
 
-// Re-export browser driver factories.
-export {
-	createBrowserDriver,
-	createBrowserNetworkAdapter,
-	createBrowserRuntimeDriverFactory,
-	createOpfsFileSystem,
-} from "@secure-exec/browser";
-export type {
-	BrowserDriverOptions,
-	BrowserRuntimeDriverFactoryOptions,
-	BrowserRuntimeSystemOptions,
-} from "@secure-exec/browser";
+// TODO: Re-enable once @secure-exec/browser is a reliable optional dependency
+// export {
+// 	createBrowserDriver,
+// 	createBrowserNetworkAdapter,
+// 	createBrowserRuntimeDriverFactory,
+// 	createOpfsFileSystem,
+// } from "@secure-exec/browser";
+// export type {
+// 	BrowserDriverOptions,
+// 	BrowserRuntimeDriverFactoryOptions,
+// 	BrowserRuntimeSystemOptions,
+// } from "@secure-exec/browser";
 
 export { createInMemoryFileSystem } from "./shared/in-memory-fs.js";
 export {

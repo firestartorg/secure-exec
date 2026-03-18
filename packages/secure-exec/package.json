@@ -20,6 +20,10 @@
     "./browser": {
       "import": "./dist/browser-runtime.js",
       "types": "./dist/browser-runtime.d.ts"
+    },
+    "./python": {
+      "import": "./dist/python-runtime.js",
+      "types": "./dist/python-runtime.d.ts"
     }
   },
   "scripts": {
@@ -35,10 +39,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@secure-exec/browser": "workspace:*",
     "@secure-exec/core": "workspace:*",
     "@secure-exec/node": "workspace:*",
-    "@secure-exec/python": "workspace:*",
     "buffer": "^6.0.3",
     "esbuild": "^0.27.1",
     "isolated-vm": "^6.0.0",
@@ -47,6 +49,10 @@
     "sucrase": "^3.35.0",
     "text-encoding-utf-8": "^1.0.2",
     "whatwg-url": "^15.1.0"
+  },
+  "optionalDependencies": {
+    "@secure-exec/browser": "workspace:*",
+    "@secure-exec/python": "workspace:*"
   },
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "^0.60.0",
