@@ -1972,3 +1972,14 @@ PRD: ralph/kernel-hardening (46 stories)
   - ANTHROPIC_BASE_URL mock redirect probe needs ≥20s timeout (first-run SQLite migration in fresh XDG_DATA_HOME takes time)
   - OpenCode TUI boot is fast (~2-3s) once database is initialized; "Ask anything" is the reliable boot indicator
 ---
+
+## 2026-03-18 - US-102
+- Added missing "bad API key exits non-zero" test to claude-headless.test.ts
+- Test creates a tiny HTTP server returning 401 (authentication_error) to simulate invalid API key
+- All 9 tests pass (boot, text output, JSON, stream-json, file read, file write, bash, bad API key, good exit code)
+- Files changed: packages/secure-exec/tests/cli-tools/claude-headless.test.ts
+- **Learnings for future iterations:**
+  - Claude Code retries on 401 errors with backoff — bad API key test needs 15s+ timeout to allow Claude to exhaust retries and exit
+  - Use inline http.createServer for one-off error responses rather than modifying the shared mock server
+  - AddressInfo type import needed from node:net when using server.address()
+---
