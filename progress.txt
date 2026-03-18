@@ -1505,3 +1505,15 @@ PRD: ralph/kernel-hardening (46 stories)
   - setInterval(0) without minimum delay causes infinite microtask loop in the else branch when _scheduleTimer is available but actualDelay is 0 — the condition `actualDelay > 0` skips the host timer path
   - setTimeout(0) does NOT need the same fix since it's one-shot (no infinite loop)
 ---
+
+## 2026-03-18 - US-128
+- Added payload size validation on network response bodies (fetch, httpRequest) and readDir results before transferring to the isolate
+- Files changed:
+  - `packages/secure-exec-node/src/bridge-setup.ts` — added assertTextPayloadSize checks on fetch response JSON, httpRequest response JSON, and readDir JSON; added fsJsonPayloadLimit variable in fs block
+  - `packages/secure-exec/tests/runtime-driver/node/payload-limits.test.ts` — added 5 tests: oversized fetch response, oversized httpRequest response, oversized readDir, normal readDir, normal fetch response
+- **Learnings for future iterations:**
+  - Network response validation uses the same assertTextPayloadSize + jsonPayloadLimit pattern as request validation — validate after JSON.stringify, before returning to isolate
+  - readDir is in the fs block which had no jsonPayloadLimit variable — need to pull deps.isolateJsonPayloadLimitBytes into a local const (fsJsonPayloadLimit)
+  - Creating ~136k VFS files for readDir overflow test is fast with InMemoryFileSystem (writeFile auto-creates parents)
+  - httpRequest sandbox test uses http.request() with callback pattern (not fetch) to exercise the separate httpRequest adapter path
+---
