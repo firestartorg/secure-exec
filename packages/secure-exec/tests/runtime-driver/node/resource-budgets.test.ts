@@ -294,6 +294,66 @@ describe("NodeRuntime resource budgets", () => {
 			expect(out).toContain("blocked:true");
 			expect(out).toContain("created:3");
 		});
+
+		it("cleared timers free slots for new ones", async () => {
+			const capture = createConsoleCapture();
+			proc = createTestNodeRuntime({
+				onStdio: capture.onStdio,
+				resourceBudgets: { maxTimers: 6 },
+			});
+
+			const result = await proc.exec(`
+				// Fill all 6 slots
+				const ids = [];
+				for (let i = 0; i < 6; i++) ids.push(setInterval(() => {}, 60000));
+				// Cap reached — next one should throw
+				let blocked = false;
+				try { setInterval(() => {}, 60000); } catch(e) { blocked = true; }
+				// Clear half
+				for (let i = 0; i < 3; i++) clearInterval(ids[i]);
+				// Now 3 slots are free — create 3 more
+				let created = 0;
+				for (let i = 0; i < 3; i++) {
+					try { setInterval(() => {}, 60000); created++; } catch(e) {}
+				}
+				// 7th total new one should be blocked again
+				let blocked2 = false;
+				try { setInterval(() => {}, 60000); } catch(e) { blocked2 = true; }
+				console.log('blocked:' + blocked);
+				console.log('created:' + created);
+				console.log('blocked2:' + blocked2);
+			`);
+
+			expect(result.code).toBe(0);
+			const out = capture.stdout();
+			expect(out).toContain("blocked:true");
+			expect(out).toContain("created:3");
+			expect(out).toContain("blocked2:true");
+		});
+
+		it("normal code with fewer than 100 timers works fine", async () => {
+			const capture = createConsoleCapture();
+			proc = createTestNodeRuntime({
+				onStdio: capture.onStdio,
+			});
+
+			const result = await proc.exec(`
+				let count = 0;
+				for (let i = 0; i < 50; i++) {
+					setTimeout(() => {}, 60000);
+					count++;
+				}
+				for (let i = 0; i < 30; i++) {
+					setInterval(() => {}, 60000);
+					count++;
+				}
+				console.log('timers:' + count);
+			`);
+
+			expect(result.code).toBe(0);
+			const out = capture.stdout();
+			expect(out).toContain("timers:80");
+		});
 	});
 
 	// -----------------------------------------------------------------------
