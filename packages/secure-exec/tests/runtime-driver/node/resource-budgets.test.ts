@@ -84,10 +84,11 @@ describe("NodeRuntime resource budgets", () => {
 		});
 
 		it("silently drops output bytes beyond the limit", async () => {
+			const budget = 100;
 			const capture = createConsoleCapture();
 			proc = createTestNodeRuntime({
 				onStdio: capture.onStdio,
-				resourceBudgets: { maxOutputBytes: 100 },
+				resourceBudgets: { maxOutputBytes: budget },
 			});
 			// Write 200+ bytes via console.log
 			const result = await proc.exec(`
@@ -95,23 +96,27 @@ describe("NodeRuntime resource budgets", () => {
 			`);
 			expect(result.code).toBe(0);
 			const total = capture.allText();
-			// Should have captured some output but not all 200+ bytes
-			expect(total.length).toBeLessThanOrEqual(200);
+			// Last write that crosses the budget boundary is allowed through,
+			// but subsequent writes are dropped — allow small overhead for that one message
+			expect(total.length).toBeLessThanOrEqual(budget + 32);
 			expect(total.length).toBeGreaterThan(0);
 		});
 
 		it("applies to stderr as well", async () => {
+			const budget = 50;
 			const capture = createConsoleCapture();
 			proc = createTestNodeRuntime({
 				onStdio: capture.onStdio,
-				resourceBudgets: { maxOutputBytes: 50 },
+				resourceBudgets: { maxOutputBytes: budget },
 			});
 			const result = await proc.exec(`
 				for (let i = 0; i < 20; i++) console.error("0123456789");
 			`);
 			expect(result.code).toBe(0);
 			const total = capture.allText();
-			expect(total.length).toBeLessThanOrEqual(100);
+			// Same enforcement as stdout — budget + one overflow message
+			expect(total.length).toBeLessThanOrEqual(budget + 32);
+			expect(total.length).toBeGreaterThan(0);
 		});
 	});
 
@@ -240,17 +245,19 @@ describe("NodeRuntime resource budgets", () => {
 		});
 
 		it("bridge returns error when budget exceeded", async () => {
+			const budget = 5;
+			const totalCalls = 10;
 			const capture = createConsoleCapture();
 			proc = createTestNodeRuntime({
 				permissions: allowAllFs,
 				onStdio: capture.onStdio,
-				resourceBudgets: { maxBridgeCalls: 5 },
+				resourceBudgets: { maxBridgeCalls: budget },
 			});
 
 			const result = await proc.exec(`
 				const fs = require('fs');
 				let errors = 0;
-				for (let i = 0; i < 10; i++) {
+				for (let i = 0; i < ${totalCalls}; i++) {
 					try {
 						fs.existsSync('/tmp');
 					} catch(e) {
@@ -260,12 +267,12 @@ describe("NodeRuntime resource budgets", () => {
 				console.log('errors:' + errors);
 			`);
 
-			// Some calls should have failed
+			// Exactly totalCalls - budget calls should fail
 			expect(result.code).toBe(0);
 			const out = capture.stdout();
 			expect(out).toContain("errors:");
 			const errCount = parseInt(out.match(/errors:(\d+)/)?.[1] ?? "0");
-			expect(errCount).toBeGreaterThan(0);
+			expect(errCount).toBe(totalCalls - budget);
 		});
 	});
 });

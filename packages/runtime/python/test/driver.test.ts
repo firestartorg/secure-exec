@@ -458,6 +458,8 @@ except Exception as e:
       const stdout = outChunks.map(c => new TextDecoder().decode(c)).join('');
       // Pyodide runs in WASM sandbox — should not access host filesystem
       expect(stdout).not.toContain('SECURITY_BREACH');
+      // Positive assertion: the exception handler ran and printed the block message
+      expect(stdout).toContain('blocked:');
     }, 30_000);
 
     it('SystemExit is caught and returns exit code', async () => {

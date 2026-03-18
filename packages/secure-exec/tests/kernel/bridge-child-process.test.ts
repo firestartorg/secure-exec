@@ -191,16 +191,18 @@ describe.skipIf(skipReason)('bridge child_process exploit/abuse paths', () => {
   it('child_process cannot escape to host shell', async () => {
     ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
 
-    // All shell commands route through kernel WasmVM, not host
+    // Use a command that produces different output in sandbox vs host:
+    // /etc/hostname exists on the host but not in the kernel VFS
     const chunks: Uint8Array[] = [];
     const proc = ctx.kernel.spawn('node', ['-e', `
       const { execSync } = require('child_process');
       try {
-        // This should run in WasmVM shell, not host shell
-        const result = execSync('echo sandbox-only', { encoding: 'utf-8' });
-        console.log(result.trim());
+        const result = execSync('cat /etc/hostname', { encoding: 'utf-8' });
+        // If we get here, the command read a host-only file
+        console.log('ESCAPED:' + result.trim());
       } catch (e) {
-        console.log('error');
+        // Expected: /etc/hostname doesn't exist in the sandbox VFS
+        console.log('sandbox:contained');
       }
     `], {
       onStdout: (data) => chunks.push(data),
@@ -208,9 +210,10 @@ describe.skipIf(skipReason)('bridge child_process exploit/abuse paths', () => {
 
     await proc.wait();
     const output = chunks.map(c => new TextDecoder().decode(c)).join('');
-    // If this outputs 'sandbox-only', the command ran inside WasmVM (safe)
-    // If it somehow escaped, we'd see different behavior
-    expect(output).toContain('sandbox-only');
+    // Positive: command ran in sandbox and couldn't access host filesystem
+    expect(output).toContain('sandbox:contained');
+    // Negative: no host data leaked
+    expect(output).not.toContain('ESCAPED:');
   });
 
   it('child_process cannot read host filesystem', async () => {

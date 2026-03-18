@@ -484,18 +484,21 @@ describe('WasmVM RuntimeDriver', () => {
 
     it('pipe read/write FileDescriptions are freed after process exits', async () => {
       const vfs = new SimpleVFS();
-      // Write file within SAB capacity
-      const smallData = new Uint8Array(1024);
-      for (let i = 0; i < smallData.length; i++) smallData[i] = 0x41 + (i % 26);
-      await vfs.writeFile('/small-file', smallData);
+      await vfs.writeFile('/small-file', 'hello');
 
       kernel = createKernel({ filesystem: vfs as any });
       await kernel.mount(createWasmVmRuntime({ wasmBinaryPath: WASM_BINARY_PATH }));
 
-      // Small file reads should work fine
-      const result = await kernel.exec('cat /small-file');
+      // Capture FD table count before spawning
+      const fdMgr = (kernel as any).fdTableManager;
+      const tableSizeBefore = fdMgr.size;
+
+      // echo uses pipes (stdin/stdout wired between kernel and WasmVM)
+      const result = await kernel.exec('echo done');
       expect(result.exitCode).toBe(0);
-      expect(result.stdout.length).toBe(1024);
+
+      // After process exits, its FD table (including pipe FDs) must be cleaned up
+      expect(fdMgr.size).toBe(tableSizeBefore);
     });
   });
 
