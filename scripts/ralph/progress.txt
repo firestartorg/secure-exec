@@ -3,6 +3,9 @@ Started: 2026-03-17
 PRD: ralph/kernel-hardening (46 stories)
 
 ## Codebase Patterns
+- Bridge `createHttpModule(protocol)` sets the default protocol (http: or https:) for requests — always goes through `ensureProtocol()` helper
+- Sandbox exec() does NOT support top-level await; use `(async () => { ... })()` IIFE pattern for async sandbox code
+- stream.Transform/PassThrough available in bridge via stream-browserify polyfill — no bridge code needed
 - Yarn/bun commands in test infra need COREPACK_ENABLE_STRICT=0 in env because workspace root has packageManager: "pnpm" — corepack blocks other PMs otherwise
 - Yarn berry fixtures need `packageManager: "yarn@4.x.x"` in package.json so corepack uses berry instead of falling back to yarn classic (v1)
 - Kernel-opened vfsFile resources have ino=0 (sentinel); code using resource.ino must handle ino===0 by resolving via vfs.getIno(path) — affects fd_filestat_get and any future per-fd stat operations
@@ -1815,4 +1818,23 @@ PRD: ralph/kernel-hardening (46 stories)
   - Bridge refs for optional features (like PTY) should only be installed when the feature is active (stdinIsTTY=true) — bridge code checks typeof for optional refs
   - DriverDeps optional callback pattern (onPtySetRawMode) allows kernel-level integration without coupling execution driver to kernel internals
   - The 6 failing tests in index.test.ts (SSE, upgrade, HTTP server) are pre-existing and not related to PTY changes
+---
+
+## 2026-03-18 - US-096
+- Verified HTTPS client and stream.Transform/PassThrough in bridge
+- Fixed: `createHttpModule` ignored protocol parameter — `https.request()` was sending `http:` URLs to host
+- Added `rejectUnauthorized` TLS option pass-through from bridge → host (types.ts, network.ts, bridge-setup.ts, driver.ts)
+- Added `ensureProtocol()` helper in `createHttpModule` to set correct default protocol per module
+- Files changed:
+  - packages/secure-exec-core/src/types.ts (added rejectUnauthorized to httpRequest options)
+  - packages/secure-exec-core/src/bridge/network.ts (protocol fix + TLS option forwarding)
+  - packages/secure-exec-node/src/bridge-setup.ts (parse rejectUnauthorized from options JSON)
+  - packages/secure-exec-node/src/driver.ts (apply rejectUnauthorized to https.RequestOptions)
+  - packages/secure-exec/tests/runtime-driver/node/https-streams.test.ts (new test file)
+- **Learnings for future iterations:**
+  - `createHttpModule(_protocol)` was ignoring the protocol parameter — both http and https modules were identical; _buildUrl() only used protocol from options or defaulted to http unless port=443
+  - Sandbox exec() does NOT support top-level await; use `(async () => { ... })()` pattern for async sandbox code
+  - stream.Transform and stream.PassThrough are already available via stream-browserify polyfill (readable-stream v3.6.2) — no bridge changes needed
+  - Custom NetworkAdapter in tests bypasses SSRF protection and can inject host-side TLS options (ca, rejectUnauthorized) — useful for localhost HTTPS testing
+  - Self-signed cert generation in tests: use openssl CLI (genpkey + req + x509) — works reliably in CI
 ---
