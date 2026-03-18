@@ -395,4 +395,35 @@ describe.skipIf(!hasWasmBinary)("wasmvm-shell-terminal", () => {
 			].join("\n"),
 		);
 	});
+
+	it("exit command terminates shell — 'exit' causes wait() to resolve with code 0", async () => {
+		const { kernel } = await createShellKernel();
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor(PROMPT);
+		harness.shell.write("exit\n");
+
+		const exitCode = await Promise.race([
+			harness.shell.wait(),
+			new Promise<number>((_, rej) =>
+				setTimeout(() => rej(new Error("wait() hung after 'exit'")), 10_000),
+			),
+		]);
+		expect(exitCode).toBe(0);
+	});
+
+	it("Ctrl+D on empty line exits — ^D causes wait() to resolve with code 0", async () => {
+		const { kernel } = await createShellKernel();
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor(PROMPT);
+
+		const exitCode = await Promise.race([
+			harness.exit(),
+			new Promise<number>((_, rej) =>
+				setTimeout(() => rej(new Error("wait() hung after ^D")), 10_000),
+			),
+		]);
+		expect(exitCode).toBe(0);
+	});
 });
