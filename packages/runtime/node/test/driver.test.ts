@@ -185,8 +185,14 @@ describe('Node RuntimeDriver', () => {
     });
 
     it('accepts custom memoryLimit', () => {
+      // Verify option is stored and differs from default (128)
       const driver = createNodeRuntime({ memoryLimit: 256 });
-      expect(driver.name).toBe('node');
+      expect((driver as any)._memoryLimit).toBe(256);
+    });
+
+    it('memoryLimit defaults to 128', () => {
+      const driver = createNodeRuntime();
+      expect((driver as any)._memoryLimit).toBe(128);
     });
   });
 

@@ -82,7 +82,8 @@ export const WASMVM_COMMANDS: readonly string[] = [
   'mkfifo', 'mknod',
   'pinky', 'who', 'users', 'uptime',
   'stty',
-];
+] as const;
+Object.freeze(WASMVM_COMMANDS);
 
 export interface WasmVmRuntimeOptions {
   /** Path to the compiled WASM multicall binary. */
@@ -404,6 +405,10 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
           const pipeFds = kernel.pipe(pid);
           // Pack read + write FDs: low 16 bits = readFd, high 16 bits = writeFd
           intResult = (pipeFds.readFd & 0xFFFF) | ((pipeFds.writeFd & 0xFFFF) << 16);
+          break;
+        }
+        case 'fdDup': {
+          intResult = kernel.fdDup(pid, msg.args.fd as number);
           break;
         }
         case 'vfsStat': {

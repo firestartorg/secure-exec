@@ -191,8 +191,14 @@ describe('Python RuntimeDriver', () => {
     });
 
     it('accepts custom cpuTimeLimitMs', () => {
+      // Verify option is stored on the driver instance
       const driver = createPythonRuntime({ cpuTimeLimitMs: 5000 });
-      expect(driver.name).toBe('python');
+      expect((driver as any)._cpuTimeLimitMs).toBe(5000);
+    });
+
+    it('cpuTimeLimitMs defaults to undefined', () => {
+      const driver = createPythonRuntime();
+      expect((driver as any)._cpuTimeLimitMs).toBeUndefined();
     });
   });
 

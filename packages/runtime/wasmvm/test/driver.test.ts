@@ -167,11 +167,29 @@ describe('WasmVM RuntimeDriver', () => {
     it('WASMVM_COMMANDS is exported and frozen', () => {
       expect(WASMVM_COMMANDS.length).toBeGreaterThanOrEqual(90);
       expect(WASMVM_COMMANDS).toContain('sh');
+      expect(Object.isFrozen(WASMVM_COMMANDS)).toBe(true);
     });
 
-    it('accepts custom wasmBinaryPath', () => {
-      const driver = createWasmVmRuntime({ wasmBinaryPath: '/custom/path.wasm' });
-      expect(driver.name).toBe('wasmvm');
+    it('accepts custom wasmBinaryPath', async () => {
+      // Verify the custom path is actually used by spawning with a bogus path
+      // and checking the error references it
+      const bogusPath = '/bogus/nonexistent-binary.wasm';
+      const vfs = new SimpleVFS();
+      const kernel = createKernel({ filesystem: vfs as any });
+      const driver = createWasmVmRuntime({ wasmBinaryPath: bogusPath });
+      await kernel.mount(driver);
+
+      const stderrChunks: Uint8Array[] = [];
+      const proc = kernel.spawn('echo', ['hello'], {
+        onStderr: (data) => stderrChunks.push(data),
+      });
+      const exitCode = await proc.wait();
+
+      expect(exitCode).toBeGreaterThan(0);
+      const stderr = stderrChunks.map(c => new TextDecoder().decode(c)).join('');
+      expect(stderr).toContain(bogusPath);
+
+      await kernel.dispose();
     });
   });
 
