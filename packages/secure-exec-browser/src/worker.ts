@@ -127,8 +127,11 @@ function makeApplyPromise<TArgs extends unknown[], TResult>(
 	};
 }
 
+// Save real postMessage before sandbox code can replace it
+const _realPostMessage = self.postMessage.bind(self);
+
 function postResponse(message: BrowserWorkerResponseMessage): void {
-	self.postMessage(message satisfies BrowserWorkerOutboundMessage);
+	_realPostMessage(message satisfies BrowserWorkerOutboundMessage);
 }
 
 function postStdio(
@@ -142,7 +145,7 @@ function postStdio(
 		channel,
 		message,
 	};
-	self.postMessage(payload);
+	_realPostMessage(payload);
 }
 
 function formatConsoleValue(
@@ -481,6 +484,45 @@ async function initRuntime(payload: BrowserWorkerInitPayload): Promise<void> {
 	exposeMutableRuntimeStateGlobal("_pendingModules", {});
 	exposeMutableRuntimeStateGlobal("_currentModule", { dirname: "/" });
 	eval(getRequireSetupCode());
+
+	// Block dangerous Web APIs that bypass bridge permission checks
+	const dangerousApis = [
+		"XMLHttpRequest",
+		"WebSocket",
+		"importScripts",
+		"indexedDB",
+		"caches",
+		"BroadcastChannel",
+	];
+	for (const api of dangerousApis) {
+		try {
+			delete (self as unknown as Record<string, unknown>)[api];
+		} catch {
+			// May not exist or may be non-configurable
+		}
+		Object.defineProperty(self, api, {
+			get() {
+				throw new ReferenceError(`${api} is not available in sandbox`);
+			},
+			configurable: false,
+		});
+	}
+
+	// Lock down self.onmessage so sandbox code cannot hijack the control channel
+	const currentHandler = self.onmessage;
+	Object.defineProperty(self, "onmessage", {
+		value: currentHandler,
+		writable: false,
+		configurable: false,
+	});
+
+	// Block self.postMessage so sandbox code cannot forge responses to host
+	Object.defineProperty(self, "postMessage", {
+		get() {
+			throw new TypeError("postMessage is not available in sandbox");
+		},
+		configurable: false,
+	});
 
 	initialized = true;
 }

