@@ -1427,6 +1427,17 @@ PRD: ralph/kernel-hardening (46 stories)
 - Batch-marked passes: true in prd.json
 ---
 
+## 2026-03-18 - US-106 (p112)
+- Changed `echoOutput()` in pty.ts to throw EAGAIN when output buffer is full (was silent drop)
+- Added test: fill output buffer, verify echo EAGAIN, drain, verify echo recovery
+- Files changed:
+  - packages/kernel/src/pty.ts — echoOutput throws EAGAIN instead of silent drop
+  - packages/kernel/test/resource-exhaustion.test.ts — new echo buffer overflow test
+- **Learnings for future iterations:**
+  - echoOutput is called from processInput (master write path) — EAGAIN propagates to the caller who can drain and retry
+  - deliverInput already throws EAGAIN for full input buffer; now echo is consistent
+---
+
 ## 2026-03-18 - US-135
 - Already implemented: command registry override warnings, /dev/zero write no-op, device realpath, /dev/fd/N parsing validation
 - Tests already exist in command-registry.test.ts, device-layer.test.ts, kernel-integration.test.ts
