@@ -4,6 +4,7 @@ PRD: ralph/kernel-hardening (46 stories)
 
 ## Codebase Patterns
 - Yarn/bun commands in test infra need COREPACK_ENABLE_STRICT=0 in env because workspace root has packageManager: "pnpm" — corepack blocks other PMs otherwise
+- Yarn berry fixtures need `packageManager: "yarn@4.x.x"` in package.json so corepack uses berry instead of falling back to yarn classic (v1)
 - Kernel-opened vfsFile resources have ino=0 (sentinel); code using resource.ino must handle ino===0 by resolving via vfs.getIno(path) — affects fd_filestat_get and any future per-fd stat operations
 - Test VFS helpers (SimpleVFS in shell-terminal.test.ts) must implement the full VirtualFileSystem interface including pread — kernel fdRead delegates through device-layer → vfs.pread()
 - @secure-exec/python package at packages/secure-exec-python/ owns PyodideRuntimeDriver (driver.ts) — deps: @secure-exec/core, pyodide
@@ -1704,4 +1705,15 @@ PRD: ralph/kernel-hardening (46 stories)
   - Use `COREPACK_ENABLE_STRICT=0 corepack yarn` to run yarn from within a pnpm-managed workspace locally
   - Yarn classic (v1) is detected by absence of .yarnrc.yml in getYarnInstallCmd()
   - express-pass and fastify-pass fixtures have pre-existing failures unrelated to layout fixtures
+---
+
+## 2026-03-18 - US-089
+- Added yarn berry (v2+) node-modules linker fixture at packages/secure-exec/tests/projects/yarn-berry-layout-pass/
+- Files created: fixture.json, .yarnrc.yml, package.json (with packageManager field), yarn.lock (v8 format), src/index.js
+- Fixture passes project-matrix parity test — host Node and sandbox produce identical output
+- **Learnings for future iterations:**
+  - Yarn berry requires `packageManager: "yarn@4.x.x"` in package.json for corepack to use the correct version — without this, corepack falls back to yarn classic (v1)
+  - Berry detection in test runner is based on presence of `.yarnrc.yml` file — triggers `--immutable` flag
+  - Berry lockfiles use `__metadata:` header and `resolution: "pkg@npm:version"` format (vs v1's `# yarn lockfile v1`)
+  - `nodeLinker: node-modules` in `.yarnrc.yml` makes berry create a traditional node_modules/ layout while using berry's resolution engine
 ---
