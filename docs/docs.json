@@ -73,7 +73,8 @@
           "security-model",
           "nodejs-compatibility",
           "python-compatibility",
-          "cloudflare-workers-comparison"
+          "cloudflare-workers-comparison",
+          "benchmarks"
         ]
       }
     ]
