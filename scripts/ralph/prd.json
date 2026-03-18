@@ -2333,7 +2333,7 @@
         "Tests pass"
       ],
       "priority": 137,
-      "passes": false,
+      "passes": true,
       "notes": "CLI E2E Phase 3, Strategy A. OpenCode is a Bun binary, NOT a Node.js package \u2014 tests the child_process.spawn bridge for complex host binaries. Hardest CLI tool, tested before Claude Code to front-load risk. API tokens (ANTHROPIC_API_KEY, OPENAI_API_KEY) available at ~/misc/env.txt \u2014 source it before running tests that need real or mock-pointed API keys."
     },
     {

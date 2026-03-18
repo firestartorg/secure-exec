@@ -3,6 +3,9 @@ Started: 2026-03-17
 PRD: ralph/kernel-hardening (46 stories)
 
 ## Codebase Patterns
+- OpenCode is a Bun binary — ANTHROPIC_BASE_URL causes hangs during plugin init from temp dirs; works when run from project dirs with cached plugins; use probeBaseUrlRedirect() to detect at runtime
+- OpenCode `run --format json` emits NDJSON events; `--format default` may also emit JSON when piped (non-TTY); always check for text content rather than asserting non-JSON
+- OpenCode makes a title generation request before the main prompt — mock server queues need extra response items to account for title requests
 - Bridge `createHttpModule(protocol)` sets the default protocol (http: or https:) for requests — always goes through `ensureProtocol()` helper
 - Sandbox exec() does NOT support top-level await; use `(async () => { ... })()` IIFE pattern for async sandbox code
 - stream.Transform/PassThrough available in bridge via stream-browserify polyfill — no bridge code needed
@@ -1905,4 +1908,20 @@ PRD: ralph/kernel-hardening (46 stories)
   - Linux `script -qefc "command" /dev/null` creates a real PTY for host processes — use for any CLI tool needing isTTY=true
   - PtyHarness SETTLE_MS=100 (vs 50 for kernel TerminalHarness) — host process output is less predictable in timing
   - @xterm/headless must be explicitly added as devDependency to packages that import it directly (not inherited through relative imports to kernel's TerminalHarness)
+---
+
+## 2026-03-18 - US-099
+- Implemented OpenCode headless binary spawn tests (Strategy A)
+- Created packages/secure-exec/tests/cli-tools/opencode-headless.test.ts with 9 tests
+- Files changed: packages/secure-exec/tests/cli-tools/opencode-headless.test.ts (new)
+- **Learnings for future iterations:**
+  - OpenCode is a standalone Bun binary (not Node.js) — NODE_OPTIONS and fetch-intercept.cjs don't work
+  - ANTHROPIC_BASE_URL env var causes opencode to hang indefinitely during plugin initialization from temp directories; works from project dirs with cached plugins
+  - Used probeBaseUrlRedirect() to detect at runtime whether mock server redirect is viable
+  - Mock server response queue must be padded with extra items because opencode's title generation request consumes the first response
+  - OpenCode `--format default` may emit JSON-like output when piped (non-TTY) — don't assert non-JSON
+  - OpenCode always exits with code 0 even on errors — use JSON error events for error detection
+  - opencode.json config accepts `provider.anthropic.api` for API key; no `baseURL` field in config schema
+  - OpenCode tool_use: tool names are `read`, `edit`, `bash`, `glob`, `grep`, `list` — same as Claude Code
+  - Mock server bash tool_use executes but may not persist files (tool input schema may not exactly match)
 ---
