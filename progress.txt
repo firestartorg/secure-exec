@@ -1806,3 +1806,11 @@ PRD: ralph/kernel-hardening (46 stories)
   - Both host and sandbox correctly report optionalAvailable: false via try/catch on require()
   - npm install with missing optional deps succeeds (npm treats optional dep install failures as warnings)
 ---
+
+## 2026-03-18 - US-141
+- What was implemented: Exit builtin handling already fixed and committed (5e4250d)
+- Files changed: prd.json (marked passes: true)
+- **Learnings for future iterations:**
+  - Shell-terminal tests are in packages/kernel/test/shell-terminal.test.ts (mock) and packages/runtime/wasmvm/test/shell-terminal.test.ts (real brush-shell)
+  - Exit path: brush-shell exit → WASI proc_exit → WasiProcExit exception → kernel worker exit message → process table wait() resolves
+---
