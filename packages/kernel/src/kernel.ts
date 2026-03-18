@@ -528,13 +528,10 @@ class KernelImpl implements Kernel {
 					return data ?? new Uint8Array(0);
 				}
 
-				// Read from VFS at cursor position
-				const content = await this.vfs.readFile(entry.description.path);
+				// Positional read from VFS — avoids loading entire file
 				const cursor = Number(entry.description.cursor);
-				if (cursor >= content.length) return new Uint8Array(0);
-				const end = Math.min(cursor + length, content.length);
-				const slice = content.slice(cursor, end);
-				entry.description.cursor = BigInt(end);
+				const slice = await this.vfs.pread(entry.description.path, cursor, length);
+				entry.description.cursor += BigInt(slice.length);
 				return slice;
 			},
 			fdWrite: (pid, fd, data) => {

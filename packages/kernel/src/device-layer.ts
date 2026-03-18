@@ -88,6 +88,23 @@ export function createDeviceLayer(vfs: VirtualFileSystem): VirtualFileSystem {
 			return vfs.readFile(path);
 		},
 
+		async pread(path, offset, length) {
+			if (path === "/dev/null") return new Uint8Array(0);
+			if (path === "/dev/zero") return new Uint8Array(length);
+			if (path === "/dev/urandom") {
+				const buf = new Uint8Array(length);
+				if (typeof globalThis.crypto?.getRandomValues === "function") {
+					globalThis.crypto.getRandomValues(buf);
+				} else {
+					for (let i = 0; i < buf.length; i++) {
+						buf[i] = (Math.random() * 256) | 0;
+					}
+				}
+				return buf;
+			}
+			return vfs.pread(path, offset, length);
+		},
+
 		async readTextFile(path) {
 			if (path === "/dev/null") return "";
 			const bytes = await this.readFile(path);

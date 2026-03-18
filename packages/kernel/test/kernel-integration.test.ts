@@ -287,6 +287,61 @@ describe("kernel + MockRuntimeDriver integration", () => {
 		await proc.wait();
 	});
 
+	it("fdRead uses pread — small read on large file does not allocate full file", async () => {
+		const driver = new MockRuntimeDriver(["x"], { x: { neverExit: true } });
+		const { kernel: k, vfs } = await createTestKernel({ drivers: [driver] });
+		kernel = k;
+
+		// Create a 1MB file
+		const MB = 1024 * 1024;
+		const bigData = new Uint8Array(MB);
+		bigData[0] = 0x42; // marker byte
+		await vfs.writeFile("/tmp/big.bin", bigData);
+
+		const ki = driver.kernelInterface!;
+		const proc = kernel.spawn("x", []);
+		const fd = ki.fdOpen(proc.pid, "/tmp/big.bin", 0);
+
+		// Read just 1 byte at offset 0
+		const data = await ki.fdRead(proc.pid, fd, 1);
+		expect(data.length).toBe(1);
+		expect(data[0]).toBe(0x42);
+
+		proc.kill(9);
+		await proc.wait();
+	});
+
+	it("fdRead sequential calls advance cursor correctly", async () => {
+		const driver = new MockRuntimeDriver(["x"], { x: { neverExit: true } });
+		const { kernel: k, vfs } = await createTestKernel({ drivers: [driver] });
+		kernel = k;
+
+		await vfs.writeFile("/tmp/seq.txt", "abcdefghij");
+
+		const ki = driver.kernelInterface!;
+		const proc = kernel.spawn("x", []);
+		const fd = ki.fdOpen(proc.pid, "/tmp/seq.txt", 0);
+
+		// Read 3 bytes
+		const d1 = await ki.fdRead(proc.pid, fd, 3);
+		expect(new TextDecoder().decode(d1)).toBe("abc");
+
+		// Read 4 bytes — cursor should be at 3
+		const d2 = await ki.fdRead(proc.pid, fd, 4);
+		expect(new TextDecoder().decode(d2)).toBe("defg");
+
+		// Read remaining
+		const d3 = await ki.fdRead(proc.pid, fd, 100);
+		expect(new TextDecoder().decode(d3)).toBe("hij");
+
+		// EOF
+		const d4 = await ki.fdRead(proc.pid, fd, 10);
+		expect(d4.length).toBe(0);
+
+		proc.kill(9);
+		await proc.wait();
+	});
+
 	it("fdRead returns EBADF for invalid FD", async () => {
 		const driver = new MockRuntimeDriver(["x"]);
 		({ kernel } = await createTestKernel({ drivers: [driver] }));
