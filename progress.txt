@@ -961,3 +961,17 @@ PRD: ralph/kernel-hardening (46 stories)
   - Source policy tests read source files by filesystem path, not by import — must update paths when moving code between packages
   - @secure-exec/core/internal/shared/* wildcard export provides access to all shared modules, so moved files can use subpath imports
 ---
+
+## 2026-03-17 - US-058
+- Updated packages/runtime/node/ to depend on @secure-exec/node + @secure-exec/core instead of secure-exec
+- Files changed:
+  - packages/runtime/node/package.json — replaced `secure-exec` dep with `@secure-exec/core` + `@secure-exec/node`
+  - packages/runtime/node/src/driver.ts — updated imports: NodeExecutionDriver/createNodeDriver from @secure-exec/node, allowAllChildProcess/types from @secure-exec/core
+  - pnpm-lock.yaml — regenerated
+- Verified: no transitive dependency on pyodide or browser code; `pnpm why pyodide` and `pnpm why secure-exec` return empty
+- All 24 tests pass, typecheck passes
+- **Learnings for future iterations:**
+  - @secure-exec/core exports all shared types (CommandExecutor, VirtualFileSystem) and permissions (allowAllChildProcess) — use it for type-only and utility imports
+  - @secure-exec/node exports V8-specific code (NodeExecutionDriver, createNodeDriver) — use it for execution engine imports
+  - pnpm install (without --frozen-lockfile) is needed when changing workspace dependencies
+---
