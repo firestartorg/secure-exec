@@ -946,3 +946,18 @@ PRD: ralph/kernel-hardening (46 stories)
   - @secure-exec/node uses internal/* subpath exports (./internal/execution, ./internal/isolate, etc.) matching the pattern established by @secure-exec/core
   - pnpm-workspace.yaml `packages/*` glob auto-discovers packages/secure-exec-node/ — no workspace config changes needed
 ---
+
+## 2026-03-17 - US-057
+- Moved 8 node/ source files (execution-driver, isolate-bootstrap, module-resolver, execution-lifecycle, esm-compiler, bridge-setup, driver, module-access) from secure-exec/src/node/ to @secure-exec/node (packages/secure-exec-node/src/)
+- Updated all imports in moved files: `../shared/*` → `@secure-exec/core/internal/shared/*`, `../isolate.js` → `./isolate.js`, `../types.js` → `@secure-exec/core`, etc.
+- Added 8 new subpath exports to @secure-exec/node package.json
+- Updated @secure-exec/node index.ts to export public API (NodeExecutionDriver, createNodeDriver, createNodeRuntimeDriverFactory, NodeFileSystem, createDefaultNetworkAdapter, ModuleAccessFileSystem)
+- Replaced original files in secure-exec/src/node/ with thin re-export stubs pointing to @secure-exec/node
+- Updated secure-exec barrel (index.ts) to re-export from @secure-exec/node instead of ./node/driver.js
+- Updated source-grep policy tests (isolate-runtime-injection-policy, bridge-registry-policy) to read from canonical @secure-exec/node location
+- Files changed: 21 files (8 new in secure-exec-node, 8 replaced in secure-exec/src/node/, 1 barrel, 2 test files, 1 package.json, 1 index.ts)
+- **Learnings for future iterations:**
+  - bridge compilation is already handled by @secure-exec/core's build:bridge step; @secure-exec/node just imports getRawBridgeCode() — no separate build:bridge needed in node package
+  - Source policy tests read source files by filesystem path, not by import — must update paths when moving code between packages
+  - @secure-exec/core/internal/shared/* wildcard export provides access to all shared modules, so moved files can use subpath imports
+---
