@@ -1555,3 +1555,14 @@ PRD: ralph/kernel-hardening (46 stories)
   - isolate-runtime sources must be regenerated via `pnpm --filter @secure-exec/core run build:isolate-runtime` after any change
   - 5 HTTP/network tests in index.test.ts are pre-existing ECONNREFUSED flakes (serves requests, coerces 0.0.0.0, terminate server, maxSockets, upgrade)
 ---
+
+## 2026-03-18 - US-116-B
+- What was implemented: Changed process.binding() and process._linkedBinding() to throw errors instead of returning stub objects
+- Files changed:
+  - packages/secure-exec-core/src/bridge/process.ts — replaced stub dictionary with throw statements
+  - packages/secure-exec/tests/runtime-driver/node/sandbox-escape.test.ts — updated test to verify throws for binding('fs'), binding('buffer'), and _linkedBinding('fs'); updated 2 other tests that called process.binding() in escape-detection logic to wrap in try/catch
+- **Learnings for future iterations:**
+  - process.binding stubs were only consumed by tests, not production code — safe to remove without cascading changes
+  - BUFFER_CONSTANTS/BUFFER_MAX_LENGTH are still used elsewhere in process.ts (global Buffer setup) — don't remove them
+  - Multiple sandbox escape tests reference process.binding() as a sentinel for "real bindings" — when changing binding behavior, grep all test files for `process.binding` calls
+---
