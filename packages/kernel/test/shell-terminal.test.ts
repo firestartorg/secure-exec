@@ -15,6 +15,7 @@ import type {
 	ProcessContext,
 	KernelInterface,
 } from "../src/types.js";
+import { SIGINT, SIGWINCH } from "../src/types.js";
 
 // ---------------------------------------------------------------------------
 // Mock shell driver — reads lines from PTY slave via kernel FDs, interprets
@@ -48,8 +49,15 @@ class MockShellDriver implements RuntimeDriver {
 			writeStdin() {},
 			closeStdin() {},
 			kill(signal) {
-				exitResolve!(128 + signal);
-				proc.onExit?.(128 + signal);
+				if (signal === SIGINT) {
+					// SIGINT: show ^C, emit new prompt, keep running
+					ki.fdWrite(pid, stdoutFd, enc.encode("^C\r\n$ "));
+				} else if (signal === SIGWINCH) {
+					// SIGWINCH: ignore, shell stays alive
+				} else {
+					exitResolve!(128 + signal);
+					proc.onExit?.(128 + signal);
+				}
 			},
 			wait() {
 				return exitPromise;
@@ -78,6 +86,9 @@ class MockShellDriver implements RuntimeDriver {
 				// Simple command dispatch
 				if (line.startsWith("echo ")) {
 					ki.fdWrite(pid, stdoutFd, enc.encode(line.slice(5) + "\r\n"));
+				} else if (line === "noecho") {
+					// Disable PTY echo (password input scenario)
+					ki.ptySetDiscipline(pid, stdinFd, { echo: false });
 				} else if (line.length > 0) {
 					// Unknown command — just emit a newline
 					ki.fdWrite(pid, stdoutFd, enc.encode("\r\n"));
@@ -154,5 +165,111 @@ describe("shell-terminal", () => {
 		expect(harness.screenshotTrimmed()).toBe(
 			["$ echo AAA", "AAA", "$ echo BBB", "BBB", "$ "].join("\n"),
 		);
+	});
+
+	it("^C sends SIGINT — screen shows ^C, shell stays alive, can type more", async () => {
+		const driver = new MockShellDriver();
+		const { kernel } = await createTestKernel({ drivers: [driver] });
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor("$");
+
+		// Type partial input then ^C
+		await harness.type("hel\x03");
+
+		// PTY echo shows "hel", ^C triggers SIGINT (no echo from PTY),
+		// mock shell writes "^C\r\n$ " in kill handler
+		expect(harness.screenshotTrimmed()).toBe(
+			["$ hel^C", "$ "].join("\n"),
+		);
+
+		// Shell stays alive — type another command
+		await harness.type("echo hi\n");
+
+		expect(harness.screenshotTrimmed()).toBe(
+			["$ hel^C", "$ echo hi", "hi", "$ "].join("\n"),
+		);
+	});
+
+	it("^D exits cleanly — shell exits with code 0, no extra output", async () => {
+		const driver = new MockShellDriver();
+		const { kernel } = await createTestKernel({ drivers: [driver] });
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor("$");
+
+		const exitCode = await harness.exit();
+
+		expect(exitCode).toBe(0);
+		expect(harness.screenshotTrimmed()).toBe("$ ");
+	});
+
+	it("backspace erases character — 'helo' + BS + 'lo' produces 'hello'", async () => {
+		const driver = new MockShellDriver();
+		const { kernel } = await createTestKernel({ drivers: [driver] });
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor("$");
+
+		// Type "echo helo", backspace erases 'o', then "lo\n" → shell receives "echo hello"
+		await harness.type("echo helo\x7flo\n");
+
+		expect(harness.screenshotTrimmed()).toBe(
+			["$ echo hello", "hello", "$ "].join("\n"),
+		);
+	});
+
+	it("long line wrapping — input exceeding cols wraps to next row", async () => {
+		const driver = new MockShellDriver();
+		const { kernel } = await createTestKernel({ drivers: [driver] });
+		harness = new TerminalHarness(kernel, { cols: 20, rows: 24 });
+
+		await harness.waitFor("$");
+
+		// "$ " = 2 chars, leaves 18 chars on first row. 25 A's forces wrap.
+		const input = "A".repeat(25);
+		await harness.type(input);
+
+		expect(harness.screenshotTrimmed()).toBe(
+			"$ " + "A".repeat(18) + "\n" + "A".repeat(7),
+		);
+	});
+
+	it("resize triggers SIGWINCH — shell stays alive, prompt returns", async () => {
+		const driver = new MockShellDriver();
+		const { kernel } = await createTestKernel({ drivers: [driver] });
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor("$");
+
+		// Resize terminal — delivers SIGWINCH to foreground process group
+		harness.term.resize(40, 12);
+		harness.shell.resize(40, 12);
+
+		// Shell survives SIGWINCH — verify by typing a command
+		await harness.type("echo alive\n");
+
+		expect(harness.screenshotTrimmed()).toBe(
+			["$ echo alive", "alive", "$ "].join("\n"),
+		);
+	});
+
+	it("echo disabled — typed text does NOT appear on screen", async () => {
+		const driver = new MockShellDriver();
+		const { kernel } = await createTestKernel({ drivers: [driver] });
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor("$");
+
+		// "noecho" command disables PTY echo via ptySetDiscipline
+		await harness.type("noecho\n");
+
+		const screenAfterNoecho = harness.screenshotTrimmed();
+		expect(screenAfterNoecho).toBe(["$ noecho", "$ "].join("\n"));
+
+		// Type "secret" with echo off — should NOT appear on screen
+		await harness.type("secret");
+
+		expect(harness.screenshotTrimmed()).toBe(screenAfterNoecho);
 	});
 });
