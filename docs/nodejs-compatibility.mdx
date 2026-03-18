@@ -9,74 +9,116 @@ description: Target Node.js version and standard-library compatibility matrix fo
 
 ## Support Tiers
 
-| Tier | Label | Meaning |
+| Icon | Meaning |
+| --- | --- |
+| 🟢 | **Supported**: native or full implementation. |
+| 🔵 | **Planned**: not yet implemented; on the roadmap. |
+| 🟡 | **Partial**: functional with behavioral gaps or missing APIs. |
+| ⚪ | **TBD**: under consideration; not yet committed. |
+| 🔴 | **Stub**: requireable but most APIs throw on call. |
+| ⛔ | **Unsupported**: not available; `require()` throws immediately. |
+
+---
+
+## Module Compatibility Matrix
+
+### Core I/O and Networking
+
+| Module | Status | Notes |
 | --- | --- | --- |
-| 1 | Bridge | Runtime implementation in secure-exec bridge modules. |
-| 2 | Polyfill | Browser-compatible polyfill package implementation. |
-| 3 | Stub | Minimal compatibility surface for lightweight usage and type/instance checks. |
-| 4 | Deferred | `require()` succeeds, but APIs throw deterministic unsupported errors on call. |
-| 5 | Unsupported | Not implemented by design; `require()` throws immediately. |
+| **`fs`** | 🟡 | Core I/O implemented: `readFile`, `writeFile`, `appendFile`, `open`, `read`, `write`, `close`, `readdir`, `mkdir`, `rmdir`, `rm`, `unlink`, `stat`, `lstat`, `rename`, `copyFile`, `exists`, `createReadStream`, `createWriteStream`, `writev`, `access`, `realpath`. Deferred: `watch`, `watchFile`, `chmod`, `chown`, `link`, `symlink`, `readlink`, `truncate`, `utimes`. |
+| **`http`** | 🟡 | `request`, `get`, `createServer` with bridged request/response classes. Fetch-based, fully buffered. No connection pooling, keep-alive tuning, WebSocket upgrade, or trailer headers. `Agent` is stub-only. |
+| **`https`** | 🟡 | Same contract and limitations as `http`. |
+| **`http2`** | 🔴 | Compatibility classes only (`Http2ServerRequest`, `Http2ServerResponse`); `createServer`/`createSecureServer` throw. |
+| **`net`** | 🔵 | Planned. |
+| **`tls`** | 🔵 | Planned. |
+| **`dns`** | 🟢 | `lookup`, `resolve`, `resolve4`, `resolve6`, plus `dns.promises`. Permission-gated. |
+| **`dgram`** | ⛔ | |
+| **Fetch globals** | 🟢 | `fetch`, `Headers`, `Request`, `Response`. |
 
-Unsupported API errors follow this format: `"<module>.<api> is not supported in sandbox"`.
-Unsupported modules use: `"<module> is not supported in sandbox"`.
+### Process and Runtime
 
-## Compatibility Matrix
-
-| Module | Tier | Status |
+| Module | Status | Notes |
 | --- | --- | --- |
-| `fs` | 1 (Bridge) + 4 (Deferred APIs) | Implemented: `readFile`, `writeFile`, `appendFile`, `open`, `read`, `write`, `close`, `readdir`, `mkdir`, `rmdir`, `rm`, `unlink`, `stat`, `lstat`, `rename`, `copyFile`, `exists`, `createReadStream`, `createWriteStream`, `writev`, `access`, `realpath`. Metadata-sensitive operations (`stat`, `exists`, `readdir` with `withFileTypes`) use metadata-native driver paths instead of content probing. `rename` delegates to driver semantics (atomic where supported; explicit limitation errors where not). Deferred deterministic errors remain for `watch`, `watchFile`, `chmod`, `chown`, `link`, `symlink`, `readlink`, `truncate`, `utimes`. |
-| `process` | 1 (Bridge) | Env access (permission-gated), cwd/chdir, exit semantics, timers, stdio, eventing, and basic usage/system metadata APIs. |
-| `os` | 1 (Bridge) | Platform/arch/version, user/system info, and `os.constants`. |
-| `child_process` | 1 (Bridge) + 5 (`fork`) | Implemented: `spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync`; `fork` is intentionally unsupported. |
-| `http` | 1 (Bridge) | Implemented: `request`, `get`, `createServer`; bridged request/response/server classes and constants. |
-| `https` | 1 (Bridge) | Implemented: `request`, `get`, `createServer` with the same contract as `http`. |
-| `http2` | 3 (Stub) + 5 (Full support) | Provides compatibility classes (`Http2ServerRequest`, `Http2ServerResponse`); `createServer` and `createSecureServer` are unsupported. |
-| `dns` | 1 (Bridge) | Implemented: `lookup`, `resolve`, `resolve4`, `resolve6`, plus `dns.promises` variants. |
-| `module` | 1 (Bridge) | Implements `createRequire`, `Module` basics, and builtin resolution (`require.resolve("fs")` returns builtin identifiers). |
-| `timers` | 1 (Bridge) | `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, `setImmediate`, `clearImmediate`. |
-| `path` | 2 (Polyfill) | `path-browserify`; supports default and named ESM imports. |
-| `buffer` | 2 (Polyfill) | Polyfill via `buffer`. |
-| `url` | 2 (Polyfill) | Polyfill via `whatwg-url` and node-stdlib-browser shims. |
-| `events` | 2 (Polyfill) | Polyfill via `events`. |
-| `stream` | 2 (Polyfill) | Polyfill via `readable-stream`. |
-| `util` | 2 (Polyfill) | Polyfill via node-stdlib-browser. |
-| `assert` | 2 (Polyfill) | Polyfill via node-stdlib-browser. |
-| `querystring` | 2 (Polyfill) | Polyfill via node-stdlib-browser. |
-| `string_decoder` | 2 (Polyfill) | Polyfill via node-stdlib-browser. |
-| `zlib` | 2 (Polyfill) | Polyfill via node-stdlib-browser. |
-| `vm` | 2 (Polyfill) | Polyfill via node-stdlib-browser. |
-| `crypto` | 3 (Stub) | Limited bridge/polyfill blend; `getRandomValues()` and `randomUUID()` use host `node:crypto` secure randomness, or throw deterministic unsupported errors if host entropy is unavailable; `subtle.*` methods throw deterministic unsupported errors. |
-| `tty` | 2 (Polyfill) | `tty-browserify`; `isatty()` returns `false`; `ReadStream`/`WriteStream` are compatibility constructors. |
-| `v8` | 3 (Stub) | Pre-registered stub with mock heap stats and JSON-based `serialize`/`deserialize`. |
-| `constants` | 2 (Polyfill) | `constants-browserify`; `os.constants` remains available via `os`. |
-| Fetch globals (`fetch`, `Headers`, `Request`, `Response`) | 1 (Bridge) | Bridged via network bridge implementation. |
-| Deferred modules (`net`, `tls`, `readline`, `perf_hooks`, `async_hooks`, `worker_threads`) | 4 (Deferred) | `require()` returns stubs; APIs throw deterministic unsupported errors when called. |
-| Unsupported modules (`dgram`, `cluster`, `wasi`, `diagnostics_channel`, `inspector`, `repl`, `trace_events`, `domain`) | 5 (Unsupported) | `require()` fails immediately with deterministic unsupported-module errors. |
+| **`process`** | 🟢 | `env` (permission-gated), `cwd`/`chdir`, `exit`, timers, stdio, `hrtime`, `platform`, `arch`, `version`, `argv`, `pid`, `ppid`, `uid`, `gid`. |
+| **`child_process`** | 🟢 | `spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync`. `fork` unsupported. |
+| **`os`** | 🟢 | `platform`, `arch`, `type`, `release`, `version`, `homedir`, `tmpdir`, `hostname`, `userInfo`, `os.constants`. |
+| **`timers`** | 🟢 | `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, `setImmediate`, `clearImmediate`. |
+| **`module`** | 🟢 | `createRequire`, `Module` basics, builtin resolution. |
+| **`worker_threads`** | 🔴 | Requireable; APIs throw on call. |
+| **`cluster`** | ⛔ | |
+| **`vm`** | 🔴 | Polyfill via `Function()`/`eval()`. No real context isolation; shares global scope. |
+| **`v8`** | 🔴 | Mock heap stats; `serialize`/`deserialize` use JSON instead of V8 binary format. |
 
-## Logging Behavior
+### Crypto and Security
 
-- `console.log`/`warn`/`error` are supported and serialize arguments with circular-safe bounded formatting.
-- `exec()`/`run()` results do not expose buffered `stdout`/`stderr` fields.
-- By default, secure-exec drops console emissions instead of buffering runtime-managed output.
-- Consumers that need logs should use the explicit `onStdio` hook to stream `stdout`/`stderr` events in emission order.
+| Module | Status | Notes |
+| --- | --- | --- |
+| **`crypto`** | 🔵 | `getRandomValues()` and `randomUUID()` use host secure randomness. `subtle.*` throws. Full crypto planned. |
+| **Web Crypto** | 🔵 | Planned. |
 
-## TypeScript Workflows
+### Data and Encoding
 
-- Core `secure-exec` runtimes execute JavaScript only.
-- Sandboxed TypeScript type checking and compilation belong in the separate `@secure-exec/typescript` package.
+| Module | Status | Notes |
+| --- | --- | --- |
+| **`buffer`** | 🟢 | |
+| **`stream`** | 🟢 | |
+| **`string_decoder`** | 🟢 | |
+| **`zlib`** | 🟢 | |
+| **`querystring`** | 🟢 | |
 
-## Node-Modules Overlay Behavior
+### Utilities and Diagnostics
 
-- Node runtime composes a read-only `/app/node_modules` overlay from `<cwd>/node_modules` (default `cwd` is host `process.cwd()`, configurable via `moduleAccess.cwd`).
-- Overlay reads are constrained to canonical paths under `<cwd>/node_modules` and fail closed on out-of-scope symlink/canonical escapes.
-- Writes and mutations under `/app/node_modules/**` are denied with `EACCES`.
-- Native addons (`.node`) are rejected in overlay-backed module loading.
+| Module | Status | Notes |
+| --- | --- | --- |
+| **`path`** | 🟢 | |
+| **`url`** | 🟢 | |
+| **`util`** | 🟢 | |
+| **`assert`** | 🟢 | |
+| **`events`** | 🟢 | |
+| **`console`** | 🟢 | Circular-safe bounded formatting. Drop-by-default; use `onStdio` hook for streaming. |
+| **`constants`** | 🟢 | |
+| **`tty`** | 🔴 | `isatty()` returns `false`; `ReadStream`/`WriteStream` are compatibility constructors. |
+| **`async_hooks`** | ⚪ | |
+| **`perf_hooks`** | ⚪ | |
+| **`diagnostics_channel`** | ⚪ | |
+| **`readline`** | ⚪ | |
 
-## Permission Model (Runtime/Bridge Scope)
+### Unsupported
 
-- This section describes the core runtime/bridge contract only.
-- Runtime permissions are deny-by-default for `fs`, `network`, `childProcess`, and `env`.
-- If a domain checker is not configured, operations fail with `EACCES`.
-- `filterEnv` strips environment variables unless `permissions.env` explicitly allows them.
-- Embedders can opt in via explicit permission policies such as `allowAll`, `allowAllFs`, `allowAllNetwork`, `allowAllChildProcess`, and `allowAllEnv`.
-- Driver-specific convenience defaults (for example, direct `createNodeDriver(...)` usage when adapters are provided without an explicit `permissions` policy) are implementation details and are not the canonical runtime/bridge security contract.
+| Module | Status |
+| --- | --- |
+| **`dgram`** | ⛔ |
+| **`wasi`** | ⛔ |
+| **`inspector`** | ⛔ |
+| **`repl`** | ⛔ |
+| **`trace_events`** | ⛔ |
+| **`domain`** | ⛔ |
+
+---
+
+## Error Format
+
+Unsupported API calls follow this format:
+
+```
+<module>.<api> is not supported in sandbox
+```
+
+Unsupported modules use:
+
+```
+<module> is not supported in sandbox
+```
+
+---
+
+## Additional Notes
+
+### Node-Modules Overlay
+
+The Node runtime composes a read-only `/app/node_modules` overlay from `<cwd>/node_modules` (default `cwd` is host `process.cwd()`, configurable via `moduleAccess.cwd`). Writes under `/app/node_modules/**` are denied with `EACCES`. Native addons (`.node`) are rejected.
+
+### Permission Model
+
+Runtime permissions are deny-by-default for `fs`, `network`, `childProcess`, and `env`. If a domain checker is not configured, operations fail with `EACCES`. Embedders opt in via explicit permission policies (`allowAll`, `allowAllFs`, `allowAllNetwork`, `allowAllChildProcess`, `allowAllEnv`).

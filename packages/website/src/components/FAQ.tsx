@@ -62,17 +62,28 @@ const faqs: { question: string; answer: React.ReactNode }[] = [
   },
   {
     question: "Can I use it to run dev servers like Express, Hono, or Next.js?",
-    answer: "Yes. Secure Exec bridges Node.js APIs including http, net, and child_process, so frameworks like Express, Hono, and Next.js work out of the box.",
+    answer: (
+      <>
+        Yes. Secure Exec bridges Node.js APIs including http, net, and child_process, so frameworks like Express, Hono,
+        and Next.js work out of the box. For production deployments, pair Secure Exec with{" "}
+        <a href="https://rivet.dev/docs/actors" className="text-white underline underline-offset-2 hover:text-zinc-300">
+          Rivet Actors
+        </a>
+        {" "}to get built-in routing, scaling, and lifecycle management for each server instance.
+      </>
+    ),
   },
   {
     question: "Can it be used for long-running tasks?",
     answer: (
       <>
-        Yes. For orchestrating stateful, long-running processes efficiently, we recommend pairing Secure Exec with{" "}
+        Yes. For orchestrating stateful, long-running tasks, we recommend pairing Secure Exec with{" "}
         <a href="https://rivet.dev/docs/actors" className="text-white underline underline-offset-2 hover:text-zinc-300">
           Rivet Actors
         </a>
-        .
+        . Rivet Actors provide durable state, automatic persistence, and fault-tolerant orchestration — so each
+        long-running task survives restarts and can be monitored, paused, or resumed without you building that
+        infrastructure yourself.
       </>
     ),
   },
@@ -80,10 +91,22 @@ const faqs: { question: string; answer: React.ReactNode }[] = [
     question: "What are common use cases?",
     answer: (
       <ul className="list-disc list-inside space-y-1.5 text-zinc-400">
-        <li>AI agent code evaluation and tool use</li>
-        <li>User-facing dev servers (Express, Hono, Next.js)</li>
+        <li>
+          <a href="/docs/use-cases/ai-agent-code-eval" className="text-red-400 hover:text-red-300">
+            AI agent code evaluation and tool use
+          </a>
+        </li>
+        <li>
+          <a href="/docs/use-cases/dev-servers" className="text-red-400 hover:text-red-300">
+            User-facing dev servers (Express, Hono, Next.js)
+          </a>
+        </li>
         <li>MCP tool-code execution</li>
-        <li>Sandboxed plugin / extension systems</li>
+        <li>
+          <a href="/docs/use-cases/plugin-systems" className="text-red-400 hover:text-red-300">
+            Sandboxed plugin / extension systems
+          </a>
+        </li>
         <li>Interactive coding playgrounds</li>
       </ul>
     ),
@@ -103,6 +126,10 @@ const faqs: { question: string; answer: React.ReactNode }[] = [
   {
     question: "Does this have access to a full operating system?",
     answer: "Yes. Secure Exec includes a virtual kernel with a system bridge that supports a granular permission model. Filesystem, network, child processes, and environment variables are all available — gated behind deny-by-default permissions.",
+  },
+  {
+    question: "Does Secure Exec support JIT compilation?",
+    answer: "Yes. Secure Exec runs on native V8 isolates, so your code is JIT-compiled by V8's TurboFan optimizing compiler — the same pipeline that powers Chrome and Node.js. This means full optimization tiers, inline caching, and speculative optimization out of the box.",
   },
   {
     question: "How does Secure Exec compare to WASM-based JavaScript runtimes like QuickJS?",

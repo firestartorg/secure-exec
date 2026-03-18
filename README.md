@@ -141,18 +141,25 @@ V8 isolates vs. sandboxes.
 
 ## Secure Exec vs. Sandboxes
 
-Same isolation guarantees, without the infrastructure overhead.
+Not every workload needs a full OS. Secure Exec gives you V8-level isolation for code execution — no container required.
+
+- **Secure Exec** — Run untrusted code (Node.js, Python) inside your backend process
+- **Sandboxes** — Spin up a full OS with root access, system packages, and persistent disk
 
 |                      | Secure Exec                              | Sandbox                      |
 |----------------------|------------------------------------------|------------------------------|
 | **Performance**      | ✅ Native V8                             | ✅ Native container          |
 | **Permissions**      | ✅ Granular deny-by-default              | ❌ Coarse-grained            |
 | **Setup**            | ✅ Just `npm install` — no vendor account | ❌ Vendor account required  |
-| **API keys**         | ✅ None                                  | ❌ Required                  |
 | **Infrastructure**   | ✅ Run on any cloud or hardware          | ❌ Hardware lock-in          |
 | **Egress**           | ✅ No egress fees                        | ❌ Per-GB egress fees        |
+| **API keys**         | ✅ None                                  | ❌ Required                  |
 
-[Full comparison →](https://secureexec.dev/docs/comparison/sandbox)
+[**Full comparison guide →**](https://secureexec.dev/docs/comparison/sandbox)
+
+> **Need a full sandboxed operating system? We've got that too.** <br/>
+>
+> The [Sandbox Agent SDK](https://sandboxagent.dev/) lets you run coding agents in sandboxes and control them over HTTP. Supports Claude Code, Codex, OpenCode, Amp, and Pi. Works with E2B, Daytona, Vercel, Docker, and Cloudflare.
 
 ## FAQ
 
@@ -189,22 +196,22 @@ Yes. Secure Exec supports dynamic module installation via npm inside the executi
 <details>
 <summary>Can I use it to run dev servers like Express, Hono, or Next.js?</summary>
 
-Yes. Secure Exec bridges Node.js APIs including http, net, and child_process, so frameworks like Express, Hono, and Next.js work out of the box.
+Yes. Secure Exec bridges Node.js APIs including http, net, and child_process, so frameworks like Express, Hono, and Next.js work out of the box. For production deployments, pair Secure Exec with [Rivet Actors](https://rivet.dev/docs/actors) to get built-in routing, scaling, and lifecycle management for each server instance.
 </details>
 
 <details>
 <summary>Can it be used for long-running tasks?</summary>
 
-Yes. For orchestrating stateful, long-running processes efficiently, we recommend pairing Secure Exec with [Rivet Actors](https://rivet.dev/docs/actors).
+Yes. For orchestrating stateful, long-running tasks, we recommend pairing Secure Exec with [Rivet Actors](https://rivet.dev/docs/actors). Rivet Actors provide durable state, automatic persistence, and fault-tolerant orchestration — so each long-running task survives restarts and can be monitored, paused, or resumed without you building that infrastructure yourself.
 </details>
 
 <details>
 <summary>What are common use cases?</summary>
 
-- AI agent code evaluation and tool use
-- User-facing dev servers (Express, Hono, Next.js)
+- [AI agent code evaluation and tool use](https://secureexec.dev/docs/use-cases/ai-agent-code-eval)
+- [User-facing dev servers (Express, Hono, Next.js)](https://secureexec.dev/docs/use-cases/dev-servers)
 - MCP tool-code execution
-- Sandboxed plugin / extension systems
+- [Sandboxed plugin / extension systems](https://secureexec.dev/docs/use-cases/plugin-systems)
 - Interactive coding playgrounds
 </details>
 
@@ -218,6 +225,12 @@ Yes. Most Node.js core modules work — including fs, child_process, http, dns, 
 <summary>Does this have access to a full operating system?</summary>
 
 Yes. Secure Exec includes a virtual kernel with a system bridge that supports a granular permission model. Filesystem, network, child processes, and environment variables are all available — gated behind deny-by-default permissions.
+</details>
+
+<details>
+<summary>Does Secure Exec support JIT compilation?</summary>
+
+Yes. Secure Exec runs on native V8 isolates, so your code is JIT-compiled by V8's TurboFan optimizing compiler — the same pipeline that powers Chrome and Node.js. This means full optimization tiers, inline caching, and speculative optimization out of the box.
 </details>
 
 <details>

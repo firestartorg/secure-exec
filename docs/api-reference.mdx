@@ -5,16 +5,10 @@ description: Complete reference for all secure-exec exports.
 
 ## Package Structure
 
-secure-exec is split into focused packages. The umbrella `secure-exec` package re-exports everything for convenience.
-
 | Package | Contents |
 |---|---|
-| `@secure-exec/core` | Shared types, utilities, bridge guest code, `NodeRuntime`, `PythonRuntime` classes |
-| `@secure-exec/node` | Node.js V8 isolate runtime driver, `createNodeDriver`, `createNodeRuntimeDriverFactory` |
-| `@secure-exec/browser` | Browser Web Worker runtime driver, `createBrowserDriver`, `createBrowserRuntimeDriverFactory` |
-| `@secure-exec/python` | Pyodide runtime driver, `createPyodideRuntimeDriverFactory` |
+| `secure-exec` | Main package — `NodeRuntime`, system drivers, execution environment factories, filesystem, network, and permissions |
 | `@secure-exec/typescript` | Sandboxed TypeScript compiler tools |
-| `secure-exec` | Umbrella barrel — re-exports all of the above |
 
 ---
 
@@ -22,7 +16,7 @@ secure-exec is split into focused packages. The umbrella `secure-exec` package r
 
 ### `NodeRuntime`
 
-<sub>Package: `@secure-exec/core` (also re-exported from `secure-exec`)</sub>
+<sub>Exported from `secure-exec`</sub>
 
 Sandboxed JavaScript runtime using a V8 isolate.
 
@@ -85,41 +79,11 @@ createTypeScriptTools(options: TypeScriptToolsOptions)
 
 ---
 
-### `PythonRuntime`
-
-<sub>Package: `@secure-exec/core` (also re-exported from `secure-exec`)</sub>
-
-Sandboxed Python runtime using Pyodide in a Worker thread.
-
-```ts
-new PythonRuntime(options: PythonRuntimeOptions)
-```
-
-**`PythonRuntimeOptions`**
-
-| Option | Type | Description |
-|---|---|---|
-| `systemDriver` | `SystemDriver` | Host capabilities. **Required.** |
-| `runtimeDriverFactory` | `PythonRuntimeDriverFactory` | Creates the Pyodide worker. **Required.** |
-| `cpuTimeLimitMs` | `number` | CPU time budget in ms. |
-| `onStdio` | `StdioHook` | Default console output hook. |
-
-**Methods**
-
-| Method | Returns | Description |
-|---|---|---|
-| `exec(code, options?)` | `Promise<ExecResult>` | Execute Python code without a return value. |
-| `run<T>(code, options?)` | `Promise<PythonRunResult<T>>` | Execute Python code and return a value. |
-| `dispose()` | `void` | Release resources synchronously. |
-| `terminate()` | `Promise<void>` | Terminate the runtime. |
-
----
-
 ## System Driver Factories
 
 ### `createNodeDriver(options?)`
 
-<sub>Package: `@secure-exec/node` (also re-exported from `secure-exec`)</sub>
+<sub>Exported from `secure-exec`</sub>
 
 Creates a system driver for Node.js environments.
 
@@ -142,7 +106,7 @@ createNodeDriver(options?: NodeDriverOptions): SystemDriver
 
 ### `createBrowserDriver(options?)`
 
-<sub>Package: `@secure-exec/browser` (also re-exported from `secure-exec`)</sub>
+<sub>Exported from `secure-exec`</sub>
 
 Creates a system driver for browser environments. Returns a promise because OPFS initialization is async.
 
@@ -160,13 +124,13 @@ createBrowserDriver(options?: BrowserDriverOptions): Promise<SystemDriver>
 
 ---
 
-## Runtime Driver Factories
+## Execution Environment Setup
 
 ### `createNodeRuntimeDriverFactory(options?)`
 
-<sub>Package: `@secure-exec/node` (also re-exported from `secure-exec`)</sub>
+<sub>Re-exported from `secure-exec`</sub>
 
-Creates a factory for Node.js V8 isolate runtime drivers.
+Creates the execution environment factory for Node.js V8 isolates. Pass the result as the `runtimeDriverFactory` option when constructing a `NodeRuntime`.
 
 ```ts
 createNodeRuntimeDriverFactory(options?: {
@@ -176,24 +140,14 @@ createNodeRuntimeDriverFactory(options?: {
 
 ### `createBrowserRuntimeDriverFactory(options?)`
 
-<sub>Package: `@secure-exec/browser` (also re-exported from `secure-exec`)</sub>
+<sub>Re-exported from `secure-exec`</sub>
 
-Creates a factory for browser Worker-based runtime drivers.
+Creates the execution environment factory for browser Worker-based sandboxes. Pass the result as the `runtimeDriverFactory` option when constructing a `NodeRuntime`.
 
 ```ts
 createBrowserRuntimeDriverFactory(options?: {
   workerUrl?: URL | string;
 }): NodeRuntimeDriverFactory
-```
-
-### `createPyodideRuntimeDriverFactory()`
-
-<sub>Package: `@secure-exec/python` (also re-exported from `secure-exec`)</sub>
-
-Creates a factory for Pyodide-based Python runtime drivers.
-
-```ts
-createPyodideRuntimeDriverFactory(): PythonRuntimeDriverFactory
 ```
 
 ---
@@ -202,7 +156,7 @@ createPyodideRuntimeDriverFactory(): PythonRuntimeDriverFactory
 
 ### `createInMemoryFileSystem()`
 
-<sub>Package: `@secure-exec/core` (also re-exported from `secure-exec`)</sub>
+<sub>Exported from `secure-exec`</sub>
 
 Creates a fully in-memory filesystem backed by Maps.
 
@@ -212,7 +166,7 @@ createInMemoryFileSystem(): InMemoryFileSystem
 
 ### `createOpfsFileSystem()`
 
-<sub>Package: `@secure-exec/browser` (also re-exported from `secure-exec`)</sub>
+<sub>Exported from `secure-exec`</sub>
 
 Creates an OPFS-backed filesystem (browser only).
 
@@ -251,7 +205,7 @@ new NodeFileSystem()
 
 ### `createDefaultNetworkAdapter()`
 
-<sub>Package: `@secure-exec/node` (also re-exported from `secure-exec`)</sub>
+<sub>Exported from `secure-exec`</sub>
 
 Creates a network adapter with real fetch, DNS, and HTTP support (Node.js only).
 
@@ -261,7 +215,7 @@ createDefaultNetworkAdapter(): NetworkAdapter
 
 ### `createBrowserNetworkAdapter()`
 
-<sub>Package: `@secure-exec/browser` (also re-exported from `secure-exec`)</sub>
+<sub>Exported from `secure-exec`</sub>
 
 Creates a fetch-only network adapter for browser environments. No DNS support.
 
@@ -283,7 +237,7 @@ createBrowserNetworkAdapter(): NetworkAdapter
 
 ## Permissions
 
-<sub>Package: `@secure-exec/core` (also re-exported from `secure-exec`)</sub>
+<sub>Exported from `secure-exec`</sub>
 
 ### Pre-built helpers
 
@@ -335,20 +289,6 @@ Each field accepts a `PermissionCheck`, which is either a boolean or a function 
 ```ts
 { code: number; errorMessage?: string; exports?: T }
 ```
-
-### `PythonRunResult<T>`
-
-```ts
-{ code: number; errorMessage?: string; value?: T; globals?: Record<string, unknown> }
-```
-
-### `PythonRunOptions`
-
-Extends `ExecOptions` with:
-
-| Option | Type | Description |
-|---|---|---|
-| `globals` | `string[]` | Python globals to return. |
 
 ### `StdioHook`
 

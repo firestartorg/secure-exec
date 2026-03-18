@@ -37,6 +37,14 @@
         ]
       },
       {
+        "group": "Use Cases",
+        "pages": [
+          "use-cases/ai-agent-code-eval",
+          "use-cases/dev-servers",
+          "use-cases/plugin-systems"
+        ]
+      },
+      {
         "group": "System Drivers",
         "pages": [
           "system-drivers/overview",
@@ -50,6 +58,7 @@
           "features/typescript",
           "features/permissions",
           "features/filesystem",
+          "features/virtual-filesystem",
           "features/networking",
           "features/module-loading",
           "features/output-capture",

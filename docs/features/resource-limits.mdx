@@ -6,6 +6,50 @@ icon: "gauge"
 
 Resource limits prevent sandboxed code from running forever or exhausting host memory.
 
+## Runnable example
+
+```ts
+import {
+  NodeRuntime,
+  createNodeDriver,
+  createNodeRuntimeDriverFactory,
+} from "../../../packages/secure-exec/src/index.ts";
+
+const runtime = new NodeRuntime({
+  systemDriver: createNodeDriver(),
+  runtimeDriverFactory: createNodeRuntimeDriverFactory(),
+  memoryLimit: 64,
+  cpuTimeLimitMs: 100,
+});
+
+try {
+  const safeRun = await runtime.exec(`
+    console.log("resource-limits-ok");
+  `);
+
+  const timedOut = await runtime.exec("while (true) {}");
+
+  const success =
+    safeRun.code === 0 &&
+    timedOut.code === 124 &&
+    (timedOut.errorMessage?.includes("CPU time limit exceeded") ?? false);
+
+  console.log(
+    JSON.stringify({
+      ok: success,
+      safeCode: safeRun.code,
+      timeoutCode: timedOut.code,
+      errorMessage: timedOut.errorMessage,
+      summary: "normal code completed and an infinite loop hit the CPU limit",
+    }),
+  );
+} finally {
+  runtime.dispose();
+}
+```
+
+Source: [examples/features/src/resource-limits.ts](https://github.com/rivet-dev/secure-exec/blob/main/examples/features/src/resource-limits.ts)
+
 ## CPU time limit
 
 Set a CPU time budget in milliseconds. When exceeded, the execution exits with code `124`.
@@ -42,8 +86,6 @@ const runtime = new NodeRuntime({
 });
 ```
 
-<Info>Memory limits apply to Node runtimes only. Python runtimes run in a thread and do not support isolate-level memory caps.</Info>
-
 ## Payload limits
 
 The bridge enforces size limits on data crossing the isolate boundary. Oversized payloads are rejected with `ERR_SANDBOX_PAYLOAD_TOO_LARGE` instead of exhausting host memory.
@@ -54,7 +96,7 @@ const runtime = new NodeRuntime({
   runtimeDriverFactory: createNodeRuntimeDriverFactory(),
   payloadLimits: {
     base64TransferBytes: 10 * 1024 * 1024, // 10 MB for file transfers
-    jsonPayloadBytes: 5 * 1024 * 1024,     // 5 MB for JSON payloads
+    jsonPayloadBytes: 5 * 1024 * 1024, // 5 MB for JSON payloads
   },
 });
 ```

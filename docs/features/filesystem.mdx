@@ -6,27 +6,52 @@ icon: "folder"
 
 secure-exec supports three filesystem backends. The system driver controls which backend sandboxed code uses.
 
-## In-memory
-
-Fully in-memory filesystem backed by Maps. Works in both Node and browser.
+## Runnable example
 
 ```ts
-import { createInMemoryFileSystem } from "secure-exec";
+import {
+  NodeRuntime,
+  allowAllFs,
+  createInMemoryFileSystem,
+  createNodeDriver,
+  createNodeRuntimeDriverFactory,
+} from "../../../packages/secure-exec/src/index.ts";
 
-const fs = createInMemoryFileSystem();
-await fs.writeFile("/hello.txt", new TextEncoder().encode("hello"));
-```
-
-Use with a driver:
-
-```ts
-import { createNodeDriver, createInMemoryFileSystem, allowAllFs } from "secure-exec";
-
-const driver = createNodeDriver({
-  filesystem: createInMemoryFileSystem(),
-  permissions: { fs: allowAllFs },
+const filesystem = createInMemoryFileSystem();
+const runtime = new NodeRuntime({
+  systemDriver: createNodeDriver({
+    filesystem,
+    permissions: { ...allowAllFs },
+  }),
+  runtimeDriverFactory: createNodeRuntimeDriverFactory(),
 });
+
+try {
+  const result = await runtime.exec(`
+    const fs = require("node:fs");
+    fs.mkdirSync("/workspace", { recursive: true });
+    fs.writeFileSync("/workspace/hello.txt", "hello from the sandbox");
+  `);
+
+  if (result.code !== 0) {
+    throw new Error(`Unexpected execution result: ${JSON.stringify(result)}`);
+  }
+
+  const message = await filesystem.readTextFile("/workspace/hello.txt");
+
+  console.log(
+    JSON.stringify({
+      ok: message === "hello from the sandbox",
+      message,
+      summary: "sandbox wrote to the in-memory filesystem",
+    }),
+  );
+} finally {
+  runtime.dispose();
+}
 ```
+
+Source: [examples/features/src/filesystem.ts](https://github.com/rivet-dev/secure-exec/blob/main/examples/features/src/filesystem.ts)
 
 ## OPFS (browser)
 

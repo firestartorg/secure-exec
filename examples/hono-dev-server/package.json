@@ -1,0 +1,20 @@
+{
+  "name": "@libsandbox/example-hono-dev-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "verify-docs": "node scripts/verify-docs.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.6",
+    "hono": "^4.7.2",
+    "secure-exec": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

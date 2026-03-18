@@ -30,6 +30,34 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
 
+  examples/ai-agent-type-check:
+    dependencies:
+      '@ai-sdk/anthropic':
+        specifier: ^3.0.58
+        version: 3.0.58(zod@3.25.76)
+      '@secure-exec/typescript':
+        specifier: workspace:*
+        version: link:../../packages/secure-exec-typescript
+      ai:
+        specifier: ^6.0.116
+        version: 6.0.116(zod@3.25.76)
+      secure-exec:
+        specifier: workspace:*
+        version: link:../../packages/secure-exec
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.3
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   examples/ai-sdk:
     dependencies:
       '@ai-sdk/anthropic':
@@ -48,9 +76,15 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.3
       tsx:
         specifier: ^4.19.2
         version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
 
   examples/codemod:
     dependencies:
@@ -61,6 +95,44 @@ importers:
       tsx:
         specifier: ^4.19.2
         version: 4.21.0
+
+  examples/features:
+    dependencies:
+      '@secure-exec/typescript':
+        specifier: workspace:*
+        version: link:../../packages/secure-exec-typescript
+      secure-exec:
+        specifier: workspace:*
+        version: link:../../packages/secure-exec
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  examples/hono-dev-server:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.19.6
+        version: 1.19.9(hono@4.12.2)
+      hono:
+        specifier: ^4.7.2
+        version: 4.12.2
+      secure-exec:
+        specifier: workspace:*
+        version: link:../../packages/secure-exec
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.3
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
 
   examples/hono/loader:
     dependencies:
@@ -94,8 +166,27 @@ importers:
         specifier: ^4.19.2
         version: 4.21.0
 
+  examples/plugin-system:
+    dependencies:
+      secure-exec:
+        specifier: workspace:*
+        version: link:../../packages/secure-exec
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.3
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   examples/quickstart:
     dependencies:
+      '@secure-exec/typescript':
+        specifier: workspace:*
+        version: link:../../packages/secure-exec-typescript
       hono:
         specifier: ^4.7.2
         version: 4.12.2
@@ -404,6 +495,9 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+      vite:
+        specifier: ^6.4.1
+        version: 6.4.1(@types/node@22.19.3)(tsx@4.21.0)
 
 packages:
 
@@ -877,7 +971,6 @@ packages:
     cpu: [ppc64]
     os: [aix]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/aix-ppc64@0.27.4:
@@ -903,7 +996,6 @@ packages:
     cpu: [arm64]
     os: [android]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/android-arm64@0.27.4:
@@ -929,7 +1021,6 @@ packages:
     cpu: [arm]
     os: [android]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/android-arm@0.27.4:
@@ -955,7 +1046,6 @@ packages:
     cpu: [x64]
     os: [android]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/android-x64@0.27.4:
@@ -981,7 +1071,6 @@ packages:
     cpu: [arm64]
     os: [darwin]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/darwin-arm64@0.27.4:
@@ -1007,7 +1096,6 @@ packages:
     cpu: [x64]
     os: [darwin]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/darwin-x64@0.27.4:
@@ -1033,7 +1121,6 @@ packages:
     cpu: [arm64]
     os: [freebsd]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/freebsd-arm64@0.27.4:
@@ -1059,7 +1146,6 @@ packages:
     cpu: [x64]
     os: [freebsd]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/freebsd-x64@0.27.4:
@@ -1085,7 +1171,6 @@ packages:
     cpu: [arm64]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/linux-arm64@0.27.4:
@@ -1111,7 +1196,6 @@ packages:
     cpu: [arm]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/linux-arm@0.27.4:
@@ -1137,7 +1221,6 @@ packages:
     cpu: [ia32]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/linux-ia32@0.27.4:
@@ -1163,7 +1246,6 @@ packages:
     cpu: [loong64]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/linux-loong64@0.27.4:
@@ -1189,7 +1271,6 @@ packages:
     cpu: [mips64el]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/linux-mips64el@0.27.4:
@@ -1215,7 +1296,6 @@ packages:
     cpu: [ppc64]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/linux-ppc64@0.27.4:
@@ -1241,7 +1321,6 @@ packages:
     cpu: [riscv64]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/linux-riscv64@0.27.4:
@@ -1267,7 +1346,6 @@ packages:
     cpu: [s390x]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/linux-s390x@0.27.4:
@@ -1293,7 +1371,6 @@ packages:
     cpu: [x64]
     os: [linux]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/linux-x64@0.27.4:
@@ -1310,7 +1387,6 @@ packages:
     cpu: [arm64]
     os: [netbsd]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/netbsd-arm64@0.27.4:
@@ -1336,7 +1412,6 @@ packages:
     cpu: [x64]
     os: [netbsd]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/netbsd-x64@0.27.4:
@@ -1353,7 +1428,6 @@ packages:
     cpu: [arm64]
     os: [openbsd]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/openbsd-arm64@0.27.4:
@@ -1379,7 +1453,6 @@ packages:
     cpu: [x64]
     os: [openbsd]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/openbsd-x64@0.27.4:
@@ -1396,7 +1469,6 @@ packages:
     cpu: [arm64]
     os: [openharmony]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/openharmony-arm64@0.27.4:
@@ -1422,7 +1494,6 @@ packages:
     cpu: [x64]
     os: [sunos]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/sunos-x64@0.27.4:
@@ -1448,7 +1519,6 @@ packages:
     cpu: [arm64]
     os: [win32]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/win32-arm64@0.27.4:
@@ -1474,7 +1544,6 @@ packages:
     cpu: [ia32]
     os: [win32]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/win32-ia32@0.27.4:
@@ -1500,7 +1569,6 @@ packages:
     cpu: [x64]
     os: [win32]
     requiresBuild: true
-    dev: false
     optional: true
 
   /@esbuild/win32-x64@0.27.4:
@@ -3465,7 +3533,6 @@ packages:
       '@esbuild/win32-arm64': 0.25.12
       '@esbuild/win32-ia32': 0.25.12
       '@esbuild/win32-x64': 0.25.12
-    dev: false
 
   /esbuild@0.27.4:
     resolution: {integrity: sha512-Rq4vbHnYkK5fws5NF7MYTU68FPRE1ajX7heQ/8QXXWqNgqqJ/GkmmyxIzUnf2Sr/bakf8l54716CcMGHYhMrrQ==}
@@ -6748,7 +6815,6 @@ packages:
       tsx: 4.21.0
     optionalDependencies:
       fsevents: 2.3.3
-    dev: false
 
   /vitefu@1.1.2(vite@6.4.1):
     resolution: {integrity: sha512-zpKATdUbzbsycPFBN71nS2uzBUQiVnFoOrr2rvqv34S1lcAgMKKkjWleLGeiJlZ8lwCXvtWaRn7R3ZC16SYRuw==}

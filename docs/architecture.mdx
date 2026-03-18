@@ -10,7 +10,7 @@ Every secure-exec sandbox has three layers: a **runtime** (public API), a **brid
 ```mermaid
 flowchart TB
     subgraph Host["Host Process"]
-        RT["Runtime<br/>(NodeRuntime / PythonRuntime)"]
+        RT["Runtime<br/>(NodeRuntime)"]
         SD["System Driver<br/>(filesystem, network, processes, permissions)"]
     end
     subgraph Isolate["Sandbox"]
@@ -29,12 +29,13 @@ User code runs inside the sandbox and can only reach host capabilities through t
 
 ### Runtime
 
-The public API. `NodeRuntime` and `PythonRuntime` are thin facades that accept a system driver and a runtime driver factory, then delegate all execution to the runtime driver.
+The public API. `NodeRuntime` is a thin facade that accepts a system driver, then delegates all execution to the isolate.
 
 ```ts
+import { NodeRuntime, createNodeDriver } from "secure-exec";
+
 const runtime = new NodeRuntime({
   systemDriver: createNodeDriver(),
-  runtimeDriverFactory: createNodeRuntimeDriverFactory(),
 });
 
 await runtime.exec("console.log('hello')");
@@ -59,10 +60,6 @@ Each capability is wrapped in a permission layer before the bridge can call it. 
 
 The narrow interface between the sandbox and the host. All privileged operations pass through the bridge. It serializes requests, enforces payload size limits, and routes calls to the appropriate system driver capability.
 
-### Runtime Driver
-
-Manages the actual execution environment. This is where the runtime-specific isolation mechanism lives.
-
 ## Node Runtime
 
 On Node, the sandbox is a V8 isolate managed by `isolated-vm`.
@@ -71,7 +68,6 @@ On Node, the sandbox is a V8 isolate managed by `isolated-vm`.
 flowchart TB
     subgraph Host["Host (Node.js process)"]
         NR["NodeRuntime"]
-        NED["NodeExecutionDriver"]
         SD["System Driver"]
         MAFS["ModuleAccessFileSystem"]
     end
@@ -80,8 +76,7 @@ flowchart TB
         BR["Bridge (ivm.Reference callbacks)"]
         MOD["Module Cache"]
     end
-    NR --> NED
-    NED --> ISO
+    NR --> ISO
     UC --> BR
     BR -->|"fs / net / process / crypto"| SD
     SD --> MAFS
@@ -95,7 +90,7 @@ flowchart TB
 - `SharedArrayBuffer` is unavailable in freeze mode
 
 **Outside the isolate (host):**
-- `NodeExecutionDriver` creates contexts, compiles modules, and manages the isolate lifecycle
+- The V8 isolate execution environment creates contexts, compiles modules, and manages the isolate lifecycle
 - `ModuleAccessFileSystem` overlays host `node_modules` at `/app/node_modules` (read-only, blocks `.node` native addons, prevents symlink escapes)
 - System driver applies permission checks before every host operation
 - Bridge enforces payload size limits on all transfers (`ERR_SANDBOX_PAYLOAD_TOO_LARGE`)
@@ -113,15 +108,13 @@ In the browser, the sandbox is a Web Worker.
 flowchart TB
     subgraph Host["Host (browser main thread)"]
         NR["NodeRuntime"]
-        BRD["BrowserRuntimeDriver"]
         SD["System Driver"]
     end
     subgraph WK["Web Worker"]
         UC["User Code (CJS / ESM)"]
         BR["Bridge (postMessage RPC)"]
     end
-    NR --> BRD
-    BRD -->|"postMessage"| WK
+    NR --> WK
     UC --> BR
     BR -->|"postMessage"| SD
 ```
@@ -133,42 +126,9 @@ flowchart TB
 - DNS operations return deterministic `ENOSYS` errors
 
 **Outside the worker (host):**
-- `BrowserRuntimeDriver` spawns workers, dispatches requests by ID, and correlates responses
+- The browser isolate spawns workers, dispatches requests by ID, and correlates responses
 - `createBrowserDriver()` configures OPFS or in-memory filesystem and fetch-based networking
 - Node-only runtime options (like `memoryLimit`) are validated and rejected at creation time
-
-## Python Runtime
-
-The Python sandbox runs Pyodide in a Node Worker thread.
-
-```mermaid
-flowchart TB
-    subgraph Host["Host (Node.js process)"]
-        PR["PythonRuntime"]
-        PRD["PyodideRuntimeDriver"]
-        SD["System Driver"]
-    end
-    subgraph WK["Worker Thread"]
-        PY["Pyodide (CPython via Emscripten)"]
-        UC["User Code (Python)"]
-        BR["Bridge (worker RPC)"]
-    end
-    PR --> PRD
-    PRD -->|"worker messages"| WK
-    UC --> BR
-    BR -->|"worker RPC"| SD
-```
-
-**Inside the worker:**
-- Pyodide loads once and keeps interpreter state warm across runs
-- Python code executes with access to bridged filesystem and network
-- stdio streams to the host via message events
-
-**Outside the worker (host):**
-- `PyodideRuntimeDriver` manages worker lifecycle and request correlation
-- Filesystem and network access goes through the same `SystemDriver` permission layer
-- On execution timeout, the worker state restarts for deterministic recovery
-- No `memoryLimit` or `timingMitigation` (Pyodide runs in a Worker, not a V8 isolate)
 
 ## Permission Flow
 

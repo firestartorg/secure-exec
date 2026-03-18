@@ -26,7 +26,7 @@ icon: "rocket"
   </Step>
 
   <Step title="Create a runtime">
-    A runtime needs a **system driver** (host capabilities) and a **runtime driver** (sandbox execution).
+    A runtime needs a **system driver** that provides host capabilities like filesystem and network access.
 
     ```ts
     import {
@@ -44,8 +44,6 @@ icon: "rocket"
 
   <Step title="Run code">
     Use `run()` when you want a value back and `exec()` when you care about side effects like logging, files, networking, or long-lived handles.
-    For the TypeScript example, also install `@secure-exec/typescript`.
-
     <CodeGroup>
       ```ts Simple
       import {
@@ -65,62 +63,6 @@ icon: "rocket"
 
       const message = result.exports?.message;
       // "hello from secure-exec"
-      ```
-
-      ```ts TypeScript
-      import {
-        NodeRuntime,
-        createNodeDriver,
-        createNodeRuntimeDriverFactory,
-      } from "secure-exec";
-      import { createTypeScriptTools } from "@secure-exec/typescript";
-
-      const systemDriver = createNodeDriver();
-      const runtimeDriverFactory = createNodeRuntimeDriverFactory();
-
-      const runtime = new NodeRuntime({
-        systemDriver,
-        runtimeDriverFactory,
-      });
-      const ts = createTypeScriptTools({
-        systemDriver,
-        runtimeDriverFactory,
-      });
-
-      const sourceText = `
-        const message: string = "hello from typescript";
-        module.exports = { message };
-      `;
-
-      const typecheck = await ts.typecheckSource({
-        sourceText,
-        filePath: "/root/example.ts",
-        compilerOptions: {
-          module: "commonjs",
-          target: "es2022",
-        },
-      });
-
-      if (!typecheck.success) {
-        throw new Error(typecheck.diagnostics.map((d) => d.message).join("\n"));
-      }
-
-      const compiled = await ts.compileSource({
-        sourceText,
-        filePath: "/root/example.ts",
-        compilerOptions: {
-          module: "commonjs",
-          target: "es2022",
-        },
-      });
-
-      const result = await runtime.run<{ message: string }>(
-        compiled.outputText ?? "",
-        "/root/example.js"
-      );
-
-      const message = result.exports?.message;
-      // "hello from typescript"
       ```
 
       ```ts Logging

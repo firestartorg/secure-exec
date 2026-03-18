@@ -29,7 +29,7 @@ icon: "compass"
 Every sandbox has two layers:
 
 - **System driver** provides host capabilities: filesystem, network, child processes, and permissions.
-- **Runtime driver** manages the isolated execution environment (V8 isolate on Node, Web Worker in browser).
+- The execution environment runs code in a V8 isolate (Node) or Web Worker (browser).
 
 All host capabilities are deny-by-default. You opt in to what sandboxed code can access.
 
@@ -247,7 +247,7 @@ runtime.dispose();
 
 <CardGroup cols={2}>
   <Card title="Runtimes" icon="microchip" href="/runtimes/overview">
-    Node and Python runtime details.
+    Node runtime details.
   </Card>
   <Card title="System Drivers" icon="server" href="/system-drivers/overview">
     Configure host capabilities per environment.
