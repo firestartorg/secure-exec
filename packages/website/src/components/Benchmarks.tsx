@@ -56,7 +56,7 @@ function ColdStartChart() {
           </h4>
           <p className="text-[11px] text-zinc-600 italic mt-1">Lower is better</p>
         </div>
-        <div className="flex gap-1 sm:ml-auto">
+        <div className="flex flex-wrap gap-1 sm:ml-auto">
           {groups.map((t, i) => (
             <button
               key={t.label}
@@ -76,7 +76,7 @@ function ColdStartChart() {
         {/* Secure Exec bar */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
           <span className="text-xs text-zinc-500 sm:w-48 shrink-0 font-mono">Secure Exec</span>
-          <div className="flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
+          <div className="w-full sm:flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
             <motion.div
               key={active}
               initial={{ width: 0 }}
@@ -99,7 +99,7 @@ function ColdStartChart() {
         {/* Sandbox bar */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
           <span className="text-xs text-zinc-500 sm:w-48 shrink-0 font-mono">Fastest sandbox</span>
-          <div className="flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
+          <div className="w-full sm:flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
             <motion.div
               key={active}
               initial={{ width: 0 }}
@@ -145,7 +145,7 @@ function MetricBar({
         {/* Secure Exec bar */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
           <span className="text-xs text-zinc-500 sm:w-48 shrink-0 font-mono">Secure Exec</span>
-          <div className="flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
+          <div className="w-full sm:flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
               whileInView={{ width: `${barMin}%` }}
@@ -170,7 +170,7 @@ function MetricBar({
         {/* Sandbox bar */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
           <span className="text-xs text-zinc-500 sm:w-48 shrink-0 font-mono">{sandbox.label}</span>
-          <div className="flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
+          <div className="w-full sm:flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
               whileInView={{ width: `${sandbox.bar}%` }}
@@ -222,7 +222,7 @@ function CostChart() {
           </h4>
           <p className="text-[11px] text-zinc-600 italic mt-1">Lower is better</p>
         </div>
-        <div className="flex gap-1 sm:ml-auto">
+        <div className="flex flex-wrap gap-1 sm:ml-auto">
           {tiers.map((tier, i) => (
             <button
               key={tier.label}
@@ -242,7 +242,7 @@ function CostChart() {
         {/* Secure Exec bar */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
           <span className="text-xs text-zinc-500 sm:w-48 shrink-0 font-mono">Secure Exec</span>
-          <div className="flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
+          <div className="w-full sm:flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
             <motion.div
               key={active}
               initial={{ width: 0 }}
@@ -265,7 +265,7 @@ function CostChart() {
         {/* Sandbox bar */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
           <span className="text-xs text-zinc-500 sm:w-48 shrink-0 font-mono">Cheapest sandbox</span>
-          <div className="flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
+          <div className="w-full sm:flex-1 relative h-7 bg-white/5 rounded-sm overflow-hidden">
             <motion.div
               key={active}
               initial={{ width: 0 }}
@@ -285,7 +285,7 @@ function CostChart() {
 
 export function Benchmarks() {
   return (
-    <section id="benchmarks" className="border-t border-white/10 py-48">
+    <section id="benchmarks" className="border-t border-white/10 py-48 overflow-x-hidden">
       <div className="mx-auto max-w-7xl px-6">
         <div className="mb-12">
           <motion.h2
@@ -324,7 +324,7 @@ export function Benchmarks() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="relative z-10 rounded-xl bg-[#0c0c0e] p-8 chrome-gradient-border"
+          className="relative z-10 rounded-xl bg-[#0c0c0e] p-4 sm:p-8 overflow-hidden chrome-gradient-border"
           style={{ "--chrome-angle": "75deg" } as React.CSSProperties}
         >
           {/* Cold start charts */}

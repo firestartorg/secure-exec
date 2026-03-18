@@ -79,36 +79,55 @@ const structuredData = {
   <body class="min-h-screen bg-background text-foreground antialiased">
     <slot />
     <script>
-      // Chrome border scroll effects:
-      // 1. Rotate gradient clockwise on scroll-down (fast at edges, slow at center)
-      // 2. Brighter/shinier near page center, darker near top/bottom
+      // Chrome border scroll + tilt effects:
+      // Scroll: rotate gradient clockwise, brighter near page center
+      // Tilt (mobile): device orientation adds rotation and brightness shift
       {
         const K = 0.6;
         const TWO_PI = Math.PI * 2;
         const BRIGHT_MIN = 0.35;
         const BRIGHT_MAX = 1.2;
+
+        let scrollDeg = 0;
+        let scrollBright = BRIGHT_MIN;
+        let scrollDivider = 100;
+        let tiltDeg = 0;
+        let tiltBright = 0;
         let ticking = false;
-        const update = () => {
+
+        const apply = () => {
+          const root = document.documentElement.style;
+          root.setProperty("--chrome-scroll-offset", `${scrollDeg + tiltDeg}deg`);
+          root.setProperty("--chrome-brightness", `${scrollBright + tiltBright}`);
+          root.setProperty("--chrome-divider-offset", `${scrollDivider}%`);
+          ticking = false;
+        };
+
+        const onScroll = () => {
           const scrollY = window.scrollY;
           const pageHeight = document.documentElement.scrollHeight - window.innerHeight;
           const t = pageHeight > 0 ? scrollY / pageHeight : 0;
           const eased = t + K * Math.sin(TWO_PI * t) / TWO_PI;
-          const degrees = eased * 360;
-          const brightness = BRIGHT_MIN + (BRIGHT_MAX - BRIGHT_MIN) * Math.sin(Math.PI * t);
-          const root = document.documentElement.style;
-          const dividerOffset = (1 - t) * 100;
-          root.setProperty("--chrome-scroll-offset", `${degrees}deg`);
-          root.setProperty("--chrome-brightness", `${brightness}`);
-          root.setProperty("--chrome-divider-offset", `${dividerOffset}%`);
-          ticking = false;
+          scrollDeg = eased * 360;
+          scrollBright = BRIGHT_MIN + (BRIGHT_MAX - BRIGHT_MIN) * Math.sin(Math.PI * t);
+          scrollDivider = (1 - t) * 100;
+          if (!ticking) { requestAnimationFrame(apply); ticking = true; }
         };
-        window.addEventListener("scroll", () => {
-          if (!ticking) {
-            requestAnimationFrame(update);
-            ticking = true;
-          }
+
+        window.addEventListener("scroll", onScroll, { passive: true });
+        onScroll();
+
+        // Device tilt: gamma (left/right) drives rotation, beta (front/back) drives brightness
+        let hasTilt = false;
+        window.addEventListener("deviceorientation", (e) => {
+          if (e.gamma == null || e.beta == null) return;
+          hasTilt = true;
+          const gamma = Math.max(-45, Math.min(45, e.gamma));
+          const beta = Math.max(-45, Math.min(45, e.beta));
+          tiltDeg = (gamma / 45) * 60;
+          tiltBright = (1 - Math.abs(beta) / 45) * 0.3;
+          if (!ticking) { requestAnimationFrame(apply); ticking = true; }
         }, { passive: true });
-        update();
       }
     </script>
   </body>
