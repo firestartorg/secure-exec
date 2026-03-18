@@ -178,7 +178,9 @@ function createKernelVfs(): WasiVFS {
   // Inode cache for getIno/getInodeByIno — synthesizes inodes from kernel VFS stat
   let nextIno = 1;
   const pathToIno = new Map<string, number>();
+  const inoToPath = new Map<number, string>();
   const inoCache = new Map<number, WasiInode>();
+  const populatedDirs = new Set<number>();
 
   function resolveIno(path: string): number | null {
     const cached = pathToIno.get(path);
@@ -191,6 +193,7 @@ function createKernelVfs(): WasiVFS {
     const raw = JSON.parse(decoder.decode(res.data)) as Record<string, unknown>;
     const ino = nextIno++;
     pathToIno.set(path, ino);
+    inoToPath.set(ino, path);
 
     const nodeType = raw.type as string ?? 'file';
     const isDir = nodeType === 'dir';
@@ -212,6 +215,27 @@ function createKernelVfs(): WasiVFS {
 
     inoCache.set(ino, node);
     return ino;
+  }
+
+  /** Lazy-populate directory entries from kernel VFS readdir. */
+  function populateDirEntries(ino: number, node: WasiInode): void {
+    if (populatedDirs.has(ino)) return;
+    populatedDirs.add(ino);
+
+    const path = inoToPath.get(ino);
+    if (!path) return;
+
+    const res = rpcCall('vfsReaddir', { path });
+    if (res.errno !== 0) return;
+
+    const names = JSON.parse(decoder.decode(res.data)) as string[];
+    for (const name of names) {
+      const childPath = path === '/' ? '/' + name : path + '/' + name;
+      const childIno = resolveIno(childPath);
+      if (childIno !== null) {
+        node.entries!.set(name, childIno);
+      }
+    }
   }
 
   return {
@@ -284,7 +308,13 @@ function createKernelVfs(): WasiVFS {
       return resolveIno(path);
     },
     getInodeByIno(ino: number): WasiInode | null {
-      return inoCache.get(ino) ?? null;
+      const node = inoCache.get(ino);
+      if (!node) return null;
+      // Lazy-populate directory entries from kernel VFS
+      if (node.type === 'dir' && node.entries) {
+        populateDirEntries(ino, node);
+      }
+      return node;
     },
     snapshot(): VfsSnapshotEntry[] {
       return [];

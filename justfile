@@ -1,3 +1,6 @@
+dev-shell:
+	npx tsx scripts/shell.ts
+
 dev-docs:
 	cd docs && npx mintlify dev
 
@@ -7,5 +10,3 @@ dev-website:
 build-website:
 	pnpm --filter @secure-exec/website build
 
-open-docs:
-	open https://secure-exec.rivet.gg

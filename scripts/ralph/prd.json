@@ -1420,6 +1420,159 @@
       "notes": "Phase 2 of terminal-e2e-testing.md spec. Requires WASM binary built. Adversarial review added: cd and export builtins \u2014 state persistence across commands is an interactive-only behavior. cd and ls tests are .todo due to pre-existing WASI path resolution / proc_spawn issues."
     },
     {
+      "id": "US-104",
+      "title": "Fix connectTerminal() raw mode setup outside try block",
+      "description": "As a developer, I need connectTerminal() to set raw mode inside the try block so terminal state is always restored on exception.",
+      "acceptanceCriteria": [
+        "stdin.setRawMode(true) is called inside the try block, not before it",
+        "stdin.on('data') listener is added inside the try block",
+        "If openShell() or any setup throws, terminal is not left in raw mode",
+        "All existing connectTerminal tests still pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 84,
+      "passes": false,
+      "notes": "HIGH \u2014 found during PTY review. Current code sets raw mode at line ~267 but try starts at ~291. If anything between those lines throws, finally block never runs and terminal is permanently in raw mode."
+    },
+    {
+      "id": "US-105",
+      "title": "Fix openShell() read pump lifecycle \u2014 track and cancel on exit",
+      "description": "As a developer, I need the openShell() read pump to be tracked and cleanly cancelled when the shell exits, instead of running fire-and-forget.",
+      "acceptanceCriteria": [
+        "Read pump promise is tracked (not fire-and-forget)",
+        "Pump exits promptly when shell exits (not only when PTY master closes)",
+        "Pump errors are logged or propagated, not silently swallowed",
+        "ShellHandle.wait() does not resolve while pump is still delivering data",
+        "All existing openShell and shell-terminal tests still pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 85,
+      "passes": false,
+      "notes": "MEDIUM \u2014 found during PTY review. readPump() is called without await at kernel.ts:~233. Errors are silently caught. Pump outlives shell.wait() resolution."
+    },
+    {
+      "id": "US-106",
+      "title": "Fix PTY echo buffer overflow \u2014 queue or error instead of silent drop",
+      "description": "As a developer, I need PTY echo to either queue or return an error when the output buffer is full, instead of silently dropping echo bytes.",
+      "acceptanceCriteria": [
+        "When output buffer is full, echo bytes are not silently dropped",
+        "Chosen strategy documented: either queue echo (backpressure), throw EAGAIN, or document best-effort with test",
+        "Test: fill output buffer to MAX_PTY_BUFFER_BYTES, write input with echo enabled, verify defined behavior (not silent drop)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 86,
+      "passes": false,
+      "notes": "MEDIUM \u2014 found during PTY review. pty.ts:~444-447 silently drops echo when output buffer full. User types but sees nothing \u2014 violates 'what you type is what you see' principle."
+    },
+    {
+      "id": "US-107",
+      "title": "Validate tcsetpgrp target PGID exists",
+      "description": "As a developer, I need tcsetpgrp() to validate that the target PGID refers to an existing process group, so that signal delivery doesn't silently fail.",
+      "acceptanceCriteria": [
+        "tcsetpgrp(pid, fd, pgid) throws ESRCH or EPERM if pgid does not match any running process's pgid",
+        "Setting foregroundPgid to a valid group still works as before",
+        "Test: tcsetpgrp with non-existent pgid throws appropriate error",
+        "Test: tcsetpgrp with valid pgid succeeds",
+        "All existing tcsetpgrp tests still pass",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 87,
+      "passes": false,
+      "notes": "MEDIUM \u2014 found during PTY review. kernel.ts:~691-696 and pty.ts:~274-279 accept any number. Setting foregroundPgid to non-existent group causes ^C to silently fail (caught by try/catch)."
+    },
+    {
+      "id": "US-108",
+      "title": "Add adversarial PTY stress tests",
+      "description": "As a developer, I need tests that exercise PTY under adversarial conditions to verify bounded behavior under hostile workloads.",
+      "acceptanceCriteria": [
+        "Test: rapid sequential writes (100+ chunks) to PTY master with no slave reader \u2014 verify EAGAIN and bounded memory",
+        "Test: single large write (1MB+) to PTY \u2014 verify immediate EAGAIN, no partial buffering",
+        "Test: multiple PTY pairs simultaneously filled to buffer limit \u2014 verify isolation between pairs",
+        "Test: canonical mode line buffer under sustained input without newline \u2014 verify bounded behavior",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 88,
+      "passes": false,
+      "notes": "MEDIUM \u2014 test-audit.md M11 flags this as HIGH priority. Current tests only fill buffer to exact limit and check one extra byte. No realistic adversarial patterns."
+    },
+    {
+      "id": "US-109",
+      "title": "Add test for stale foregroundPgid after group leader exit",
+      "description": "As a developer, I need a test verifying that signal delivery behaves correctly when the foreground process group leader exits.",
+      "acceptanceCriteria": [
+        "Test: set foregroundPgid to a process group, exit the group leader, send ^C \u2014 verify defined behavior (error or no-op, not crash)",
+        "Test: set foregroundPgid, exit leader, set new foregroundPgid to valid group \u2014 verify recovery works",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 89,
+      "passes": false,
+      "notes": "LOW \u2014 found during PTY review. PTY foregroundPgid goes stale when process exits. Protected by try/catch in kernel constructor wiring but untested."
+    },
+    {
+      "id": "US-110",
+      "title": "Add PTY echo buffer exhaustion test",
+      "description": "As a developer, I need a test that exercises the echo path when the PTY output buffer is full.",
+      "acceptanceCriteria": [
+        "Test: fill PTY output buffer to MAX_PTY_BUFFER_BYTES, then write input with echo enabled \u2014 verify behavior matches US-106 fix",
+        "Test: drain buffer after echo exhaustion, verify echo resumes correctly",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 90,
+      "passes": false,
+      "notes": "LOW \u2014 depends on US-106 (echo overflow fix). Tests the specific interaction between buffer fullness and echo."
+    },
+    {
+      "id": "US-111",
+      "title": "Add waitFor() occurrence parameter and type() settlement edge case tests",
+      "description": "As a developer, I need tests exercising untested TerminalHarness API paths.",
+      "acceptanceCriteria": [
+        "Test: waitFor with occurrence=2 \u2014 verify it waits for second appearance of text",
+        "Test: waitFor with occurrence=3 on text that appears only twice \u2014 verify timeout",
+        "Test: type() on command that produces no output \u2014 verify settlement resolves after SETTLE_MS",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 91,
+      "passes": false,
+      "notes": "LOW \u2014 found during PTY review. waitFor() occurrence param and type() edge cases have zero coverage despite being part of TerminalHarness API."
+    },
+    {
+      "id": "US-112",
+      "title": "Add concurrent openShell() session test",
+      "description": "As a developer, I need a test verifying that multiple concurrent openShell() sessions are fully isolated.",
+      "acceptanceCriteria": [
+        "Test: open two shells concurrently, write different commands to each, verify output isolation \u2014 data from shell A never appears in shell B",
+        "Test: exit one shell while the other is still running \u2014 verify surviving shell is unaffected",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 92,
+      "passes": false,
+      "notes": "LOW \u2014 found during PTY review. Multi-PTY isolation is tested at raw PTY level but not through openShell() integration path."
+    },
+    {
+      "id": "US-113",
+      "title": "Add PTY signal callback error handling",
+      "description": "As a developer, I need the PTY onSignal callback to handle errors gracefully instead of being fire-and-forget.",
+      "acceptanceCriteria": [
+        "onSignal callback errors are caught and do not crash the PTY or break the line discipline",
+        "After a failed signal delivery, subsequent PTY operations (read, write, echo) still work",
+        "Test: configure onSignal to throw, send ^C, verify PTY continues working",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 93,
+      "passes": false,
+      "notes": "LOW \u2014 found during PTY review. pty.ts:~374 calls onSignal?.() with no error handling. Currently protected by kernel try/catch wiring but fragile if wiring changes."
+    },
+    {
       "id": "US-084",
       "title": "Add WasmVM terminal tests: cat, pipe, bad command",
       "description": "As a developer, I need terminal-level tests for VFS file reading, pipes, and error output in the interactive shell.",
@@ -1434,7 +1587,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 84,
+      "priority": 94,
       "passes": false,
       "notes": "Phase 2 of terminal-e2e-testing.md spec. Completes the WasmVM terminal test suite (excluding cross-runtime). Adversarial review added: stderr rendering, redirection operators, and multi-line input \u2014 all interactive-only behaviors with zero coverage."
     },
@@ -1452,7 +1605,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 85,
+      "priority": 95,
       "passes": false,
       "notes": "Phase 3 of terminal-e2e-testing.md spec. Known risk: cross-runtime stdout routing through proc_spawn \u2192 kernel \u2192 PTY has known issues \u2014 if tests fail, fix is in spawn/stdio wiring, not test infrastructure. Adversarial review added: ^C during cross-runtime spawn \u2014 signal must reach correct process and shell must survive."
     },
@@ -1470,7 +1623,7 @@
       "passes": false,
       "notes": "Prerequisite for yarn layout fixtures. Currently only pnpm/npm/bun are handled in fixture prep.",
       "id": "US-086",
-      "priority": 86
+      "priority": 96
     },
     {
       "title": "Add npm flat layout fixture",
@@ -1487,7 +1640,7 @@
       "passes": false,
       "notes": "npm uses flat hoisting - all deps directly in node_modules/ as real directories (no symlinks, no hardlinks).",
       "id": "US-087",
-      "priority": 87
+      "priority": 97
     },
     {
       "title": "Add yarn classic layout fixture",
@@ -1505,7 +1658,7 @@
       "passes": false,
       "notes": "Yarn classic (v1) uses a hoisted layout similar to npm but with different lockfile format. Depends on US-086 for yarn support.",
       "id": "US-088",
-      "priority": 88
+      "priority": 98
     },
     {
       "title": "Add yarn berry node-modules linker fixture",
@@ -1523,7 +1676,7 @@
       "passes": false,
       "notes": "Yarn berry with node-modules linker still creates node_modules/ but uses a different internal structure than classic. Depends on US-086.",
       "id": "US-089",
-      "priority": 89
+      "priority": 99
     },
     {
       "title": "Add workspace/monorepo layout fixture",
@@ -1541,7 +1694,7 @@
       "passes": false,
       "notes": "Workspace layouts use symlinks between workspace members. Increasingly common (turborepo, nx, etc). Use pnpm or npm workspaces.",
       "id": "US-090",
-      "priority": 90
+      "priority": 100
     },
     {
       "title": "Add peer dependency resolution fixture",
@@ -1558,7 +1711,7 @@
       "passes": false,
       "notes": "Peer deps are resolved differently by each package manager. Tests that the sandbox module resolver handles the hoisting/symlink correctly.",
       "id": "US-091",
-      "priority": 91
+      "priority": 101
     },
     {
       "title": "Add conditional exports (package.json exports field) fixture",
@@ -1575,7 +1728,7 @@
       "passes": false,
       "notes": "The exports field is a major source of module resolution bugs. Tests subpath exports and condition matching.",
       "id": "US-092",
-      "priority": 92
+      "priority": 102
     },
     {
       "title": "Add transitive dependency chain fixture",
@@ -1592,7 +1745,7 @@
       "passes": false,
       "notes": "Verifies the resolver does not break on deep chains, especially with different hoisting strategies across package managers.",
       "id": "US-093",
-      "priority": 93
+      "priority": 103
     },
     {
       "title": "Add optional dependency fixture",
@@ -1608,7 +1761,7 @@
       "passes": false,
       "notes": "Optional deps are common in the ecosystem (e.g., fsevents on macOS). Sandbox must handle missing optional deps identically to host.",
       "id": "US-094",
-      "priority": 94
+      "priority": 104
     },
     {
       "id": "US-095",
@@ -1627,7 +1780,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 95,
+      "priority": 105,
       "passes": false,
       "notes": "CLI E2E Phase 0 \u2014 bridge prerequisite. Gap #2, #5, #6 from cli-tool-e2e.md spec. Files: packages/secure-exec/src/bridge/process.ts, packages/secure-exec/src/node/execution-driver.ts"
     },
@@ -1647,7 +1800,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 96,
+      "priority": 106,
       "passes": false,
       "notes": "CLI E2E Phase 0 \u2014 bridge prerequisite. Gap #1, #3 from cli-tool-e2e.md spec. Required for Pi, Claude Code (Anthropic SSE), and OpenCode SDK (OpenAI SSE)."
     },
@@ -1672,7 +1825,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 97,
+      "priority": 107,
       "passes": false,
       "notes": "CLI E2E Phase 1. Mock LLM server is shared infrastructure for all subsequent CLI tool tests. Pi is tested first because it's pure JS with simplest dependency tree. API tokens (ANTHROPIC_API_KEY, OPENAI_API_KEY) available at ~/misc/env.txt \u2014 source it before running tests that need real or mock-pointed API keys."
     },
@@ -1693,7 +1846,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 98,
+      "priority": 108,
       "passes": false,
       "notes": "CLI E2E Phase 2. Depends on US-080 (TerminalHarness), US-095 (isTTY). Pi uses custom pi-tui with differential rendering and synchronized output sequences (CSI ?2026h/l). API tokens (ANTHROPIC_API_KEY, OPENAI_API_KEY) available at ~/misc/env.txt \u2014 source it before running tests that need real or mock-pointed API keys."
     },
@@ -1718,7 +1871,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 99,
+      "priority": 109,
       "passes": false,
       "notes": "CLI E2E Phase 3, Strategy A. OpenCode is a Bun binary, NOT a Node.js package \u2014 tests the child_process.spawn bridge for complex host binaries. Hardest CLI tool, tested before Claude Code to front-load risk. API tokens (ANTHROPIC_API_KEY, OPENAI_API_KEY) available at ~/misc/env.txt \u2014 source it before running tests that need real or mock-pointed API keys."
     },
@@ -1740,7 +1893,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 100,
+      "priority": 110,
       "passes": false,
       "notes": "CLI E2E Phase 3, Strategy B. Tests HTTP/SSE client bridge by running @opencode-ai/sdk inside the sandbox talking to opencode serve on host. Depends on US-096 (SSE/streams). API tokens (ANTHROPIC_API_KEY, OPENAI_API_KEY) available at ~/misc/env.txt \u2014 source it before running tests that need real or mock-pointed API keys."
     },
@@ -1761,7 +1914,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 101,
+      "priority": 111,
       "passes": false,
       "notes": "CLI E2E Phase 4. Depends on US-080 (TerminalHarness), US-095 (isTTY). OpenCode uses OpenTUI (TypeScript + Zig) with SolidJS \u2014 may render non-standard ANSI sequences. Use waitFor() with content assertions, tighten after empirical capture. API tokens (ANTHROPIC_API_KEY, OPENAI_API_KEY) available at ~/misc/env.txt \u2014 source it before running tests that need real or mock-pointed API keys."
     },
@@ -1784,7 +1937,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 102,
+      "priority": 112,
       "passes": false,
       "notes": "CLI E2E Phase 5. Claude Code is the most complex in-VM tool \u2014 Node.js with native binary, Ink TUI, known spawn stall issue (anthropics/claude-code#771). Consider @anthropic-ai/claude-agent-sdk as fallback entry point. API tokens (ANTHROPIC_API_KEY, OPENAI_API_KEY) available at ~/misc/env.txt \u2014 source it before running tests that need real or mock-pointed API keys."
     },
@@ -1806,7 +1959,7 @@
         "Typecheck passes",
         "Tests pass"
       ],
-      "priority": 103,
+      "priority": 113,
       "passes": false,
       "notes": "CLI E2E Phase 6 \u2014 final phase. Depends on US-080 (TerminalHarness), US-095 (isTTY). Claude Code uses Ink (React-based TUI) with cursor movement, screen clearing, and color codes. Known spawn stall risk. API tokens (ANTHROPIC_API_KEY, OPENAI_API_KEY) available at ~/misc/env.txt \u2014 source it before running tests that need real or mock-pointed API keys."
     }

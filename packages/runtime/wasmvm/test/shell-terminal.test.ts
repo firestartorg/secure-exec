@@ -6,9 +6,11 @@
  * Gated with skipIf(!hasWasmBinary) — requires WASM binary built.
  *
  * Known limitations (pre-existing, not caused by test infrastructure):
- * - `cd` builtin hangs when target directory exists (WASI path resolution blocks)
- * - `ls` spawns via proc_spawn but child PID retrieval fails, no listing output
- * These are tracked as .todo tests until the underlying issues are fixed.
+ * - `ls` child process fails with WASI I/O errors — proc_spawn returns PID but
+ *   the child's WASI fd_readdir/path_open cannot access the VFS, producing
+ *   "ls-error-cannot-access-no-such-file". Fix requires child process WASI VFS
+ *   integration or brush-shell glob support.
+ * Tracked as .todo until the underlying child process WASI issue is fixed.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -166,9 +168,9 @@ describe.skipIf(!hasWasmBinary)("wasmvm-shell-terminal", () => {
 		);
 	});
 
-	// Blocked: ls spawns via proc_spawn but child PID retrieval fails.
-	// The child process runs but stdout does not flow back to the terminal.
-	// Fix requires: proc_spawn PID tracking + child stdout→PTY routing.
+	// Blocked: ls child process fails with WASI I/O errors — the child Worker's
+	// fd_readdir/path_open cannot access the VFS through the parent's kernel.
+	// Fix requires: child process WASI VFS integration or brush-shell glob support.
 	it.todo(
 		"ls / shows listing — directory entries rendered correctly",
 	);
@@ -194,14 +196,26 @@ describe.skipIf(!hasWasmBinary)("wasmvm-shell-terminal", () => {
 		);
 	});
 
-	// Blocked: cd builtin hangs when target directory exists.
-	// brush-shell's chdir does WASI path_filestat_get (which now works with
-	// getIno impl) but then blocks on a subsequent WASI operation (likely
-	// path_open or fd_readdir on the directory FD).
-	// Fix requires: debugging brush-shell's cd syscall trace.
-	it.todo(
-		"cd changes directory — 'cd /tmp' then 'pwd' → '/tmp' on screen",
-	);
+	it("cd changes directory — 'cd /tmp' then 'pwd' → '/tmp' on screen", async () => {
+		const { kernel, vfs } = await createShellKernel();
+		await vfs.createDir("/tmp");
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor(PROMPT);
+		await harness.type("cd /tmp\n");
+		await harness.waitFor(PROMPT, 2);
+		await harness.type("pwd\n");
+		await harness.waitFor(PROMPT, 3);
+
+		expect(harness.screenshotTrimmed()).toBe(
+			[
+				`${PROMPT}cd /tmp`,
+				`${PROMPT}pwd`,
+				"/tmp",
+				PROMPT,
+			].join("\n"),
+		);
+	});
 
 	it("export sets env var — 'export FOO=bar' then 'echo $FOO' → 'bar' on screen", async () => {
 		const { kernel } = await createShellKernel();
