@@ -4,13 +4,6 @@
  *
  * All output assertions use exact-match on screenshotTrimmed().
  * Gated with skipIf(!hasWasmBinary) — requires WASM binary built.
- *
- * Known limitations (pre-existing, not caused by test infrastructure):
- * - `ls` child process fails with WASI I/O errors — proc_spawn returns PID but
- *   the child's WASI fd_readdir/path_open cannot access the VFS, producing
- *   "ls-error-cannot-access-no-such-file". Fix requires child process WASI VFS
- *   integration or brush-shell glob support.
- * Tracked as .todo until the underlying child process WASI issue is fixed.
  */
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -168,12 +161,24 @@ describe.skipIf(!hasWasmBinary)("wasmvm-shell-terminal", () => {
 		);
 	});
 
-	// Blocked: ls child process fails with WASI I/O errors — the child Worker's
-	// fd_readdir/path_open cannot access the VFS through the parent's kernel.
-	// Fix requires: child process WASI VFS integration or brush-shell glob support.
-	it.todo(
-		"ls / shows listing — directory entries rendered correctly",
-	);
+	it("ls / shows listing — directory entries rendered correctly", async () => {
+		const { kernel } = await createShellKernel();
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor(PROMPT);
+		await harness.type("ls /\n");
+		await harness.waitFor(PROMPT, 2);
+
+		expect(harness.screenshotTrimmed()).toBe(
+			[
+				`${PROMPT}ls /`,
+				// brush-shell warns about child PID retrieval (benign)
+				" WARN could not retrieve pid for child process",
+				"bin",
+				PROMPT,
+			].join("\n"),
+		);
+	});
 
 	it("output preserved across commands — 'echo AAA' then 'echo BBB' — both visible", async () => {
 		const { kernel } = await createShellKernel();

@@ -131,6 +131,18 @@ const EVENTTYPE_CLOCK: number = 0;
 const EVENTTYPE_FD_READ: number = 1;
 const EVENTTYPE_FD_WRITE: number = 2;
 
+/** Normalize a POSIX path — resolve `.` and `..`, collapse slashes. */
+function normalizePath(path: string): string {
+  const parts = path.split('/');
+  const resolved: string[] = [];
+  for (const p of parts) {
+    if (p === '' || p === '.') continue;
+    if (p === '..') { resolved.pop(); continue; }
+    resolved.push(p);
+  }
+  return '/' + resolved.join('/');
+}
+
 /**
  * Exception thrown by proc_exit to terminate WASM execution.
  * Callers should catch this to extract the exit code.
@@ -662,8 +674,15 @@ export class WasiPolyfill {
       basePath = entry.path || '/';
     }
 
-    if (pathStr.startsWith('/')) return pathStr;
-    return basePath === '/' ? '/' + pathStr : basePath + '/' + pathStr;
+    let fullPath: string;
+    if (pathStr.startsWith('/')) {
+      fullPath = pathStr;
+    } else {
+      fullPath = basePath === '/' ? '/' + pathStr : basePath + '/' + pathStr;
+    }
+
+    // Normalize . and .. components (WASI paths may contain them)
+    return normalizePath(fullPath);
   }
 
   /**

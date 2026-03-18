@@ -19,6 +19,7 @@ import { FDTable } from '../test/helpers/test-fd-table.ts';
 import {
   FILETYPE_CHARACTER_DEVICE,
   FILETYPE_REGULAR_FILE,
+  FILETYPE_DIRECTORY,
   ERRNO_SUCCESS,
   ERRNO_EINVAL,
 } from './wasi-constants.ts';
@@ -84,54 +85,83 @@ function rpcCall(call: string, args: Record<string, unknown>): {
 
 const fdTable = new FDTable();
 
+// Local FD → kernel FD mapping: the local FD table has a preopen at FD 3
+// that the kernel doesn't know about, so opened-file FDs diverge.
+const localToKernelFd = new Map<number, number>();
+
 // -------------------------------------------------------------------------
 // Kernel-backed WasiFileIO
 // -------------------------------------------------------------------------
 
 function createKernelFileIO(): WasiFileIO {
+  /** Translate local FD to kernel FD (falls back to identity for stdio FDs 0-2). */
+  function kernelFd(localFd: number): number {
+    return localToKernelFd.get(localFd) ?? localFd;
+  }
+
   return {
     fdRead(fd, maxBytes) {
-      const res = rpcCall('fdRead', { fd, length: maxBytes });
+      const res = rpcCall('fdRead', { fd: kernelFd(fd), length: maxBytes });
       return { errno: res.errno, data: res.data };
     },
     fdWrite(fd, data) {
-      const res = rpcCall('fdWrite', { fd, data: Array.from(data) });
+      const res = rpcCall('fdWrite', { fd: kernelFd(fd), data: Array.from(data) });
       return { errno: res.errno, written: res.intResult };
     },
     fdOpen(path, dirflags, oflags, fdflags, rightsBase, rightsInheriting) {
+      const isDirectory = !!(oflags & 0x2); // OFLAG_DIRECTORY
+
+      // Directory opens: verify path exists as directory, return local FD
+      // No kernel FD needed — directory ops use VFS RPCs, not kernel fdRead
+      if (isDirectory) {
+        const statRes = rpcCall('vfsStat', { path });
+        if (statRes.errno !== 0) return { errno: 44 /* ENOENT */, fd: -1, filetype: 0 };
+
+        const localFd = fdTable.open(
+          { type: 'preopen', path },
+          { filetype: FILETYPE_DIRECTORY, rightsBase, rightsInheriting, fdflags, path },
+        );
+        return { errno: 0, fd: localFd, filetype: FILETYPE_DIRECTORY };
+      }
+
       // Map WASI oflags to POSIX open flags for kernel
       let flags = 0;
       if (oflags & 0x1) flags |= 0o100;   // O_CREAT
-      if (oflags & 0x2) flags |= 0o200;   // O_EXCL
-      if (oflags & 0x4) flags |= 0o1000;  // O_TRUNC
+      if (oflags & 0x4) flags |= 0o200;   // O_EXCL
+      if (oflags & 0x8) flags |= 0o1000;  // O_TRUNC
       if (fdflags & 0x1) flags |= 0o2000; // O_APPEND
       if (rightsBase & 2n) flags |= 1;     // O_WRONLY
 
       const res = rpcCall('fdOpen', { path, flags, mode: 0o666 });
       if (res.errno !== 0) return { errno: res.errno, fd: -1, filetype: 0 };
 
+      const kFd = res.intResult; // kernel FD
+
       // Mirror in local FDTable for polyfill rights checking
       const localFd = fdTable.open(
         { type: 'vfsFile', ino: 0, path },
         { filetype: FILETYPE_REGULAR_FILE, rightsBase, rightsInheriting, fdflags, path },
       );
+      localToKernelFd.set(localFd, kFd);
       return { errno: 0, fd: localFd, filetype: FILETYPE_REGULAR_FILE };
     },
     fdSeek(fd, offset, whence) {
-      const res = rpcCall('fdSeek', { fd, offset: offset.toString(), whence });
+      const res = rpcCall('fdSeek', { fd: kernelFd(fd), offset: offset.toString(), whence });
       return { errno: res.errno, newOffset: BigInt(res.intResult) };
     },
     fdClose(fd) {
+      const kFd = kernelFd(fd);
       fdTable.close(fd);
-      const res = rpcCall('fdClose', { fd });
+      localToKernelFd.delete(fd);
+      const res = rpcCall('fdClose', { fd: kFd });
       return res.errno;
     },
     fdPread(fd, maxBytes, offset) {
-      const res = rpcCall('fdPread', { fd, length: maxBytes, offset: offset.toString() });
+      const res = rpcCall('fdPread', { fd: kernelFd(fd), length: maxBytes, offset: offset.toString() });
       return { errno: res.errno, data: res.data };
     },
     fdPwrite(fd, data, offset) {
-      const res = rpcCall('fdPwrite', { fd, data: Array.from(data), offset: offset.toString() });
+      const res = rpcCall('fdPwrite', { fd: kernelFd(fd), data: Array.from(data), offset: offset.toString() });
       return { errno: res.errno, written: res.intResult };
     },
   };
