@@ -36,7 +36,11 @@ describe("isolate runtime injection policy", () => {
 
 	it("keeps bridge/require setup loaders on static isolate-runtime sources", () => {
 		const bridgeLoader = readSource("src/bridge-loader.ts");
-		const bridgeSetup = readSource("src/bridge-setup.ts");
+		// bridge-setup.ts canonical source is in @secure-exec/core
+		const bridgeSetup = readFileSync(
+			new URL("../../secure-exec-core/src/bridge-setup.ts", import.meta.url),
+			"utf8",
+		);
 		// require-setup.ts canonical source is in @secure-exec/core
 		const requireSetup = readFileSync(
 			new URL("../../secure-exec-core/src/shared/require-setup.ts", import.meta.url),

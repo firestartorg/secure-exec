@@ -190,3 +190,39 @@ export {
 
 // Generated polyfills.
 export { POLYFILL_CODE_MAP } from "./generated/polyfills.js";
+
+// Runtime facades.
+export { NodeRuntime } from "./runtime.js";
+export type { NodeRuntimeOptions } from "./runtime.js";
+export { PythonRuntime } from "./python-runtime.js";
+export type { PythonRuntimeOptions } from "./python-runtime.js";
+
+// Filesystem helpers.
+export type { DirEntry, StatInfo } from "./fs-helpers.js";
+export { exists, stat, rename, readDirWithTypes, mkdir } from "./fs-helpers.js";
+
+// Module resolution.
+export {
+	BUILTIN_NAMED_EXPORTS,
+	normalizeBuiltinSpecifier,
+	getPathDir,
+} from "./module-resolver.js";
+
+// ESM compiler.
+export {
+	getStaticBuiltinWrapperSource,
+	createBuiltinESMWrapper,
+	getEmptyBuiltinESMWrapper,
+} from "./esm-compiler.js";
+
+// Package bundler (VFS module resolution).
+export type { ResolutionCache } from "./package-bundler.js";
+export {
+	createResolutionCache,
+	resolveModule,
+	loadFile,
+	bundlePackage,
+} from "./package-bundler.js";
+
+// Bridge setup.
+export { getInitialBridgeGlobalsSetupCode } from "./bridge-setup.js";
