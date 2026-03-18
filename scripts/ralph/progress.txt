@@ -3,6 +3,7 @@ Started: 2026-03-17
 PRD: ralph/kernel-hardening (46 stories)
 
 ## Codebase Patterns
+- Yarn/bun commands in test infra need COREPACK_ENABLE_STRICT=0 in env because workspace root has packageManager: "pnpm" — corepack blocks other PMs otherwise
 - Kernel-opened vfsFile resources have ino=0 (sentinel); code using resource.ino must handle ino===0 by resolving via vfs.getIno(path) — affects fd_filestat_get and any future per-fd stat operations
 - Test VFS helpers (SimpleVFS in shell-terminal.test.ts) must implement the full VirtualFileSystem interface including pread — kernel fdRead delegates through device-layer → vfs.pread()
 - @secure-exec/python package at packages/secure-exec-python/ owns PyodideRuntimeDriver (driver.ts) — deps: @secure-exec/core, pyodide
@@ -1690,4 +1691,17 @@ PRD: ralph/kernel-hardening (46 stories)
   - uu_cat calls fd_filestat_get (fstat) before reading — EBADF from fstat shows as "Bad file descriptor" not "I/O error"
   - Test VFS helpers (SimpleVFS) must implement the full VirtualFileSystem interface including pread — kernel fdRead delegates through device-layer which calls vfs.pread()
   - Pre-existing test failure: resource-exhaustion.test.ts > PTY adversarial stress > single large write — unrelated to this change
+---
+
+## 2026-03-18 - US-088
+- Created yarn classic (v1) layout fixture at packages/secure-exec/tests/projects/yarn-classic-layout-pass/
+- fixture.json with packageManager: "yarn", package.json with left-pad 0.0.3 dep, yarn.lock committed
+- No .yarnrc.yml (signals classic mode to getYarnInstallCmd)
+- Fixed COREPACK_ENABLE_STRICT=0 env var for yarn commands in both project-matrix.test.ts and e2e-project-matrix.test.ts
+- Files changed: tests/projects/yarn-classic-layout-pass/{fixture.json,package.json,src/index.js,yarn.lock}, tests/project-matrix.test.ts, tests/kernel/e2e-project-matrix.test.ts
+- **Learnings for future iterations:**
+  - corepack enforces workspace-root packageManager field — yarn/bun commands fail unless COREPACK_ENABLE_STRICT=0 is set in the env
+  - Use `COREPACK_ENABLE_STRICT=0 corepack yarn` to run yarn from within a pnpm-managed workspace locally
+  - Yarn classic (v1) is detected by absence of .yarnrc.yml in getYarnInstallCmd()
+  - express-pass and fastify-pass fixtures have pre-existing failures unrelated to layout fixtures
 ---
