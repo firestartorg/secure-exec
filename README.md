@@ -19,3 +19,7 @@ TODO:
 ## Examples
 
 - Browser playground: `pnpm -C packages/playground dev`
+
+## License
+
+Apache-2.0

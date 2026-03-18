@@ -2,6 +2,7 @@
 name = "multicall"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "BusyBox-style multicall binary for wasmVM"
 
 [[bin]]

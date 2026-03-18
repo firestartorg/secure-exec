@@ -2,6 +2,7 @@
 name = "wasi-ext"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Custom WASM import bindings for wasmVM host syscalls"
 
 [lib]
