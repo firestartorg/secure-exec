@@ -138,18 +138,20 @@ export class PtyManager {
 			return this.processInput(state, data);
 		} else {
 			// Slave write → output buffer (master reads)
+			// ONLCR: convert \n to \r\n (standard POSIX terminal output processing)
 			if (state.closed.slave) throw new KernelError("EIO", "slave closed");
 			if (state.closed.master) throw new KernelError("EIO", "master closed");
 
+			const processed = this.processOutput(data);
 			if (state.outputWaiters.length > 0) {
 				const waiter = state.outputWaiters.shift()!;
-				waiter(data);
+				waiter(processed);
 			} else {
 				// Enforce buffer limit to prevent unbounded memory growth
-				if (this.bufferBytes(state.outputBuffer) + data.length > MAX_PTY_BUFFER_BYTES) {
+				if (this.bufferBytes(state.outputBuffer) + processed.length > MAX_PTY_BUFFER_BYTES) {
 					throw new KernelError("EAGAIN", "PTY output buffer full");
 				}
-				state.outputBuffer.push(new Uint8Array(data));
+				state.outputBuffer.push(new Uint8Array(processed));
 			}
 		}
 
@@ -314,6 +316,35 @@ export class PtyManager {
 		const ref = this.descToPty.get(descriptionId);
 		if (!ref) throw new KernelError("EBADF", "not a PTY end");
 		return ref.ptyId;
+	}
+
+	// -------------------------------------------------------------------
+	// Output processing (ONLCR)
+	// -------------------------------------------------------------------
+
+	/** Convert lone \n to \r\n in output data (POSIX ONLCR). */
+	private processOutput(data: Uint8Array): Uint8Array {
+		// Fast path: no newlines → return as-is
+		if (!data.includes(0x0a)) return data;
+
+		// Count lone LFs (not preceded by CR) to size the result buffer
+		let extraCRs = 0;
+		for (let i = 0; i < data.length; i++) {
+			if (data[i] === 0x0a && (i === 0 || data[i - 1] !== 0x0d)) {
+				extraCRs++;
+			}
+		}
+		if (extraCRs === 0) return data;
+
+		const result = new Uint8Array(data.length + extraCRs);
+		let j = 0;
+		for (let i = 0; i < data.length; i++) {
+			if (data[i] === 0x0a && (i === 0 || data[i - 1] !== 0x0d)) {
+				result[j++] = 0x0d; // CR
+			}
+			result[j++] = data[i];
+		}
+		return result;
 	}
 
 	// -------------------------------------------------------------------

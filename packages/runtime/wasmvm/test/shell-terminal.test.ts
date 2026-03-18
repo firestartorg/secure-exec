@@ -1,0 +1,225 @@
+/**
+ * WasmVM shell terminal tests — real brush-shell commands verified through
+ * headless xterm screen state.
+ *
+ * All output assertions use exact-match on screenshotTrimmed().
+ * Gated with skipIf(!hasWasmBinary) — requires WASM binary built.
+ *
+ * Known limitations (pre-existing, not caused by test infrastructure):
+ * - `cd` builtin hangs when target directory exists (WASI path resolution blocks)
+ * - `ls` spawns via proc_spawn but child PID retrieval fails, no listing output
+ * These are tracked as .todo tests until the underlying issues are fixed.
+ */
+
+import { describe, it, expect, afterEach } from "vitest";
+import { TerminalHarness } from "./terminal-harness.ts";
+import { createWasmVmRuntime } from "../src/driver.ts";
+import { createKernel } from "@secure-exec/kernel";
+import type { Kernel } from "@secure-exec/kernel";
+import { existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const WASM_BINARY_PATH = resolve(
+	__dirname,
+	"../../../../wasmvm/target/wasm32-wasip1/release/multicall.wasm",
+);
+const hasWasmBinary = existsSync(WASM_BINARY_PATH);
+
+/** brush-shell interactive prompt (captured empirically). */
+const PROMPT = "sh-0.4$ ";
+
+// ---------------------------------------------------------------------------
+// Simple in-memory VFS for kernel tests
+// ---------------------------------------------------------------------------
+
+class SimpleVFS {
+	private files = new Map<string, Uint8Array>();
+	private dirs = new Set<string>(["/"]);
+
+	async readFile(path: string): Promise<Uint8Array> {
+		const d = this.files.get(path);
+		if (!d) throw new Error(`ENOENT: ${path}`);
+		return d;
+	}
+	async readTextFile(path: string): Promise<string> {
+		return new TextDecoder().decode(await this.readFile(path));
+	}
+	async readDir(path: string): Promise<string[]> {
+		const prefix = path === "/" ? "/" : path + "/";
+		const entries: string[] = [];
+		for (const p of [...this.files.keys(), ...this.dirs]) {
+			if (p !== path && p.startsWith(prefix)) {
+				const rest = p.slice(prefix.length);
+				if (!rest.includes("/")) entries.push(rest);
+			}
+		}
+		return entries;
+	}
+	async readDirWithTypes(path: string) {
+		return (await this.readDir(path)).map((name) => ({
+			name,
+			isDirectory: this.dirs.has(
+				path === "/" ? `/${name}` : `${path}/${name}`,
+			),
+		}));
+	}
+	async writeFile(
+		path: string,
+		content: string | Uint8Array,
+	): Promise<void> {
+		const d =
+			typeof content === "string"
+				? new TextEncoder().encode(content)
+				: content;
+		this.files.set(path, new Uint8Array(d));
+		const parts = path.split("/").filter(Boolean);
+		for (let i = 1; i < parts.length; i++) {
+			this.dirs.add("/" + parts.slice(0, i).join("/"));
+		}
+	}
+	async createDir(path: string) {
+		this.dirs.add(path);
+	}
+	async mkdir(path: string, _o?: { recursive?: boolean }) {
+		this.dirs.add(path);
+	}
+	async exists(path: string): Promise<boolean> {
+		return this.files.has(path) || this.dirs.has(path);
+	}
+	async stat(path: string) {
+		const isDir = this.dirs.has(path);
+		const d = this.files.get(path);
+		if (!isDir && !d) throw new Error(`ENOENT: ${path}`);
+		return {
+			mode: isDir ? 0o40755 : 0o100644,
+			size: d?.length ?? 0,
+			isDirectory: isDir,
+			isSymbolicLink: false,
+			atimeMs: Date.now(),
+			mtimeMs: Date.now(),
+			ctimeMs: Date.now(),
+			birthtimeMs: Date.now(),
+			ino: 0,
+			nlink: 1,
+			uid: 1000,
+			gid: 1000,
+		};
+	}
+	async removeFile(path: string) {
+		this.files.delete(path);
+	}
+	async removeDir(path: string) {
+		this.dirs.delete(path);
+	}
+	async rename(o: string, n: string) {
+		const d = this.files.get(o);
+		if (d) {
+			this.files.set(n, d);
+			this.files.delete(o);
+		}
+	}
+	async realpath(path: string) {
+		return path;
+	}
+	async symlink(_t: string, _l: string) {}
+}
+
+// ---------------------------------------------------------------------------
+// Helper — create kernel + mount WasmVM
+// ---------------------------------------------------------------------------
+
+async function createShellKernel(): Promise<{
+	kernel: Kernel;
+	vfs: SimpleVFS;
+}> {
+	const vfs = new SimpleVFS();
+	const kernel = createKernel({ filesystem: vfs as any });
+	await kernel.mount(
+		createWasmVmRuntime({ wasmBinaryPath: WASM_BINARY_PATH }),
+	);
+	return { kernel, vfs };
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe.skipIf(!hasWasmBinary)("wasmvm-shell-terminal", () => {
+	let harness: TerminalHarness;
+
+	afterEach(async () => {
+		await harness?.dispose();
+	});
+
+	it("echo prints output — 'echo hello' → 'hello' on next line, prompt returns", async () => {
+		const { kernel } = await createShellKernel();
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor(PROMPT);
+		await harness.type("echo hello\n");
+		await harness.waitFor(PROMPT, 2);
+
+		expect(harness.screenshotTrimmed()).toBe(
+			[`${PROMPT}echo hello`, "hello", PROMPT].join("\n"),
+		);
+	});
+
+	// Blocked: ls spawns via proc_spawn but child PID retrieval fails.
+	// The child process runs but stdout does not flow back to the terminal.
+	// Fix requires: proc_spawn PID tracking + child stdout→PTY routing.
+	it.todo(
+		"ls / shows listing — directory entries rendered correctly",
+	);
+
+	it("output preserved across commands — 'echo AAA' then 'echo BBB' — both visible", async () => {
+		const { kernel } = await createShellKernel();
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor(PROMPT);
+		await harness.type("echo AAA\n");
+		await harness.waitFor(PROMPT, 2);
+		await harness.type("echo BBB\n");
+		await harness.waitFor(PROMPT, 3);
+
+		expect(harness.screenshotTrimmed()).toBe(
+			[
+				`${PROMPT}echo AAA`,
+				"AAA",
+				`${PROMPT}echo BBB`,
+				"BBB",
+				PROMPT,
+			].join("\n"),
+		);
+	});
+
+	// Blocked: cd builtin hangs when target directory exists.
+	// brush-shell's chdir does WASI path_filestat_get (which now works with
+	// getIno impl) but then blocks on a subsequent WASI operation (likely
+	// path_open or fd_readdir on the directory FD).
+	// Fix requires: debugging brush-shell's cd syscall trace.
+	it.todo(
+		"cd changes directory — 'cd /tmp' then 'pwd' → '/tmp' on screen",
+	);
+
+	it("export sets env var — 'export FOO=bar' then 'echo $FOO' → 'bar' on screen", async () => {
+		const { kernel } = await createShellKernel();
+		harness = new TerminalHarness(kernel);
+
+		await harness.waitFor(PROMPT);
+		await harness.type("export FOO=bar\n");
+		await harness.waitFor(PROMPT, 2);
+		await harness.type("echo $FOO\n");
+		await harness.waitFor(PROMPT, 3);
+
+		expect(harness.screenshotTrimmed()).toBe(
+			[
+				`${PROMPT}export FOO=bar`,
+				`${PROMPT}echo $FOO`,
+				"bar",
+				PROMPT,
+			].join("\n"),
+		);
+	});
+});

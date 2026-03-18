@@ -90,4 +90,6 @@ export interface WorkerInitData {
   stdoutFd?: number;
   /** FD override for stderr (pipe write end in parent's table, or undefined). */
   stderrFd?: number;
+  /** Which stdio FDs are TTYs (for brush-shell interactive mode detection). */
+  ttyFds?: number[];
 }

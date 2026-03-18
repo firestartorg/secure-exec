@@ -175,6 +175,45 @@ function createKernelProcessIO(): WasiProcessIO {
 function createKernelVfs(): WasiVFS {
   const decoder = new TextDecoder();
 
+  // Inode cache for getIno/getInodeByIno — synthesizes inodes from kernel VFS stat
+  let nextIno = 1;
+  const pathToIno = new Map<string, number>();
+  const inoCache = new Map<number, WasiInode>();
+
+  function resolveIno(path: string): number | null {
+    const cached = pathToIno.get(path);
+    if (cached !== undefined) return cached;
+
+    const res = rpcCall('vfsStat', { path });
+    if (res.errno !== 0) return null;
+
+    // RPC response fields: { type, mode, uid, gid, nlink, size, atime, mtime, ctime }
+    const raw = JSON.parse(decoder.decode(res.data)) as Record<string, unknown>;
+    const ino = nextIno++;
+    pathToIno.set(path, ino);
+
+    const nodeType = raw.type as string ?? 'file';
+    const isDir = nodeType === 'dir';
+    const node: WasiInode = {
+      type: nodeType,
+      mode: (raw.mode as number) ?? (isDir ? 0o40755 : 0o100644),
+      uid: (raw.uid as number) ?? 0,
+      gid: (raw.gid as number) ?? 0,
+      nlink: (raw.nlink as number) ?? 1,
+      size: (raw.size as number) ?? 0,
+      atime: (raw.atime as number) ?? Date.now(),
+      mtime: (raw.mtime as number) ?? Date.now(),
+      ctime: (raw.ctime as number) ?? Date.now(),
+    };
+
+    if (isDir) {
+      node.entries = new Map();
+    }
+
+    inoCache.set(ino, node);
+    return ino;
+  }
+
   return {
     exists(path: string): boolean {
       const res = rpcCall('vfsExists', { path });
@@ -241,11 +280,11 @@ function createKernelVfs(): WasiVFS {
     chmod(_path: string, _mode: number): void {
       // No-op — permissions handled by kernel
     },
-    getIno(_path: string): number | null {
-      return null;
+    getIno(path: string): number | null {
+      return resolveIno(path);
     },
-    getInodeByIno(_ino: number): WasiInode | null {
-      return null;
+    getInodeByIno(ino: number): WasiInode | null {
+      return inoCache.get(ino) ?? null;
     },
     snapshot(): VfsSnapshotEntry[] {
       return [];
@@ -357,6 +396,34 @@ function createHostProcessImports(getMemory: () => WebAssembly.Memory | null) {
       view.setUint32(ret_write_fd_ptr, writeFd, true);
       return ERRNO_SUCCESS;
     },
+
+    /** fd_dup(fd, ret_new_fd) -> errno */
+    fd_dup(fd: number, ret_new_fd_ptr: number): number {
+      const mem = getMemory();
+      if (!mem) return ERRNO_EINVAL;
+
+      const res = rpcCall('fdDup', { fd });
+      if (res.errno !== 0) return res.errno;
+
+      new DataView(mem.buffer).setUint32(ret_new_fd_ptr, res.intResult, true);
+      return ERRNO_SUCCESS;
+    },
+
+    /** proc_getpid(ret_pid) -> errno */
+    proc_getpid(ret_pid_ptr: number): number {
+      const mem = getMemory();
+      if (!mem) return ERRNO_EINVAL;
+
+      new DataView(mem.buffer).setUint32(ret_pid_ptr, init.pid, true);
+      return ERRNO_SUCCESS;
+    },
+
+    /** sleep_ms(milliseconds) -> errno — blocks via Atomics.wait */
+    sleep_ms(milliseconds: number): number {
+      const buf = new Int32Array(new SharedArrayBuffer(4));
+      Atomics.wait(buf, 0, 0, milliseconds);
+      return ERRNO_SUCCESS;
+    },
   };
 }
 
@@ -422,7 +489,7 @@ async function main(): Promise<void> {
   const userManager = new UserManager({
     getMemory,
     fdTable,
-    ttyFds: false,
+    ttyFds: init.ttyFds ? new Set(init.ttyFds) : false,
   });
 
   const hostProcess = createHostProcessImports(getMemory);

@@ -129,21 +129,28 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
       };
     });
 
-    // Set up stdin pipe so writeStdin/closeStdin deliver data through kernel FD 0
-    const stdinPipe = kernel.pipe(ctx.pid);
-    kernel.fdDup2(ctx.pid, stdinPipe.readFd, 0);
-    kernel.fdClose(ctx.pid, stdinPipe.readFd);
-    const stdinWriteFd = stdinPipe.writeFd;
+    // Set up stdin pipe for writeStdin/closeStdin — skip if FD 0 is already
+    // a PTY slave (interactive shell: stdin flows through kernel PTY)
+    const stdinIsPty = kernel.isatty(ctx.pid, 0);
+    let stdinWriteFd: number | undefined;
+    if (!stdinIsPty) {
+      const stdinPipe = kernel.pipe(ctx.pid);
+      kernel.fdDup2(ctx.pid, stdinPipe.readFd, 0);
+      kernel.fdClose(ctx.pid, stdinPipe.readFd);
+      stdinWriteFd = stdinPipe.writeFd;
+    }
 
     const proc: DriverProcess = {
       onStdout: null,
       onStderr: null,
       onExit: null,
       writeStdin: (data: Uint8Array) => {
-        kernel.fdWrite(ctx.pid, stdinWriteFd, data);
+        if (stdinWriteFd !== undefined) kernel.fdWrite(ctx.pid, stdinWriteFd, data);
       },
       closeStdin: () => {
-        try { kernel.fdClose(ctx.pid, stdinWriteFd); } catch { /* already closed */ }
+        if (stdinWriteFd !== undefined) {
+          try { kernel.fdClose(ctx.pid, stdinWriteFd); } catch { /* already closed */ }
+        }
       },
       kill: (_signal: number) => {
         const worker = this._activeWorkers.get(ctx.pid);
@@ -169,12 +176,13 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
     this._kernel = null;
   }
 
-  /** Check if a process's FD is a pipe via kernel FD stat. */
-  private _isFdPiped(pid: number, fd: number): boolean {
+  /** Check if a process's FD is routed through kernel (pipe or PTY). */
+  private _isFdKernelRouted(pid: number, fd: number): boolean {
     if (!this._kernel) return false;
     try {
       const stat = this._kernel.fdStat(pid, fd);
-      return stat.filetype === 6; // FILETYPE_PIPE
+      if (stat.filetype === 6) return true; // FILETYPE_PIPE
+      return this._kernel.isatty(pid, fd); // PTY slave
     } catch {
       return false;
     }
@@ -197,10 +205,16 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
     const signalBuf = new SharedArrayBuffer(SIGNAL_BUFFER_BYTES);
     const dataBuf = new SharedArrayBuffer(DATA_BUFFER_BYTES);
 
-    // Check if stdio FDs are piped by inspecting the kernel FD table
-    const stdinPiped = this._isFdPiped(ctx.pid, 0);
-    const stdoutPiped = this._isFdPiped(ctx.pid, 1);
-    const stderrPiped = this._isFdPiped(ctx.pid, 2);
+    // Check if stdio FDs are kernel-routed (pipe or PTY)
+    const stdinPiped = this._isFdKernelRouted(ctx.pid, 0);
+    const stdoutPiped = this._isFdKernelRouted(ctx.pid, 1);
+    const stderrPiped = this._isFdKernelRouted(ctx.pid, 2);
+
+    // Detect which FDs are TTYs (PTY slaves) for brush-shell interactive mode
+    const ttyFds: number[] = [];
+    for (const fd of [0, 1, 2]) {
+      if (kernel.isatty(ctx.pid, fd)) ttyFds.push(fd);
+    }
 
     const workerData: WorkerInitData = {
       wasmBinaryPath: this._wasmBinaryPath,
@@ -212,10 +226,11 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
       cwd: ctx.cwd,
       signalBuf,
       dataBuf,
-      // Tell worker which stdio channels are piped so it routes writes correctly
+      // Tell worker which stdio channels are kernel-routed
       stdinFd: stdinPiped ? 99 : undefined,
       stdoutFd: stdoutPiped ? 99 : undefined,
       stderrFd: stderrPiped ? 99 : undefined,
+      ttyFds: ttyFds.length > 0 ? ttyFds : undefined,
     };
 
     const workerUrl = new URL('./kernel-worker.ts', import.meta.url);

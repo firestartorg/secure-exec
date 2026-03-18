@@ -1960,7 +1960,7 @@ describe("kernel + MockRuntimeDriver integration", () => {
 			proc.kill();
 		});
 
-		it("write to slave → read from master", async () => {
+		it("write to slave → read from master (ONLCR converts \\n to \\r\\n)", async () => {
 			const driver = new MockRuntimeDriver(["proc"], {
 				proc: { neverExit: true },
 			});
@@ -1973,8 +1973,9 @@ describe("kernel + MockRuntimeDriver integration", () => {
 			const msg = new TextEncoder().encode("hello\n");
 			ki.fdWrite(proc.pid, slaveFd, msg);
 
+			// Slave output goes through ONLCR: \n → \r\n (POSIX default)
 			const data = await ki.fdRead(proc.pid, masterFd, 1024);
-			expect(new TextDecoder().decode(data)).toBe("hello\n");
+			expect(new TextDecoder().decode(data)).toBe("hello\r\n");
 
 			proc.kill();
 		});
