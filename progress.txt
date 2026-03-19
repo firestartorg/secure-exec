@@ -2117,3 +2117,23 @@ PRD: ralph/kernel-hardening (46 stories)
   - diagnostics_channel stubs are sufficient for Fastify compatibility
   - punycode is provided via node-stdlib-browser polyfill
 ---
+
+## 2026-03-18 - US-167
+- Cross-referenced require-setup.ts, module-resolver.ts, bridge files, and polyfills against both docs
+- Fixed 3 tier mismatches in cloudflare-workers-comparison.mdx:
+  - worker_threads: ⛔ (Unsupported) → 🔴 (Stub) — it's deferred/requireable, not unsupported
+  - perf_hooks: ⚪ (TBD) → 🔴 (Stub) — it's deferred with stub APIs
+  - readline: ⚪ (TBD) → 🔴 (Stub) — it's deferred with stub APIs
+- Added missing entries to nodejs-compatibility.mdx:
+  - console: Tier 1 (Bridge) — was only mentioned in Logging section, not in matrix
+  - stream/web subpath: noted under stream entry
+  - diagnostics_channel: added Channel constructor to API listing
+- Files changed:
+  - docs/cloudflare-workers-comparison.mdx
+  - docs/nodejs-compatibility.mdx
+- **Learnings for future iterations:**
+  - Deferred modules (require succeeds, APIs throw) map to 🔴 Stub in CF comparison, not ⚪ TBD or ⛔ Unsupported
+  - console is bridge-implemented via console-formatter shim but not in BRIDGE_MODULES list — it's set up as a global override, not a requireable module
+  - stream/web has BUILTIN_NAMED_EXPORTS and is a known built-in — should be documented alongside stream
+  - diagnostics_channel Channel constructor is in BUILTIN_NAMED_EXPORTS but was missing from the nodejs-compat doc description
+---

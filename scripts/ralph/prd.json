@@ -2874,7 +2874,7 @@
         "Typecheck passes"
       ],
       "priority": 167,
-      "passes": false,
+      "passes": true,
       "notes": "Final verification pass after US-165 and US-166 update the docs."
     },
     {
