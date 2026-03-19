@@ -133,3 +133,4 @@ echo "Run started:  $RUN_START"
 echo "Run finished: $RUN_END (total: ${RUN_MINS}m ${RUN_SECS}s)"
 echo "Check $PROGRESS_FILE for status."
 exit 1
+

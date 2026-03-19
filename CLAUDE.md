@@ -55,6 +55,16 @@
 - track development friction in `docs-internal/friction.md` (mark resolved items with fix notes)
 - see `.agent/contracts/README.md` for the full contract index
 
+## Shell & Process Behavior (POSIX compliance)
+
+- the interactive shell (brush-shell via WasmVM) and kernel process model must match POSIX behavior unless explicitly documented otherwise
+- `node -e <code>` must produce stdout/stderr visible to the user, both through `kernel.exec()` and in the interactive shell PTY — identical to running `node -e` on a real Linux terminal
+- `node -e <invalid>` must display the error (SyntaxError/ReferenceError) on stderr, not silently swallow it
+- commands that only read stdin when stdin is a TTY (e.g. `tree`, `cat` with no args) must not hang when run from the shell; commands must detect whether stdin is a real data source vs an empty pipe/PTY
+- Ctrl+C (SIGINT) must interrupt the foreground process group within 1 second, matching POSIX `isig` + `VINTR` behavior — this applies to all runtimes (WasmVM, Node, Python)
+- signal delivery through the PTY line discipline → kernel process table → driver kill() chain must be end-to-end tested
+- when adding or fixing process/signal/PTY behavior, always verify against the equivalent behavior on a real Linux system
+
 ## Compatibility Project-Matrix Policy
 
 - compatibility fixtures live under `packages/secure-exec/tests/projects/` and MUST be black-box Node projects (`package.json` + source entrypoint)
@@ -62,6 +72,13 @@
 - secure-exec runtime MUST stay fixture-opaque: no behavior branches by fixture name/path/test marker
 - the matrix runs each fixture in host Node and secure-exec and compares normalized `code`, `stdout`, and `stderr`
 - no known-mismatch classification is allowed; parity mismatches stay failing until runtime/bridge behavior is fixed
+
+## Tested Package Tracking
+
+- the Tested Packages section in `docs/nodejs-compatibility.mdx` lists all packages validated via the project-matrix test suite
+- when adding a new project-matrix fixture, add the package to the Tested Packages table
+- when removing a fixture, remove the package from the table
+- the table links to GitHub Issues for requesting new packages to be tracked
 
 ## Test Structure
 
@@ -97,6 +114,8 @@ Follow the style in `packages/secure-exec/src/index.ts`.
   - `docs/runtimes/python.mdx` — update when PythonRuntime options/behavior changes
   - `docs/system-drivers/node.mdx` — update when createNodeDriver options change
   - `docs/system-drivers/browser.mdx` — update when createBrowserDriver options change
+  - `docs/nodejs-compatibility.mdx` — update when bridge, polyfill, or stub implementations change; keep the Tested Packages section current when adding or removing project-matrix fixtures
+  - `docs/cloudflare-workers-comparison.mdx` — update when secure-exec capabilities change; bump "Last updated" date
 
 ## Backlog Tracking
 
