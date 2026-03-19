@@ -6,6 +6,8 @@ import {
 	createHmac,
 	pbkdf2Sync,
 	scryptSync,
+	createCipheriv,
+	createDecipheriv,
 } from "node:crypto";
 import {
 	getInitialBridgeGlobalsSetupCode,
@@ -325,6 +327,59 @@ export async function setupRequire(
 	);
 	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.cryptoPbkdf2, cryptoPbkdf2Ref);
 	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.cryptoScrypt, cryptoScryptRef);
+
+	// Set up host crypto references for createCipheriv/createDecipheriv.
+	// Guest accumulates update() data, sends base64 to host for encrypt/decrypt.
+	// Returns JSON for GCM (includes authTag), plain base64 for other modes.
+	const cryptoCipherivRef = new ivm.Reference(
+		(
+			algorithm: string,
+			keyBase64: string,
+			ivBase64: string,
+			dataBase64: string,
+		) => {
+			const key = Buffer.from(keyBase64, "base64");
+			const iv = Buffer.from(ivBase64, "base64");
+			const data = Buffer.from(dataBase64, "base64");
+			const cipher = createCipheriv(algorithm, key, iv) as any;
+			const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
+			const isGcm = algorithm.includes("-gcm");
+			if (isGcm) {
+				return JSON.stringify({
+					data: encrypted.toString("base64"),
+					authTag: cipher.getAuthTag().toString("base64"),
+				});
+			}
+			return JSON.stringify({ data: encrypted.toString("base64") });
+		},
+	);
+	const cryptoDecipherivRef = new ivm.Reference(
+		(
+			algorithm: string,
+			keyBase64: string,
+			ivBase64: string,
+			dataBase64: string,
+			optionsJson: string,
+		) => {
+			const key = Buffer.from(keyBase64, "base64");
+			const iv = Buffer.from(ivBase64, "base64");
+			const data = Buffer.from(dataBase64, "base64");
+			const options = JSON.parse(optionsJson);
+			const decipher = createDecipheriv(algorithm, key, iv) as any;
+			const isGcm = algorithm.includes("-gcm");
+			if (isGcm && options.authTag) {
+				decipher.setAuthTag(Buffer.from(options.authTag, "base64"));
+			}
+			return Buffer.concat([decipher.update(data), decipher.final()]).toString(
+				"base64",
+			);
+		},
+	);
+	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.cryptoCipheriv, cryptoCipherivRef);
+	await jail.set(
+		HOST_BRIDGE_GLOBAL_KEYS.cryptoDecipheriv,
+		cryptoDecipherivRef,
+	);
 
 	// Set up fs References (stubbed if filesystem is disabled)
 	{

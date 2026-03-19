@@ -154,6 +154,26 @@ export const NODE_CUSTOM_GLOBAL_INVENTORY: readonly CustomGlobalInventoryEntry[]
 		rationale: "Host crypto bridge reference for createHmac digest computation.",
 	},
 	{
+		name: "_cryptoPbkdf2",
+		classification: "hardened",
+		rationale: "Host crypto bridge reference for pbkdf2 key derivation.",
+	},
+	{
+		name: "_cryptoScrypt",
+		classification: "hardened",
+		rationale: "Host crypto bridge reference for scrypt key derivation.",
+	},
+	{
+		name: "_cryptoCipheriv",
+		classification: "hardened",
+		rationale: "Host crypto bridge reference for createCipheriv encryption.",
+	},
+	{
+		name: "_cryptoDecipheriv",
+		classification: "hardened",
+		rationale: "Host crypto bridge reference for createDecipheriv decryption.",
+	},
+	{
 		name: "_fsReadFile",
 		classification: "hardened",
 		rationale: "Host filesystem bridge reference.",

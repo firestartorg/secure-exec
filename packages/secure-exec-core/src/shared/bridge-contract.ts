@@ -28,6 +28,8 @@ export const HOST_BRIDGE_GLOBAL_KEYS = {
 	cryptoHmacDigest: "_cryptoHmacDigest",
 	cryptoPbkdf2: "_cryptoPbkdf2",
 	cryptoScrypt: "_cryptoScrypt",
+	cryptoCipheriv: "_cryptoCipheriv",
+	cryptoDecipheriv: "_cryptoDecipheriv",
 	fsReadFile: "_fsReadFile",
 	fsWriteFile: "_fsWriteFile",
 	fsReadFileBinary: "_fsReadFileBinary",
@@ -147,6 +149,14 @@ export type CryptoPbkdf2BridgeRef = BridgeApplySyncRef<
 >;
 export type CryptoScryptBridgeRef = BridgeApplySyncRef<
 	[string, string, number, string],
+	string
+>;
+export type CryptoCipherivBridgeRef = BridgeApplySyncRef<
+	[string, string, string, string],
+	string
+>;
+export type CryptoDecipherivBridgeRef = BridgeApplySyncRef<
+	[string, string, string, string, string],
 	string
 >;
 

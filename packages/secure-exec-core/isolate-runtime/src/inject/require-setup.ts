@@ -516,6 +516,106 @@
             };
           }
 
+          // Overlay host-backed createCipheriv/createDecipheriv
+          if (typeof _cryptoCipheriv !== 'undefined') {
+            function SandboxCipher(algorithm, key, iv) {
+              this._algorithm = algorithm;
+              this._key = typeof key === 'string' ? Buffer.from(key, 'utf8') : Buffer.from(key);
+              this._iv = typeof iv === 'string' ? Buffer.from(iv, 'utf8') : Buffer.from(iv);
+              this._chunks = [];
+              this._authTag = null;
+              this._finalized = false;
+            }
+            SandboxCipher.prototype.update = function update(data, inputEncoding, outputEncoding) {
+              if (typeof data === 'string') {
+                this._chunks.push(Buffer.from(data, inputEncoding || 'utf8'));
+              } else {
+                this._chunks.push(Buffer.from(data));
+              }
+              // Return empty buffer/string to maintain API shape; real data comes from final()
+              if (outputEncoding && outputEncoding !== 'buffer') return '';
+              return Buffer.alloc(0);
+            };
+            SandboxCipher.prototype.final = function final(outputEncoding) {
+              if (this._finalized) throw new Error('Attempting to call final() after already finalized');
+              this._finalized = true;
+              var combined = Buffer.concat(this._chunks);
+              var resultJson = _cryptoCipheriv.applySync(undefined, [
+                this._algorithm,
+                this._key.toString('base64'),
+                this._iv.toString('base64'),
+                combined.toString('base64'),
+              ]);
+              var parsed = JSON.parse(resultJson);
+              if (parsed.authTag) {
+                this._authTag = Buffer.from(parsed.authTag, 'base64');
+              }
+              var resultBuffer = Buffer.from(parsed.data, 'base64');
+              if (outputEncoding && outputEncoding !== 'buffer') return resultBuffer.toString(outputEncoding);
+              return resultBuffer;
+            };
+            SandboxCipher.prototype.getAuthTag = function getAuthTag() {
+              if (!this._finalized) throw new Error('Cannot call getAuthTag before final()');
+              if (!this._authTag) throw new Error('Auth tag is only available for GCM ciphers');
+              return this._authTag;
+            };
+            SandboxCipher.prototype.setAAD = function setAAD() { return this; };
+            SandboxCipher.prototype.setAutoPadding = function setAutoPadding() { return this; };
+            result.createCipheriv = function createCipheriv(algorithm, key, iv) {
+              return new SandboxCipher(algorithm, key, iv);
+            };
+            result.Cipheriv = SandboxCipher;
+          }
+
+          if (typeof _cryptoDecipheriv !== 'undefined') {
+            function SandboxDecipher(algorithm, key, iv) {
+              this._algorithm = algorithm;
+              this._key = typeof key === 'string' ? Buffer.from(key, 'utf8') : Buffer.from(key);
+              this._iv = typeof iv === 'string' ? Buffer.from(iv, 'utf8') : Buffer.from(iv);
+              this._chunks = [];
+              this._authTag = null;
+              this._finalized = false;
+            }
+            SandboxDecipher.prototype.update = function update(data, inputEncoding, outputEncoding) {
+              if (typeof data === 'string') {
+                this._chunks.push(Buffer.from(data, inputEncoding || 'utf8'));
+              } else {
+                this._chunks.push(Buffer.from(data));
+              }
+              if (outputEncoding && outputEncoding !== 'buffer') return '';
+              return Buffer.alloc(0);
+            };
+            SandboxDecipher.prototype.final = function final(outputEncoding) {
+              if (this._finalized) throw new Error('Attempting to call final() after already finalized');
+              this._finalized = true;
+              var combined = Buffer.concat(this._chunks);
+              var options = {};
+              if (this._authTag) {
+                options.authTag = this._authTag.toString('base64');
+              }
+              var resultBase64 = _cryptoDecipheriv.applySync(undefined, [
+                this._algorithm,
+                this._key.toString('base64'),
+                this._iv.toString('base64'),
+                combined.toString('base64'),
+                JSON.stringify(options),
+              ]);
+              var resultBuffer = Buffer.from(resultBase64, 'base64');
+              if (outputEncoding && outputEncoding !== 'buffer') return resultBuffer.toString(outputEncoding);
+              return resultBuffer;
+            };
+            SandboxDecipher.prototype.setAuthTag = function setAuthTag(tag) {
+              this._authTag = typeof tag === 'string' ? Buffer.from(tag, 'base64') : Buffer.from(tag);
+              return this;
+            };
+            SandboxDecipher.prototype.setAAD = function setAAD() { return this; };
+            SandboxDecipher.prototype.setAutoPadding = function setAutoPadding() { return this; };
+            result.createDecipheriv = function createDecipheriv(algorithm, key, iv) {
+              return new SandboxDecipher(algorithm, key, iv);
+            };
+            result.Decipheriv = SandboxDecipher;
+          }
+
           return result;
         }
 

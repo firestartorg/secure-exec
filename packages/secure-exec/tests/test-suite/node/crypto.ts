@@ -499,6 +499,186 @@ export function runNodeCryptoSuite(context: NodeSuiteContext): void {
 		);
 	});
 
+	it("createCipheriv/createDecipheriv AES-256-CBC roundtrip", async () => {
+		const runtime = await context.createRuntime();
+		const result = await runtime.run(`
+			const crypto = require('crypto');
+			const key = Buffer.alloc(32, 1);
+			const iv = Buffer.alloc(16, 2);
+			const plaintext = 'hello world, this is a secret message!';
+
+			const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+			cipher.update(plaintext, 'utf8');
+			const encrypted = cipher.final();
+
+			const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+			decipher.update(encrypted);
+			const decrypted = decipher.final('utf8');
+
+			module.exports = { decrypted, isBuffer: Buffer.isBuffer(encrypted) };
+		`);
+		expect(result.code).toBe(0);
+		expect(result.errorMessage).toBeUndefined();
+		const exports = result.exports as any;
+		expect(exports.decrypted).toBe("hello world, this is a secret message!");
+		expect(exports.isBuffer).toBe(true);
+	});
+
+	it("createCipheriv/createDecipheriv AES-128-CBC roundtrip", async () => {
+		const runtime = await context.createRuntime();
+		const result = await runtime.run(`
+			const crypto = require('crypto');
+			const key = Buffer.alloc(16, 3);
+			const iv = Buffer.alloc(16, 4);
+			const plaintext = 'AES-128 test data';
+
+			const cipher = crypto.createCipheriv('aes-128-cbc', key, iv);
+			cipher.update(plaintext, 'utf8');
+			const encrypted = cipher.final('hex');
+
+			const decipher = crypto.createDecipheriv('aes-128-cbc', key, iv);
+			decipher.update(encrypted, 'hex');
+			const decrypted = decipher.final('utf8');
+
+			module.exports = { decrypted };
+		`);
+		expect(result.code).toBe(0);
+		expect(result.errorMessage).toBeUndefined();
+		expect((result.exports as any).decrypted).toBe("AES-128 test data");
+	});
+
+	it("createCipheriv/createDecipheriv AES-256-GCM with auth tag", async () => {
+		const runtime = await context.createRuntime();
+		const result = await runtime.run(`
+			const crypto = require('crypto');
+			const key = Buffer.alloc(32, 5);
+			const iv = Buffer.alloc(12, 6);
+			const plaintext = 'authenticated encryption test';
+
+			const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+			cipher.update(plaintext, 'utf8');
+			const encrypted = cipher.final();
+			const authTag = cipher.getAuthTag();
+
+			const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+			decipher.setAuthTag(authTag);
+			decipher.update(encrypted);
+			const decrypted = decipher.final('utf8');
+
+			module.exports = {
+				decrypted,
+				authTagLength: authTag.length,
+				isBuffer: Buffer.isBuffer(authTag),
+			};
+		`);
+		expect(result.code).toBe(0);
+		expect(result.errorMessage).toBeUndefined();
+		const exports = result.exports as any;
+		expect(exports.decrypted).toBe("authenticated encryption test");
+		expect(exports.authTagLength).toBe(16);
+		expect(exports.isBuffer).toBe(true);
+	});
+
+	it("AES-256-GCM decryption fails with wrong auth tag", async () => {
+		const runtime = await context.createRuntime();
+		const result = await runtime.run(`
+			const crypto = require('crypto');
+			const key = Buffer.alloc(32, 7);
+			const iv = Buffer.alloc(12, 8);
+
+			const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+			cipher.update('secret data', 'utf8');
+			const encrypted = cipher.final();
+			cipher.getAuthTag(); // get real tag but don't use it
+
+			const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+			decipher.setAuthTag(Buffer.alloc(16, 0)); // wrong tag
+			decipher.update(encrypted);
+			try {
+				decipher.final('utf8');
+				module.exports = { threw: false };
+			} catch (e) {
+				module.exports = { threw: true, message: e.message };
+			}
+		`);
+		expect(result.code).toBe(0);
+		const exports = result.exports as any;
+		expect(exports.threw).toBe(true);
+	});
+
+	it("createCipheriv/createDecipheriv AES-128-GCM roundtrip", async () => {
+		const runtime = await context.createRuntime();
+		const result = await runtime.run(`
+			const crypto = require('crypto');
+			const key = Buffer.alloc(16, 9);
+			const iv = Buffer.alloc(12, 10);
+			const plaintext = 'AES-128-GCM test';
+
+			const cipher = crypto.createCipheriv('aes-128-gcm', key, iv);
+			cipher.update(plaintext, 'utf8');
+			const encrypted = cipher.final();
+			const authTag = cipher.getAuthTag();
+
+			const decipher = crypto.createDecipheriv('aes-128-gcm', key, iv);
+			decipher.setAuthTag(authTag);
+			decipher.update(encrypted);
+			const decrypted = decipher.final('utf8');
+
+			module.exports = { decrypted };
+		`);
+		expect(result.code).toBe(0);
+		expect(result.errorMessage).toBeUndefined();
+		expect((result.exports as any).decrypted).toBe("AES-128-GCM test");
+	});
+
+	it("createCipheriv update() with multiple chunks", async () => {
+		const runtime = await context.createRuntime();
+		const result = await runtime.run(`
+			const crypto = require('crypto');
+			const key = Buffer.alloc(32, 11);
+			const iv = Buffer.alloc(16, 12);
+
+			const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+			cipher.update('hello ');
+			cipher.update('world');
+			const encrypted = cipher.final();
+
+			const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+			decipher.update(encrypted);
+			const decrypted = decipher.final('utf8');
+
+			module.exports = { decrypted };
+		`);
+		expect(result.code).toBe(0);
+		expect(result.errorMessage).toBeUndefined();
+		expect((result.exports as any).decrypted).toBe("hello world");
+	});
+
+	it("createCipheriv update() returns data with hex encoding", async () => {
+		const runtime = await context.createRuntime();
+		const result = await runtime.run(`
+			const crypto = require('crypto');
+			const key = Buffer.alloc(32, 1);
+			const iv = Buffer.alloc(16, 2);
+
+			const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+			var part1 = cipher.update('hello', 'utf8', 'hex');
+			var part2 = cipher.final('hex');
+			var encrypted = part1 + part2;
+
+			const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+			var d1 = decipher.update(encrypted, 'hex', 'utf8');
+			var d2 = decipher.final('utf8');
+			var decrypted = d1 + d2;
+
+			module.exports = { decrypted, encryptedLength: encrypted.length };
+		`);
+		expect(result.code).toBe(0);
+		expect(result.errorMessage).toBeUndefined();
+		expect((result.exports as any).decrypted).toBe("hello");
+		expect((result.exports as any).encryptedLength).toBeGreaterThan(0);
+	});
+
 	it("randomBytes rejects negative size", async () => {
 		const runtime = await context.createRuntime();
 		const result = await runtime.run(`
