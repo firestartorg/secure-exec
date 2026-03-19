@@ -427,9 +427,13 @@ class KernelImpl implements Kernel {
 		// Resolve output callbacks: when a child inherits non-piped stdio from
 		// a parent, forward output to the parent's DriverProcess callbacks so
 		// cross-runtime child output reaches the top-level collector.
+		// When piped, wire a callback that forwards through the pipe/PTY so
+		// drivers that emit output via callbacks (Node) reach the PTY/pipe.
 		let stdoutCb: ((data: Uint8Array) => void) | undefined;
 		let stderrCb: ((data: Uint8Array) => void) | undefined;
-		if (!stdoutPiped) {
+		if (stdoutPiped) {
+			stdoutCb = this.createPipedOutputCallback(table, 1);
+		} else {
 			if (options?.onStdout) {
 				stdoutCb = options.onStdout;
 			} else if (callerPid !== undefined) {
@@ -440,7 +444,9 @@ class KernelImpl implements Kernel {
 			}
 			if (!stdoutCb) stdoutCb = (data) => stdoutBuf.push(data);
 		}
-		if (!stderrPiped) {
+		if (stderrPiped) {
+			stderrCb = this.createPipedOutputCallback(table, 2);
+		} else {
 			if (options?.onStderr) {
 				stderrCb = options.onStderr;
 			} else if (callerPid !== undefined) {
@@ -981,6 +987,32 @@ class KernelImpl implements Kernel {
 		const entry = table.get(fd);
 		if (!entry) return false;
 		return this.pipeManager.isPipe(entry.description.id) || this.ptyManager.isPty(entry.description.id);
+	}
+
+	/**
+	 * Create a callback that forwards data through a piped stdio FD.
+	 * Needed for drivers (like Node) that emit output via callbacks rather
+	 * than kernel FD writes (like WasmVM does via WASI fd_write).
+	 */
+	private createPipedOutputCallback(
+		table: ProcessFDTable,
+		fd: number,
+	): ((data: Uint8Array) => void) | undefined {
+		const entry = table.get(fd);
+		if (!entry) return undefined;
+
+		const descId = entry.description.id;
+		if (this.pipeManager.isPipe(descId)) {
+			return (data) => {
+				try { this.pipeManager.write(descId, data); } catch { /* pipe closed */ }
+			};
+		}
+		if (this.ptyManager.isPty(descId)) {
+			return (data) => {
+				try { this.ptyManager.write(descId, data); } catch { /* pty closed */ }
+			};
+		}
+		return undefined;
 	}
 
 	/** Clean up all FDs for a process, closing pipe/PTY ends when last reference drops. */

@@ -29,6 +29,16 @@ try {
   // pyodide can't be imported as ESM — skip Python tests
 }
 
+/**
+ * Find a line in the screen output that exactly matches the expected text.
+ * Excludes lines containing the command echo (prompt line).
+ */
+function findOutputLine(screen: string, expected: string): string | undefined {
+  return screen.split('\n').find(
+    (l) => l.trim() === expected && !l.includes(PROMPT),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Node cross-runtime terminal tests
 // ---------------------------------------------------------------------------
@@ -42,19 +52,56 @@ describe.skipIf(wasmSkip)('cross-runtime terminal: node', () => {
     await ctx?.dispose();
   });
 
-  it('node -e "console.log(42)" → 42 appears on screen', async () => {
+  it('node -e stdout appears as actual output (not just command echo)', async () => {
     ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
     harness = new TerminalHarness(ctx.kernel);
 
     await harness.waitFor(PROMPT);
-    await harness.type('node -e "console.log(42)"\n');
+    // Use XYZZY — unique string that does NOT appear in the command text
+    await harness.type('node -e "console.log(\'XYZZY\')"\n');
     await harness.waitFor(PROMPT, 2, 10_000);
 
     const screen = harness.screenshotTrimmed();
-    expect(screen).toContain('42');
+    // Verify output on its own line (not just embedded in command echo)
+    expect(findOutputLine(screen, 'XYZZY')).toBeDefined();
     // Verify prompt returned
     const lines = screen.split('\n');
     expect(lines[lines.length - 1]).toBe(PROMPT);
+  }, 15_000);
+
+  it('node -e multiple console.log lines appear in order', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+    harness = new TerminalHarness(ctx.kernel);
+
+    await harness.waitFor(PROMPT);
+    await harness.type('node -e "console.log(\'AAA\'); console.log(\'BBB\')"\n');
+    await harness.waitFor(PROMPT, 2, 10_000);
+
+    const screen = harness.screenshotTrimmed();
+    expect(findOutputLine(screen, 'AAA')).toBeDefined();
+    expect(findOutputLine(screen, 'BBB')).toBeDefined();
+
+    // Verify order: AAA before BBB
+    const aaaIdx = screen.indexOf('AAA');
+    const bbbIdx = screen.indexOf('BBB');
+    // Both must appear after command echo
+    const promptIdx = screen.indexOf(PROMPT);
+    expect(aaaIdx).toBeGreaterThan(promptIdx);
+    expect(bbbIdx).toBeGreaterThan(aaaIdx);
+  }, 15_000);
+
+  it('WARN message does not suppress real stdout', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+    harness = new TerminalHarness(ctx.kernel);
+
+    await harness.waitFor(PROMPT);
+    await harness.type('node -e "console.log(\'HELLO\')"\n');
+    await harness.waitFor(PROMPT, 2, 10_000);
+
+    const screen = harness.screenshotTrimmed();
+    // Both the WARN and actual output must coexist
+    expect(screen).toContain('WARN');
+    expect(findOutputLine(screen, 'HELLO')).toBeDefined();
   }, 15_000);
 
   it('^C during node -e — shell survives and prompt returns', async () => {
@@ -79,6 +126,47 @@ describe.skipIf(wasmSkip)('cross-runtime terminal: node', () => {
     const screen = harness.screenshotTrimmed();
     expect(screen).toContain('alive');
   }, 20_000);
+});
+
+// ---------------------------------------------------------------------------
+// Node kernel.exec() stdout tests
+// ---------------------------------------------------------------------------
+
+describe.skipIf(wasmSkip)('cross-runtime exec: node', () => {
+  let ctx: IntegrationKernelResult;
+
+  afterEach(async () => {
+    await ctx?.dispose();
+  });
+
+  it('kernel.exec node -e stdout contains output', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+    const result = await ctx.kernel.exec('node -e "console.log(42)"');
+    expect(result.stdout).toContain('42');
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('kernel.exec node -e multi-line stdout in order', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+    const result = await ctx.kernel.exec(
+      'node -e "console.log(1); console.log(2)"',
+    );
+    const lines = result.stdout.split('\n').map((l: string) => l.trim()).filter(Boolean);
+    expect(lines).toContain('1');
+    expect(lines).toContain('2');
+    expect(lines.indexOf('1')).toBeLessThan(lines.indexOf('2'));
+  });
+
+  it('kernel.exec node -e large stdout does not truncate', async () => {
+    ctx = await createIntegrationKernel({ runtimes: ['wasmvm', 'node'] });
+    // Generate >64KB of output (100 lines of 700 chars each ≈ 70KB)
+    const code = `for(let i=0;i<100;i++) console.log('L'+i+' '+'x'.repeat(700))`;
+    const result = await ctx.kernel.exec(`node -e "${code}"`);
+    // Verify first and last lines present
+    expect(result.stdout).toContain('L0 ');
+    expect(result.stdout).toContain('L99 ');
+    expect(result.exitCode).toBe(0);
+  }, 15_000);
 });
 
 // ---------------------------------------------------------------------------
