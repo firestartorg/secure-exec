@@ -3354,6 +3354,124 @@
       "priority": 194,
       "passes": true,
       "notes": "Upgrades US-189 from import-only to comprehensive API surface validation. Exercises connection pool config, pool cluster, escape/format utilities, raw() prepared statements, type casting constants, Buffer formatting, promise wrapper, and event emitter interface. Real TCP connection testing blocked by net module being deferred-stubbed in sandbox — same limitation as ioredis (US-193)."
+    },
+    {
+      "id": "US-195",
+      "title": "Fix node -e stdout not appearing in interactive shell",
+      "description": "As a user, I need `node -e \"console.log('hi')\"` to display output in the interactive shell so I can use the Node runtime interactively.",
+      "acceptanceCriteria": [
+        "kernel.exec('node -e \"console.log(42)\"') returns stdout containing '42'",
+        "kernel.exec('node -e \"console.log(1); console.log(2)\"') returns stdout containing both '1' and '2' in order",
+        "Interactive shell: type `node -e \"console.log(42)\"` → '42' appears on terminal before next prompt",
+        "Test: stdout callback chain from NodeRuntimeDriver → ctx.onStdout → kernel buffer → PTY slave is verified end-to-end",
+        "Test: large stdout (>64KB) from node -e does not truncate or hang",
+        "The 'WARN could not retrieve pid for child process' message does not suppress or replace real stdout",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 195,
+      "passes": true,
+      "notes": "Root cause: when child inherits PTY slave FDs, isStdioPiped returns true so kernel skipped wiring ctx.onStdout callback. Node driver emits output via callbacks (not kernel FDs like WasmVM), so data went nowhere. Fix: createPipedOutputCallback() in kernel.ts wires a forwarding callback that writes through pipeManager/ptyManager when stdio is piped. Also fixed false positive in existing test — was matching '42' in command echo, now uses unique output string. Added tests for multi-line output ordering, large stdout (>64KB), and WARN coexistence."
+    },
+    {
+      "id": "US-196",
+      "title": "Fix node -e stderr/errors not appearing in interactive shell",
+      "description": "As a user, I need `node -e 'invalidCode'` to display the error message so I can debug my code interactively.",
+      "acceptanceCriteria": [
+        "kernel.exec('node -e \"lskdjf\"') returns non-zero exitCode and stderr containing 'ReferenceError'",
+        "kernel.exec('node -e \"throw new Error(\\\"boom\\\")\"') returns stderr containing 'boom'",
+        "kernel.exec('node -e \"({\"') returns stderr containing 'SyntaxError'",
+        "Interactive shell: type `node -e 'lskdjf'` → error message visible on terminal before next prompt",
+        "Test: stderr callback chain from NodeRuntimeDriver → ctx.onStderr → kernel buffer → PTY slave is verified end-to-end",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 196,
+      "passes": false,
+      "notes": "Same root cause as US-195 (stdout/stderr callback wiring) but stderr path. Existing test in error-propagation.test.ts line 39 tests stderr through kernel.exec() — verify it still passes and add interactive shell (PTY) equivalent. NodeRuntimeDriver.ts line 481-496 wraps caught errors as stderr."
+    },
+    {
+      "id": "US-197",
+      "title": "Fix tree command hanging in interactive shell",
+      "description": "As a user, I need the `tree` command to complete and display directory structure without hanging.",
+      "acceptanceCriteria": [
+        "kernel.exec('tree /') returns within 5 seconds with directory listing on stdout",
+        "kernel.exec('tree /nonexistent') returns non-zero exit code with error on stderr",
+        "Interactive shell: type `tree /` → directory tree appears and prompt returns",
+        "Test: tree on VFS with 3-level nested directories renders correct structure",
+        "Test: tree on empty directory shows minimal output (just the directory name)",
+        "Test: tree does not hang when stdin is an empty PTY (no stdin data to read)",
+        "If root cause is tree reading from stdin: fix by ensuring tree detects no-TTY or empty stdin and proceeds without waiting",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 197,
+      "passes": false,
+      "notes": "tree is a WASM command in the multicall binary. Likely hangs because PTY fdRead() returns a Promise that never resolves when no input data exists. On real POSIX, tree never reads stdin — it only does readdir/stat. Possible causes: (1) WASI fd_read on stdin FD blocks indefinitely, (2) VFS readdir on root blocks, (3) brush-shell pipes tree's stdin through PTY slave which blocks. Compare with `ls /` which works (also does readdir but doesn't hang)."
+    },
+    {
+      "id": "US-198",
+      "title": "Fix Ctrl+C (SIGINT) not interrupting hanging child processes",
+      "description": "As a user, I need Ctrl+C to kill a hanging child process (not the shell itself) so I can regain control, matching POSIX terminal behavior. See US-200 for Ctrl+C at the prompt.",
+      "acceptanceCriteria": [
+        "Interactive shell: start `sleep 60`, press Ctrl+C → sleep exits and prompt returns within 1 second",
+        "Interactive shell: start `node -e \"while(true){}\"`, press Ctrl+C → node exits and prompt returns within 1 second",
+        "Prerequisite: brush-shell must set child process pgid as PTY foreground before exec, and restore shell pgid after child exits",
+        "Test: PTY line discipline delivers SIGINT to child's foreground pgid (not shell's pgid) when child is running",
+        "Test: kernel processTable.kill(-pgid, SIGINT) reaches the correct RuntimeDriver.kill()",
+        "Test: NodeRuntimeDriver.kill(SIGINT) actually terminates a running isolate (not just marks it)",
+        "Test: WasmVM driver.kill(SIGINT) terminates the worker",
+        "Test: after Ctrl+C kills child, shell process itself survives and shows prompt",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 198,
+      "passes": false,
+      "notes": "Distinct from US-200 (Ctrl+C at prompt). This is about killing a running child. POSIX: shell sets child's pgid as PTY foreground via tcsetpgrp before exec, restores after wait. PTY VINTR delivers SIGINT to foreground pgid (the child), not the shell. Key code: pty.ts:393-405 (VINTR detection), kernel.ts openShell handler, wasmvm/driver.ts:156-162 (worker.terminate), node/driver.ts:384-390 (isolate dispose). Likely issues: (1) foregroundPgid never updated to child's pgid during execution, (2) NodeRuntimeDriver.kill() may not interrupt active isolate.eval(). Existing test: cross-runtime-terminal.test.ts:60-81 tests ^C but only with cooperative setTimeout."
+    },
+    {
+      "id": "US-199",
+      "title": "Comprehensive node binary integration test suite",
+      "description": "As a developer, I need a comprehensive test file covering all node CLI behaviors through the kernel so regressions are caught.",
+      "acceptanceCriteria": [
+        "Create packages/secure-exec/tests/kernel/node-binary-behavior.test.ts",
+        "Test: node -e 'console.log(\"hello\")' → stdout contains 'hello', exitCode 0",
+        "Test: node -e 'process.exit(42)' → exitCode 42",
+        "Test: node -e 'console.error(\"err\")' → stderr contains 'err'",
+        "Test: node -e 'syntax error' → exitCode non-zero, stderr contains error name",
+        "Test: node -e 'throw new Error(\"boom\")' → exitCode 1, stderr contains 'boom'",
+        "Test: node -e 'setTimeout(()=>console.log(\"delayed\"),100)' → stdout contains 'delayed'",
+        "Test: node -e with process.stdin (reads from stdin pipe) → works when stdin provided",
+        "Test: node -e 'require(\"fs\").readdirSync(\"/\")' → returns VFS root listing",
+        "Test: node -e 'require(\"child_process\").execSync(\"echo sub\").toString()' → stdout contains 'sub' (cross-runtime)",
+        "Test: node --version → stdout matches semver pattern",
+        "Test: node with no args and closed stdin → exits cleanly (does not hang)",
+        "All tests run through kernel.exec() (non-PTY path) AND at least stdout/error tests also verified through interactive shell (PTY path via TerminalHarness)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 199,
+      "passes": false,
+      "notes": "Consolidates node binary behavior testing in one file. Existing coverage is scattered: cross-runtime-terminal.test.ts (2 PTY tests), error-propagation.test.ts (5 exit/stderr tests), signal-forwarding.test.ts (kill tests). This story adds the missing matrix of node CLI flags × output channels × error types. Should use both kernel.exec() and TerminalHarness paths."
+    },
+    {
+      "id": "US-200",
+      "title": "Fix Ctrl+C at shell prompt not resetting the input line",
+      "description": "As a user, I need Ctrl+C at the shell prompt to discard the current partial input, echo ^C, and show a fresh prompt — matching POSIX bash behavior.",
+      "acceptanceCriteria": [
+        "Interactive shell: type 'partial command' then Ctrl+C → '^C' appears, current input discarded, fresh prompt on new line",
+        "Interactive shell: empty prompt + Ctrl+C → '^C' appears, fresh prompt on new line (no error)",
+        "Interactive shell: Ctrl+C at prompt does NOT kill the shell process (shell must survive)",
+        "Test: TerminalHarness types partial text, sends 0x03, verifies ^C echo and fresh prompt within 1 second",
+        "Test: after Ctrl+C at prompt, shell accepts and executes the next command normally",
+        "Fix approach: intercept SIGINT at PTY/kernel level when foreground pgid is the shell's own pgid — echo ^C\\r\\n and re-trigger prompt instead of calling driver.kill() which terminates the WASM worker",
+        "Alternative: use SharedArrayBuffer flag to signal brush-shell's reedline loop without killing the worker",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 200,
+      "passes": false,
+      "notes": "Root cause is three layers deep: (1) PTY correctly detects VINTR and delivers SIGINT, (2) kernel routes SIGINT to foreground pgid which IS the shell at the prompt, (3) WasmVM driver.kill() calls worker.terminate() which destroys the shell entirely — no graceful signal delivery to WASM. Real bash catches SIGINT via readline's signal handler and clears the line. brush-shell's reedline returns Signal::CtrlC → ReadResult::Interrupted internally but the WASM worker is killed before it can handle it. MockShellDriver in shell-terminal.test.ts shows the intended behavior (echo ^C, new prompt) but real WasmVM can't do this. Fix likely requires PTY-level special-casing: when SIGINT target is the shell session leader, handle it in the PTY/kernel layer (echo ^C, flush input) instead of delivering to the driver. See: kernel.ts:301-303 (openShell kill handler), pty.ts:393-405 (VINTR handling), wasmvm/driver.ts:156-162 (worker.terminate)."
     }
   ]
 }
