@@ -223,6 +223,26 @@ export async function setupRequire(
 		},
 	);
 
+	// Synchronous module resolution using Node.js require.resolve().
+	// Used as fallback inside applySync contexts where applySyncPromise can't
+	// pump the event loop (e.g. require() inside net socket data callbacks).
+	const { createRequire } = await import("node:module");
+	const resolveModuleSyncRef = new ivm.Reference(
+		(request: string, fromDir: string): string | null => {
+			const builtinSpecifier = normalizeBuiltinSpecifier(request);
+			if (builtinSpecifier) {
+				return builtinSpecifier;
+			}
+			try {
+				const hostRequire = createRequire(fromDir + "/noop.js");
+				const result = hostRequire.resolve(request);
+				return result;
+			} catch {
+				return null;
+			}
+		},
+	);
+
 	// Create a reference for loading file content
 	// Also transforms dynamic import() calls to __dynamicImport()
 	const loadFileRef = new ivm.Reference(
@@ -236,9 +256,24 @@ export async function setupRequire(
 		},
 	);
 
+	// Synchronous file loading for use inside applySync contexts.
+	const { readFileSync } = await import("node:fs");
+	const loadFileSyncRef = new ivm.Reference(
+		(filePath: string): string | null => {
+			try {
+				const source = readFileSync(filePath, "utf8");
+				return transformDynamicImport(source);
+			} catch {
+				return null;
+			}
+		},
+	);
+
 	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.loadPolyfill, loadPolyfillRef);
 	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.resolveModule, resolveModuleRef);
+	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.resolveModuleSync, resolveModuleSyncRef);
 	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.loadFile, loadFileRef);
+	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.loadFileSync, loadFileSyncRef);
 
 	// Set up timer Reference for actual delays (not just microtasks)
 	const scheduleTimerRef = new ivm.Reference((delayMs: number) => {

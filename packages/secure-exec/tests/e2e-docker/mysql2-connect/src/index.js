@@ -1,7 +1,13 @@
-const mysql = require("mysql2/promise");
+// Eagerly initialize iconv-lite encodings to avoid lazy module loading
+// during TCP data callbacks (required for both mysql2 and other packages
+// that use iconv-lite for character set handling)
+var iconv = require("iconv-lite");
+iconv.getDecoder("utf8");
+
+var mysql = require("mysql2/promise");
 
 async function main() {
-	const conn = await mysql.createConnection({
+	var conn = await mysql.createConnection({
 		host: process.env.MYSQL_HOST,
 		port: Number(process.env.MYSQL_PORT),
 		user: "testuser",
@@ -15,7 +21,7 @@ async function main() {
 	await conn.execute("INSERT INTO test_e2e (value) VALUES (?)", [
 		"hello-sandbox",
 	]);
-	const [rows] = await conn.execute(
+	var [rows] = await conn.execute(
 		"SELECT value FROM test_e2e WHERE value = ?",
 		["hello-sandbox"],
 	);
@@ -31,7 +37,7 @@ async function main() {
 	);
 }
 
-main().catch((err) => {
+main().catch(function (err) {
 	console.error(err.message);
 	process.exit(1);
 });

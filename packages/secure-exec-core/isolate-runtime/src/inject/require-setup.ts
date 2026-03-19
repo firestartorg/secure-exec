@@ -1182,8 +1182,37 @@
       };
       __requireExposeCustomGlobal("require", __require);
 
+      // JS-side resolution cache avoids applySyncPromise for previously resolved modules.
+      // This is critical: applySyncPromise cannot run nested inside applySync (e.g. when
+      // require() is called from a net socket data callback dispatched via applySync).
+      const _resolveCache = Object.create(null);
+
+      // Optional synchronous resolution/loading bridges (set by host when available).
+      // Used as fallback when applySyncPromise fails inside applySync contexts.
+      declare const _resolveModuleSync: { applySync(recv: undefined, args: [string, string]): string | null } | undefined;
+      declare const _loadFileSync: { applySync(recv: undefined, args: [string]): string | null } | undefined;
+
       function _resolveFrom(moduleName, fromDir) {
-        const resolved = _resolveModule.applySyncPromise(undefined, [moduleName, fromDir]);
+        const cacheKey = fromDir + '\0' + moduleName;
+        if (cacheKey in _resolveCache) {
+          const cached = _resolveCache[cacheKey];
+          if (cached === null) {
+            const err = new Error("Cannot find module '" + moduleName + "'");
+            err.code = 'MODULE_NOT_FOUND';
+            throw err;
+          }
+          return cached;
+        }
+        // Use synchronous resolution when available (always works, even inside
+        // applySync contexts like net socket data callbacks). Fall back to
+        // applySyncPromise for environments without the sync bridge.
+        let resolved;
+        if (typeof _resolveModuleSync !== 'undefined') {
+          resolved = _resolveModuleSync.applySync(undefined, [moduleName, fromDir]);
+        } else {
+          resolved = _resolveModule.applySyncPromise(undefined, [moduleName, fromDir]);
+        }
+        _resolveCache[cacheKey] = resolved;
         if (resolved === null) {
           const err = new Error("Cannot find module '" + moduleName + "'");
           err.code = 'MODULE_NOT_FOUND';
@@ -1531,8 +1560,18 @@
           throw new Error(name + ' is not supported in sandbox');
         }
 
+        // Check if module is already cached (by raw name) before any bridge calls.
+        // This avoids applySyncPromise in applySync contexts for previously loaded modules.
+        if (__internalModuleCache[name]) {
+          _debugRequire('name-cache-hit', name, name);
+          return __internalModuleCache[name];
+        }
+
         // Try to load polyfill first (for built-in modules like path, events, etc.)
-        const polyfillCode = _loadPolyfill.applySyncPromise(undefined, [name]);
+        // Skip for relative/absolute paths — they're never polyfills and the
+        // applySyncPromise call can't run inside applySync contexts.
+        const isPath = name[0] === '.' || name[0] === '/';
+        const polyfillCode = isPath ? null : _loadPolyfill.applySyncPromise(undefined, [name]);
         if (polyfillCode !== null) {
           if (__internalModuleCache[name]) return __internalModuleCache[name];
 
@@ -1553,6 +1592,18 @@
           return __internalModuleCache[name];
         }
 
+        // Check the resolution cache first (avoids applySyncPromise for cached modules).
+        // This is critical for require() calls inside applySync contexts (e.g. net
+        // socket data callbacks) where applySyncPromise cannot pump the event loop.
+        const resolveCacheKey = fromDir + '\0' + name;
+        if (resolveCacheKey in _resolveCache) {
+          const cachedPath = _resolveCache[resolveCacheKey];
+          if (cachedPath !== null && __internalModuleCache[cachedPath]) {
+            _debugRequire('resolve-cache-hit', name, cachedPath);
+            return __internalModuleCache[cachedPath];
+          }
+        }
+
         // Resolve module path using host-side resolution
         resolved = _resolveFrom(name, fromDir);
 
@@ -1571,8 +1622,14 @@
           return _pendingModules[cacheKey].exports;
         }
 
-        // Load file content
-        const source = _loadFile.applySyncPromise(undefined, [resolved]);
+        // Load file content. Use synchronous loading when available (works
+        // inside applySync contexts). Fall back to applySyncPromise otherwise.
+        let source;
+        if (typeof _loadFileSync !== 'undefined') {
+          source = _loadFileSync.applySync(undefined, [resolved]);
+        } else {
+          source = _loadFile.applySyncPromise(undefined, [resolved]);
+        }
         if (source === null) {
           const err = new Error("Cannot find module '" + resolved + "'");
           err.code = 'MODULE_NOT_FOUND';
@@ -1666,6 +1723,11 @@
 
         // Cache with resolved path
         __internalModuleCache[cacheKey] = module.exports;
+        // Also cache by raw name for non-path requires (avoids bridge calls
+        // for subsequent require() in applySync contexts like data callbacks)
+        if (!isPath && name !== cacheKey) {
+          __internalModuleCache[name] = module.exports;
+        }
         delete _pendingModules[cacheKey];
         _debugRequire('loaded', name, cacheKey);
 

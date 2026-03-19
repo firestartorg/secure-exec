@@ -187,6 +187,9 @@ describe.skipIf(skipReason)("e2e-docker", () => {
 			],
 			healthCheckTimeout: 60_000,
 			args: ["--tmpfs", "/var/lib/mysql"],
+			// Use mysql_native_password to bypass caching_sha2_password which
+			// requires crypto.publicEncrypt() not yet available in the sandbox
+			command: ["--default-authentication-plugin=mysql_native_password"],
 		});
 
 		const redis = startContainer("redis:7-alpine", {
