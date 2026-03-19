@@ -2092,3 +2092,16 @@ PRD: ralph/kernel-hardening (46 stories)
 - Kernel e2e fails (same pre-existing issue as all other fixtures)
 - No code changes needed
 ---
+
+## 2026-03-18 - US-164
+- Fix was already implemented — node-stdlib-browser runtime import replaced with static STDLIB_BROWSER_MODULES Set
+- module-resolver.ts uses hasPolyfill() checking against hardcoded set of 50 stdlib module names
+- @secure-exec/browser and @secure-exec/python moved to optionalDependencies
+- Re-exports commented out in secure-exec/src/index.ts with TODO markers
+- Typecheck passes, all 25 project-matrix tests pass
+- No code changes needed — fix was in a prior commit
+- **Learnings for future iterations:**
+  - node-stdlib-browser ESM entry is broken (calls require.resolve('./mock/empty.js') on missing file)
+  - Always use static lists for stdlib module detection, never runtime-import node-stdlib-browser
+  - polyfills.ts still imports node-stdlib-browser but that's in the bundler path (lazy/async), not during module init
+---
