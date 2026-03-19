@@ -5,6 +5,7 @@ RUN apk add --no-cache openssh \
  && echo "testuser:testpass" | chpasswd \
  && sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config \
  && sed -i 's/^#PermitEmptyPasswords.*/PermitEmptyPasswords no/' /etc/ssh/sshd_config \
- && mkdir -p /home/testuser/upload
+ && mkdir -p /home/testuser/upload \
+ && chown testuser:testuser /home/testuser/upload
 EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D", "-e"]
