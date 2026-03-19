@@ -1909,3 +1909,12 @@ PRD: ralph/kernel-hardening (46 stories)
   - `_maxTimers` counts both `_timers` and `_intervals` Maps combined
   - DEFAULT_MAX_TIMERS = 10,000 defined in isolate-bootstrap.ts
 ---
+
+## 2026-03-18 - US-146
+- What was implemented: Verified active handle map cap already in place
+- `_registerHandle()` in active-handles.ts checks `_activeHandles.size >= _maxHandles` before registration
+- DEFAULT_MAX_HANDLES = 10,000 in isolate-bootstrap.ts, injected via bridge-setup.ts
+- Tests in resource-budgets.test.ts cover: cap enforcement (maxHandles+1 throws), slot reuse after unregister
+- Files changed:
+  - prd.json — marked US-146 as passes: true
+---
