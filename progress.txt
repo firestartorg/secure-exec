@@ -1918,3 +1918,13 @@ PRD: ralph/kernel-hardening (46 stories)
 - Files changed:
   - prd.json — marked US-146 as passes: true
 ---
+
+## 2026-03-18 - US-147
+- What was implemented: Verified dangerous env var filtering in child process spawn already in place
+- `stripDangerousEnv()` in bridge-setup.ts removes LD_PRELOAD, LD_LIBRARY_PATH, NODE_OPTIONS, DYLD_INSERT_LIBRARIES
+- Applied at both streaming spawn (line 497) and sync spawn (line 581) paths
+- Two-layer defense: filterEnv (permission-based) + stripDangerousEnv (hardcoded denylist)
+- Tests in env-leakage.test.ts cover: LD_PRELOAD stripping, NODE_OPTIONS stripping, normal vars pass through, mutation isolation
+- Files changed:
+  - prd.json — marked US-147 as passes: true
+---
