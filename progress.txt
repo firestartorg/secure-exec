@@ -9,6 +9,9 @@ PRD: ralph/kernel-hardening (46 stories)
 - Overlay VFS pattern (InMemoryFileSystem + host FS fallback) for kernel tests that need both populateBin writes and host module resolution — writes go to memory, reads try memory first then fsPromises
 - TerminalHarness.waitFor() races with fast-exiting processes — use raw openShell + output collection for probes, not TerminalHarness
 - NodeRuntimeDriver doesn't bridge isTTY — process.stdout.isTTY is always false in the V8 isolate regardless of PTY attachment (spec gap #5)
+- NodeRuntimeDriver doesn't bridge streaming stdin — exec() receives stdin as single string batch; PTY input doesn't reach sandbox process.stdin events (blocks interactive TUI tests)
+- filterEnv returns {} when permissions.env is undefined — use { ...allowAllChildProcess, ...allowAllEnv } in createNodeRuntime() for sandbox tests that need process.env.PATH
+- HostBinaryDriver pattern: inline RuntimeDriver that spawns real host binaries; must handle child 'error' event (ENOENT) and use exitResolved guard to prevent double-resolve
 - Buffer polyfill (feross/buffer@5.7.1) lacks V8 internal methods (latin1Slice, base64Slice, utf8Write, etc.) — must patch on BOTH globalThis.Buffer.prototype (in process.ts) AND require('buffer').Buffer.prototype (in _patchPolyfill)
 - NetSocket._readableState must include ALL fields libraries check — ssh2 checks `.ended`, not just `.endEmitted`; ws checks `.endEmitted`
 - SandboxCipher/SandboxDecipher update() must return data immediately for streaming protocols — use stateful bridge (_cryptoCipherivCreate/Update/Final) not buffer-to-final()
@@ -2593,4 +2596,20 @@ PRD: ralph/kernel-hardening (46 stories)
   - Bridge process.stdout.write strips trailing newlines (.replace(/\n$/, "")) — NDJSON events arriving as separate chunks lose delimiters. Use newline-join in capture helpers for correct parsing
   - Pattern for spawning native binaries through sandbox: createTestNodeRuntime with createHostCommandExecutor, sandbox code calls require('child_process').spawn(), env vars pass through bridge JSON serialization to host executor
   - opencode env needs XDG_DATA_HOME for isolated SQLite storage + explicit PATH/HOME since spawn with explicit env replaces entire environment
+---
+
+## 2026-03-19 - US-009
+- Rewrote opencode-interactive.test.ts to use kernel.openShell() + TerminalHarness
+- Replaced PtyHarness (host `script -qefc` spawn) with kernel-based PTY approach
+- Created inline HostBinaryDriver RuntimeDriver to register 'opencode' and 'script' in kernel command registry
+- Added 3 probes: (1) openShell + node, (2) child_process bridge spawn through kernel, (3) streaming stdin from PTY
+- Currently skips on probe 3: streaming stdin bridge not supported
+- All 5 test scenarios preserved: TUI renders, input area, submit response, Ctrl+C, exit cleanly
+- Files changed: packages/secure-exec/tests/cli-tools/opencode-interactive.test.ts
+- **Learnings for future iterations:**
+  - filterEnv returns empty object when permissions.env is undefined — NodeRuntimeDriver defaults to allowAllChildProcess only, must add allowAllEnv for sandbox code to have PATH in process.env
+  - HostBinaryDriver must handle 'error' event on spawned child process — without handler, ENOENT from missing binary becomes uncaught exception. Use exitResolved guard to prevent double-resolve from error + close events
+  - process.exit() inside bridge async contexts causes unhandled ProcessExitError — in probe code, avoid process.exit() entirely; report results via stdout instead
+  - NodeRuntimeDriver batches stdin as single string for exec() — no streaming stdin delivery from PTY to sandbox process.stdin. This is the primary blocker for interactive TUI tests through the kernel
+  - Bridge child_process.spawn passes opts.env to the host — but if opts.env is omitted, bridge passes process.env (sandbox env). The bridge-setup serializes env to JSON for the CommandExecutor
 ---
