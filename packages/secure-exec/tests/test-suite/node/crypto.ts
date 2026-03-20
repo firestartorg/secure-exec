@@ -508,12 +508,10 @@ export function runNodeCryptoSuite(context: NodeSuiteContext): void {
 			const plaintext = 'hello world, this is a secret message!';
 
 			const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-			cipher.update(plaintext, 'utf8');
-			const encrypted = cipher.final();
+			const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
 
 			const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-			decipher.update(encrypted);
-			const decrypted = decipher.final('utf8');
+			const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
 
 			module.exports = { decrypted, isBuffer: Buffer.isBuffer(encrypted) };
 		`);
@@ -533,12 +531,10 @@ export function runNodeCryptoSuite(context: NodeSuiteContext): void {
 			const plaintext = 'AES-128 test data';
 
 			const cipher = crypto.createCipheriv('aes-128-cbc', key, iv);
-			cipher.update(plaintext, 'utf8');
-			const encrypted = cipher.final('hex');
+			const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]).toString('hex');
 
 			const decipher = crypto.createDecipheriv('aes-128-cbc', key, iv);
-			decipher.update(encrypted, 'hex');
-			const decrypted = decipher.final('utf8');
+			const decrypted = Buffer.concat([decipher.update(encrypted, 'hex'), decipher.final()]).toString('utf8');
 
 			module.exports = { decrypted };
 		`);
@@ -556,14 +552,12 @@ export function runNodeCryptoSuite(context: NodeSuiteContext): void {
 			const plaintext = 'authenticated encryption test';
 
 			const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-			cipher.update(plaintext, 'utf8');
-			const encrypted = cipher.final();
+			const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
 			const authTag = cipher.getAuthTag();
 
 			const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
 			decipher.setAuthTag(authTag);
-			decipher.update(encrypted);
-			const decrypted = decipher.final('utf8');
+			const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
 
 			module.exports = {
 				decrypted,
@@ -587,8 +581,7 @@ export function runNodeCryptoSuite(context: NodeSuiteContext): void {
 			const iv = Buffer.alloc(12, 8);
 
 			const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-			cipher.update('secret data', 'utf8');
-			const encrypted = cipher.final();
+			const encrypted = Buffer.concat([cipher.update('secret data', 'utf8'), cipher.final()]);
 			cipher.getAuthTag(); // get real tag but don't use it
 
 			const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
@@ -615,14 +608,12 @@ export function runNodeCryptoSuite(context: NodeSuiteContext): void {
 			const plaintext = 'AES-128-GCM test';
 
 			const cipher = crypto.createCipheriv('aes-128-gcm', key, iv);
-			cipher.update(plaintext, 'utf8');
-			const encrypted = cipher.final();
+			const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
 			const authTag = cipher.getAuthTag();
 
 			const decipher = crypto.createDecipheriv('aes-128-gcm', key, iv);
 			decipher.setAuthTag(authTag);
-			decipher.update(encrypted);
-			const decrypted = decipher.final('utf8');
+			const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
 
 			module.exports = { decrypted };
 		`);

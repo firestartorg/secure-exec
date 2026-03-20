@@ -239,6 +239,37 @@ export interface NetworkAdapter {
 		onData: (socketId: number, dataBase64: string) => void;
 		onEnd: (socketId: number) => void;
 	}): void;
+
+	/** Create a TCP socket and connect to host:port. Returns a socketId. */
+	netSocketConnect?(
+		host: string,
+		port: number,
+		callbacks: {
+			onConnect: () => void;
+			onData: (dataBase64: string) => void;
+			onEnd: () => void;
+			onError: (message: string) => void;
+			onClose: (hadError: boolean) => void;
+		},
+	): number;
+	/** Write data to a TCP socket. */
+	netSocketWrite?(socketId: number, dataBase64: string): void;
+	/** End a TCP socket (half-close). */
+	netSocketEnd?(socketId: number): void;
+	/** Destroy a TCP socket. */
+	netSocketDestroy?(socketId: number): void;
+	/** Upgrade an existing TCP socket to TLS. */
+	netSocketUpgradeTls?(
+		socketId: number,
+		optionsJson: string,
+		callbacks: {
+			onData: (dataBase64: string) => void;
+			onEnd: () => void;
+			onError: (message: string) => void;
+			onClose: (hadError: boolean) => void;
+			onSecureConnect: () => void;
+		},
+	): void;
 }
 
 export interface PermissionDecision {
@@ -270,10 +301,11 @@ export interface FsAccessRequest {
 }
 
 export interface NetworkAccessRequest {
-	op: "fetch" | "http" | "dns" | "listen";
+	op: "fetch" | "http" | "dns" | "listen" | "connect";
 	url?: string;
 	method?: string;
 	hostname?: string;
+	port?: number;
 }
 
 export interface ChildProcessAccessRequest {

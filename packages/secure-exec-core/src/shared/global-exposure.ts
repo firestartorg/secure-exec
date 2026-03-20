@@ -189,6 +189,21 @@ export const NODE_CUSTOM_GLOBAL_INVENTORY: readonly CustomGlobalInventoryEntry[]
 		rationale: "Host crypto bridge reference for createDecipheriv decryption.",
 	},
 	{
+		name: "_cryptoCipherivCreate",
+		classification: "hardened",
+		rationale: "Host crypto bridge reference for stateful cipher/decipher creation.",
+	},
+	{
+		name: "_cryptoCipherivUpdate",
+		classification: "hardened",
+		rationale: "Host crypto bridge reference for stateful cipher/decipher update.",
+	},
+	{
+		name: "_cryptoCipherivFinal",
+		classification: "hardened",
+		rationale: "Host crypto bridge reference for stateful cipher/decipher final.",
+	},
+	{
 		name: "_cryptoSign",
 		classification: "hardened",
 		rationale: "Host crypto bridge reference for sign operations.",

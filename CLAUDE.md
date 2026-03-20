@@ -13,6 +13,14 @@
 - every publishable package must include a `README.md` with the standard format: title, tagline, and links to website, docs, and GitHub
 - if `package.json` has a `"files"` array, `"README.md"` must be listed in it
 
+## Testing Policy
+
+- NEVER mock external services in tests — use real implementations (Docker containers for databases/services, real HTTP servers for network tests, real binaries for CLI tool tests)
+- tests that validate sandbox behavior MUST run code through the secure-exec sandbox (NodeRuntime/proc.exec()), never directly on the host
+- CLI tool tests (Pi, Claude Code, OpenCode) must execute inside the sandbox: Pi runs as JS in the VM, Claude Code and OpenCode spawn their binaries via the sandbox's child_process.spawn bridge
+- e2e-docker fixtures connect to real Docker containers (Postgres, MySQL, Redis, SSH/SFTP) — skip gracefully via `skipUnlessDocker()` when Docker is unavailable
+- interactive/PTY tests must use `kernel.openShell()` with `@xterm/headless`, not host PTY via `script -qefc`
+
 ## Tooling
 
 - use pnpm, vitest, and tsc for type checks

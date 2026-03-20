@@ -20,7 +20,9 @@ export const HOST_BRIDGE_GLOBAL_KEYS = {
 	dynamicImport: "_dynamicImport",
 	loadPolyfill: "_loadPolyfill",
 	resolveModule: "_resolveModule",
+	resolveModuleSync: "_resolveModuleSync",
 	loadFile: "_loadFile",
+	loadFileSync: "_loadFileSync",
 	scheduleTimer: "_scheduleTimer",
 	cryptoRandomFill: "_cryptoRandomFill",
 	cryptoRandomUuid: "_cryptoRandomUUID",
@@ -30,6 +32,9 @@ export const HOST_BRIDGE_GLOBAL_KEYS = {
 	cryptoScrypt: "_cryptoScrypt",
 	cryptoCipheriv: "_cryptoCipheriv",
 	cryptoDecipheriv: "_cryptoDecipheriv",
+	cryptoCipherivCreate: "_cryptoCipherivCreate",
+	cryptoCipherivUpdate: "_cryptoCipherivUpdate",
+	cryptoCipherivFinal: "_cryptoCipherivFinal",
 	cryptoSign: "_cryptoSign",
 	cryptoVerify: "_cryptoVerify",
 	cryptoGenerateKeyPairSync: "_cryptoGenerateKeyPairSync",
@@ -66,6 +71,11 @@ export const HOST_BRIDGE_GLOBAL_KEYS = {
 	upgradeSocketWriteRaw: "_upgradeSocketWriteRaw",
 	upgradeSocketEndRaw: "_upgradeSocketEndRaw",
 	upgradeSocketDestroyRaw: "_upgradeSocketDestroyRaw",
+	netSocketConnectRaw: "_netSocketConnectRaw",
+	netSocketWriteRaw: "_netSocketWriteRaw",
+	netSocketEndRaw: "_netSocketEndRaw",
+	netSocketDestroyRaw: "_netSocketDestroyRaw",
+	netSocketUpgradeTlsRaw: "_netSocketUpgradeTlsRaw",
 	ptySetRawMode: "_ptySetRawMode",
 	processConfig: "_processConfig",
 	osConfig: "_osConfig",
@@ -91,6 +101,9 @@ export const RUNTIME_BRIDGE_GLOBAL_KEYS = {
 	httpServerUpgradeDispatch: "_httpServerUpgradeDispatch",
 	upgradeSocketData: "_upgradeSocketData",
 	upgradeSocketEnd: "_upgradeSocketEnd",
+	netModule: "_netModule",
+	tlsModule: "_tlsModule",
+	netSocketDispatch: "_netSocketDispatch",
 	fsFacade: "_fs",
 	requireFrom: "_requireFrom",
 	moduleCache: "_moduleCache",
@@ -255,6 +268,15 @@ export type NetworkHttpServerCloseRawBridgeRef = BridgeApplyRef<[number], void>;
 export type UpgradeSocketWriteRawBridgeRef = BridgeApplySyncRef<[number, string], void>;
 export type UpgradeSocketEndRawBridgeRef = BridgeApplySyncRef<[number], void>;
 export type UpgradeSocketDestroyRawBridgeRef = BridgeApplySyncRef<[number], void>;
+
+// TCP socket (net module) boundary contracts.
+export type NetSocketConnectRawBridgeRef = BridgeApplySyncRef<[string, number], number>;
+export type NetSocketWriteRawBridgeRef = BridgeApplySyncRef<[number, string], void>;
+export type NetSocketEndRawBridgeRef = BridgeApplySyncRef<[number], void>;
+export type NetSocketDestroyRawBridgeRef = BridgeApplySyncRef<[number], void>;
+
+// TLS socket upgrade boundary contract.
+export type NetSocketUpgradeTlsRawBridgeRef = BridgeApplySyncRef<[number, string], void>;
 
 // PTY boundary contracts.
 export type PtySetRawModeBridgeRef = BridgeApplySyncRef<[boolean], void>;

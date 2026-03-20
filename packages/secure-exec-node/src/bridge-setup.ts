@@ -183,7 +183,8 @@ export async function setupRequire(
 				name === "http" ||
 				name === "https" ||
 				name === "http2" ||
-				name === "dns"
+				name === "dns" ||
+				name === "net"
 			) {
 				return null;
 			}
@@ -222,6 +223,26 @@ export async function setupRequire(
 		},
 	);
 
+	// Synchronous module resolution using Node.js require.resolve().
+	// Used as fallback inside applySync contexts where applySyncPromise can't
+	// pump the event loop (e.g. require() inside net socket data callbacks).
+	const { createRequire } = await import("node:module");
+	const resolveModuleSyncRef = new ivm.Reference(
+		(request: string, fromDir: string): string | null => {
+			const builtinSpecifier = normalizeBuiltinSpecifier(request);
+			if (builtinSpecifier) {
+				return builtinSpecifier;
+			}
+			try {
+				const hostRequire = createRequire(fromDir + "/noop.js");
+				const result = hostRequire.resolve(request);
+				return result;
+			} catch {
+				return null;
+			}
+		},
+	);
+
 	// Create a reference for loading file content
 	// Also transforms dynamic import() calls to __dynamicImport()
 	const loadFileRef = new ivm.Reference(
@@ -235,9 +256,24 @@ export async function setupRequire(
 		},
 	);
 
+	// Synchronous file loading for use inside applySync contexts.
+	const { readFileSync } = await import("node:fs");
+	const loadFileSyncRef = new ivm.Reference(
+		(filePath: string): string | null => {
+			try {
+				const source = readFileSync(filePath, "utf8");
+				return transformDynamicImport(source);
+			} catch {
+				return null;
+			}
+		},
+	);
+
 	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.loadPolyfill, loadPolyfillRef);
 	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.resolveModule, resolveModuleRef);
+	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.resolveModuleSync, resolveModuleSyncRef);
 	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.loadFile, loadFileRef);
+	await jail.set(HOST_BRIDGE_GLOBAL_KEYS.loadFileSync, loadFileSyncRef);
 
 	// Set up timer Reference for actual delays (not just microtasks)
 	const scheduleTimerRef = new ivm.Reference((delayMs: number) => {
@@ -385,6 +421,95 @@ export async function setupRequire(
 	await jail.set(
 		HOST_BRIDGE_GLOBAL_KEYS.cryptoDecipheriv,
 		cryptoDecipherivRef,
+	);
+
+	// Stateful cipher/decipher for streaming crypto (ssh2 AES-GCM, etc.)
+	const cipherSessions = new Map<
+		number,
+		{ instance: any; isGcm: boolean; mode: "cipher" | "decipher" }
+	>();
+	let nextCipherSessionId = 1;
+
+	const cryptoCipherivCreateRef = new ivm.Reference(
+		(
+			mode: string,
+			algorithm: string,
+			keyBase64: string,
+			ivBase64: string,
+		): number => {
+			const key = Buffer.from(keyBase64, "base64");
+			const iv = Buffer.from(ivBase64, "base64");
+			const sessionId = nextCipherSessionId++;
+			const isCipher = mode === "cipher";
+			const instance = isCipher
+				? createCipheriv(algorithm, key, iv)
+				: createDecipheriv(algorithm, key, iv);
+			cipherSessions.set(sessionId, {
+				instance,
+				isGcm: algorithm.includes("-gcm"),
+				mode: isCipher ? "cipher" : "decipher",
+			});
+			return sessionId;
+		},
+	);
+
+	const cryptoCipherivUpdateRef = new ivm.Reference(
+		(sessionId: number, dataBase64: string, optionsJson?: string): string => {
+			const session = cipherSessions.get(sessionId);
+			if (!session) throw new Error("Invalid cipher session");
+			if (optionsJson) {
+				const opts = JSON.parse(optionsJson);
+				if (opts.setAAD) {
+					(session.instance as any).setAAD(
+						Buffer.from(opts.setAAD, "base64"),
+					);
+				}
+				if (opts.setAuthTag) {
+					(session.instance as any).setAuthTag(
+						Buffer.from(opts.setAuthTag, "base64"),
+					);
+				}
+				if (opts.setAutoPadding !== undefined) {
+					(session.instance as any).setAutoPadding(opts.setAutoPadding);
+				}
+				// Options-only call (no data to process)
+				if (!dataBase64) return "";
+			}
+			const data = Buffer.from(dataBase64, "base64");
+			const result = session.instance.update(data);
+			return result.toString("base64");
+		},
+	);
+
+	const cryptoCipherivFinalRef = new ivm.Reference(
+		(sessionId: number): string => {
+			const session = cipherSessions.get(sessionId);
+			if (!session) throw new Error("Invalid cipher session");
+			const result = session.instance.final();
+			const response: Record<string, string> = {
+				data: result.toString("base64"),
+			};
+			if (session.isGcm && session.mode === "cipher") {
+				response.authTag = (session.instance as any)
+					.getAuthTag()
+					.toString("base64");
+			}
+			cipherSessions.delete(sessionId);
+			return JSON.stringify(response);
+		},
+	);
+
+	await jail.set(
+		HOST_BRIDGE_GLOBAL_KEYS.cryptoCipherivCreate,
+		cryptoCipherivCreateRef,
+	);
+	await jail.set(
+		HOST_BRIDGE_GLOBAL_KEYS.cryptoCipherivUpdate,
+		cryptoCipherivUpdateRef,
+	);
+	await jail.set(
+		HOST_BRIDGE_GLOBAL_KEYS.cryptoCipherivFinal,
+		cryptoCipherivFinalRef,
 	);
 
 	// Set up host crypto references for sign/verify and key generation.
@@ -763,6 +888,27 @@ export async function setupRequire(
 					return JSON.stringify({ data: decrypted.toString("base64") });
 				}
 				throw new Error(`Unsupported decrypt algorithm: ${algoName}`);
+			}
+			case "deriveBits": {
+				const { algorithm, key, length } = req;
+				const algoName = algorithm.name;
+				if (algoName === "PBKDF2") {
+					const password = Buffer.from(key._raw, "base64");
+					const salt = Buffer.from(algorithm.salt, "base64");
+					const iterations = algorithm.iterations;
+					const hashAlgo = normalizeHash(algorithm.hash);
+					const keylen = length / 8;
+					return JSON.stringify({
+						data: pbkdf2Sync(
+							password,
+							salt,
+							iterations,
+							keylen,
+							hashAlgo,
+						).toString("base64"),
+					});
+				}
+				throw new Error(`Unsupported deriveBits algorithm: ${algoName}`);
 			}
 			case "sign": {
 				const { key, data } = req;
@@ -1447,6 +1593,87 @@ export async function setupRequire(
 				);
 			},
 		});
+
+		// TCP socket bridge refs (net module)
+		let netSocketDispatchRef: ivm.Reference<
+			(socketId: number, type: string, data: string) => void
+		> | null = null;
+
+		const getNetSocketDispatchRef = () => {
+			if (!netSocketDispatchRef) {
+				netSocketDispatchRef = context.global.getSync(
+					RUNTIME_BRIDGE_GLOBAL_KEYS.netSocketDispatch,
+					{ reference: true },
+				) as ivm.Reference<
+					(socketId: number, type: string, data: string) => void
+				>;
+			}
+			return netSocketDispatchRef!;
+		};
+
+		const dispatchNetEvent = (socketId: number, type: string, data: string) => {
+			try {
+				getNetSocketDispatchRef().applySync(
+					undefined,
+					[socketId, type, data],
+				);
+			} catch {
+				// Isolate may have been disposed; silently drop the event
+			}
+		};
+
+		const netSocketConnectRef = new ivm.Reference(
+			(host: string, port: number): number => {
+				checkBridgeBudget(deps);
+				// Use adapter-returned socketId for all dispatch/write/end/destroy
+				let socketId = -1;
+				socketId = adapter.netSocketConnect?.(host, port, {
+					onConnect: () => dispatchNetEvent(socketId, "connect", ""),
+					onData: (dataBase64) => dispatchNetEvent(socketId, "data", dataBase64),
+					onEnd: () => dispatchNetEvent(socketId, "end", ""),
+					onError: (message) => dispatchNetEvent(socketId, "error", message),
+					onClose: (hadError) => dispatchNetEvent(socketId, "close", hadError ? "1" : "0"),
+				}) ?? -1;
+				return socketId;
+			},
+		);
+
+		const netSocketWriteRef = new ivm.Reference(
+			(socketId: number, dataBase64: string): void => {
+				adapter.netSocketWrite?.(socketId, dataBase64);
+			},
+		);
+
+		const netSocketEndRef = new ivm.Reference(
+			(socketId: number): void => {
+				adapter.netSocketEnd?.(socketId);
+			},
+		);
+
+		const netSocketDestroyRef = new ivm.Reference(
+			(socketId: number): void => {
+				adapter.netSocketDestroy?.(socketId);
+			},
+		);
+
+		const netSocketUpgradeTlsRef = new ivm.Reference(
+			(socketId: number, optionsJson: string): void => {
+				checkBridgeBudget(deps);
+				adapter.netSocketUpgradeTls?.(socketId, optionsJson, {
+					onData: (dataBase64) => dispatchNetEvent(socketId, "data", dataBase64),
+					onEnd: () => dispatchNetEvent(socketId, "end", ""),
+					onError: (message) => dispatchNetEvent(socketId, "error", message),
+					onClose: (hadError) => dispatchNetEvent(socketId, "close", hadError ? "1" : "0"),
+					onSecureConnect: () => dispatchNetEvent(socketId, "secureConnect", ""),
+				});
+			},
+		);
+
+		await jail.set(HOST_BRIDGE_GLOBAL_KEYS.netSocketConnectRaw, netSocketConnectRef);
+		await jail.set(HOST_BRIDGE_GLOBAL_KEYS.netSocketWriteRaw, netSocketWriteRef);
+		await jail.set(HOST_BRIDGE_GLOBAL_KEYS.netSocketEndRaw, netSocketEndRef);
+		await jail.set(HOST_BRIDGE_GLOBAL_KEYS.netSocketDestroyRaw, netSocketDestroyRef);
+		await jail.set(HOST_BRIDGE_GLOBAL_KEYS.netSocketUpgradeTlsRaw, netSocketUpgradeTlsRef);
 	}
 
 	// Set up PTY setRawMode bridge ref when stdin is a TTY

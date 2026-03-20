@@ -24,6 +24,7 @@ import {
 import { createTestNodeRuntime } from "./test-utils.js";
 import {
 	buildImage,
+	getContainerInternalIp,
 	skipUnlessDocker,
 	startContainer,
 	type Container,
@@ -99,11 +100,10 @@ type ServiceConnection = { host: string; port: number };
 type ServiceConnections = Partial<Record<ServiceName, ServiceConnection>>;
 
 /* ------------------------------------------------------------------ */
-/*  CI mode and skip logic                                             */
+/*  Skip logic                                                         */
 /* ------------------------------------------------------------------ */
 
-const isCI = process.env.E2E_DOCKER_CI === "true";
-const skipReason = isCI ? false : skipUnlessDocker();
+const skipReason = skipUnlessDocker();
 
 /* ------------------------------------------------------------------ */
 /*  Container lifecycle state                                          */
@@ -111,6 +111,9 @@ const skipReason = isCI ? false : skipUnlessDocker();
 
 const activeContainers: Container[] = [];
 let services: ServiceConnections = {};
+let internalAddresses: Partial<
+	Record<ServiceName, { host: string; port: number }>
+> = {};
 
 /* ------------------------------------------------------------------ */
 /*  Fixture discovery (runs at module load)                            */
@@ -124,30 +127,7 @@ const discoveredFixtures = await discoverFixtures();
 
 describe.skipIf(skipReason)("e2e-docker", () => {
 	beforeAll(async () => {
-		if (isCI) {
-			// CI manages containers via GitHub Actions services
-			services = {
-				postgres: {
-					host: process.env.PG_HOST ?? "127.0.0.1",
-					port: Number(process.env.PG_PORT ?? 5432),
-				},
-				mysql: {
-					host: process.env.MYSQL_HOST ?? "127.0.0.1",
-					port: Number(process.env.MYSQL_PORT ?? 3306),
-				},
-				redis: {
-					host: process.env.REDIS_HOST ?? "127.0.0.1",
-					port: Number(process.env.REDIS_PORT ?? 6379),
-				},
-				ssh: {
-					host: process.env.SSH_HOST ?? "127.0.0.1",
-					port: Number(process.env.SSH_PORT ?? 2222),
-				},
-			};
-			return;
-		}
-
-		// Build SSH image
+		// Build custom images
 		const sshdDockerfile = path.join(
 			FIXTURES_ROOT,
 			"dockerfiles",
@@ -155,8 +135,15 @@ describe.skipIf(skipReason)("e2e-docker", () => {
 		);
 		buildImage(sshdDockerfile, "secure-exec-test-sshd");
 
+		const pgSslDockerfile = path.join(
+			FIXTURES_ROOT,
+			"dockerfiles",
+			"postgres-ssl.Dockerfile",
+		);
+		buildImage(pgSslDockerfile, "secure-exec-test-postgres-ssl");
+
 		// Start containers (startContainer is synchronous — sequential start)
-		const pg = startContainer("postgres:16-alpine", {
+		const pg = startContainer("secure-exec-test-postgres-ssl", {
 			ports: { 5432: 0 },
 			env: {
 				POSTGRES_USER: "testuser",
@@ -166,6 +153,12 @@ describe.skipIf(skipReason)("e2e-docker", () => {
 			healthCheck: ["pg_isready", "-U", "testuser", "-d", "testdb"],
 			healthCheckTimeout: 30_000,
 			args: ["--tmpfs", "/var/lib/postgresql/data"],
+			// Enable SSL with self-signed certificate from custom image
+			command: [
+				"-c", "ssl=on",
+				"-c", "ssl_cert_file=/var/lib/postgresql/server.crt",
+				"-c", "ssl_key_file=/var/lib/postgresql/server.key",
+			],
 		});
 
 		const mysql = startContainer("mysql:8.0", {
@@ -186,6 +179,9 @@ describe.skipIf(skipReason)("e2e-docker", () => {
 			],
 			healthCheckTimeout: 60_000,
 			args: ["--tmpfs", "/var/lib/mysql"],
+			// Use mysql_native_password to bypass caching_sha2_password which
+			// requires crypto.publicEncrypt() not yet available in the sandbox
+			command: ["--default-authentication-plugin=mysql_native_password"],
 		});
 
 		const redis = startContainer("redis:7-alpine", {
@@ -208,10 +204,18 @@ describe.skipIf(skipReason)("e2e-docker", () => {
 			redis: { host: redis.host, port: redis.port },
 			ssh: { host: ssh.host, port: ssh.port },
 		};
+
+		// Internal Docker bridge IPs for tunnel tests (SSH container can reach
+		// other containers on the same bridge by their internal IP)
+		internalAddresses = {
+			redis: {
+				host: getContainerInternalIp(redis.containerId),
+				port: 6379,
+			},
+		};
 	}, 180_000);
 
 	afterAll(() => {
-		if (isCI) return;
 		for (const container of activeContainers) {
 			container.stop();
 		}
@@ -285,10 +289,16 @@ function getServiceEnvVars(
 				env.MYSQL_HOST = conn.host;
 				env.MYSQL_PORT = String(conn.port);
 				break;
-			case "redis":
+			case "redis": {
 				env.REDIS_HOST = conn.host;
 				env.REDIS_PORT = String(conn.port);
+				const internal = internalAddresses.redis;
+				if (internal) {
+					env.REDIS_INTERNAL_HOST = internal.host;
+					env.REDIS_INTERNAL_PORT = String(internal.port);
+				}
 				break;
+			}
 			case "ssh":
 				env.SSH_HOST = conn.host;
 				env.SSH_PORT = String(conn.port);

@@ -281,6 +281,21 @@ export function wrapNetworkAdapter(
 		upgradeSocketEnd: adapter.upgradeSocketEnd?.bind(adapter),
 		upgradeSocketDestroy: adapter.upgradeSocketDestroy?.bind(adapter),
 		setUpgradeSocketCallbacks: adapter.setUpgradeSocketCallbacks?.bind(adapter),
+		// Forward TCP socket (net module) methods with permission check on connect
+		netSocketConnect: adapter.netSocketConnect
+			? (host, port, callbacks) => {
+					checkPermission(
+						permissions?.network,
+						{ op: "connect", hostname: host, port },
+						(req, reason) => createEaccesError("connect", `${req.hostname}:${req.port}`, reason),
+					);
+					return adapter.netSocketConnect!(host, port, callbacks);
+				}
+			: undefined,
+		netSocketWrite: adapter.netSocketWrite?.bind(adapter),
+		netSocketEnd: adapter.netSocketEnd?.bind(adapter),
+		netSocketDestroy: adapter.netSocketDestroy?.bind(adapter),
+		netSocketUpgradeTls: adapter.netSocketUpgradeTls?.bind(adapter),
 	};
 }
 

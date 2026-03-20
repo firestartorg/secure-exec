@@ -1129,6 +1129,26 @@ export { TextEncoder, TextDecoder };
 // Buffer - use buffer package polyfill
 export const Buffer = BufferPolyfill;
 
+// Patch internal V8 Buffer slice/write methods used by native-protocol libraries
+// (ssh2, msgpack, protobuf, etc.). The polyfill supports these encodings through
+// toString()/write() but doesn't expose the fast-path internal methods.
+const bp = BufferPolyfill.prototype as Record<string, unknown>;
+const sliceEncodings = ["utf8", "ascii", "latin1", "binary", "hex", "base64", "ucs2", "utf16le"] as const;
+for (const enc of sliceEncodings) {
+  const sliceKey = `${enc}Slice`;
+  if (typeof bp[sliceKey] !== "function") {
+    bp[sliceKey] = function(this: InstanceType<typeof BufferPolyfill>, start: number, end: number): string {
+      return this.toString(enc, start, end);
+    };
+  }
+  const writeKey = `${enc}Write`;
+  if (typeof bp[writeKey] !== "function") {
+    bp[writeKey] = function(this: InstanceType<typeof BufferPolyfill>, str: string, offset: number, length: number): number {
+      return this.write(str, offset, length, enc);
+    };
+  }
+}
+
 function throwUnsupportedCryptoApi(api: "getRandomValues" | "randomUUID"): never {
   throw new Error(`crypto.${api} is not supported in sandbox`);
 }

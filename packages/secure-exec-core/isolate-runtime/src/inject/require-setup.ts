@@ -185,6 +185,22 @@
             ) {
               BufferCtor.constants = result.constants;
             }
+
+            // Patch internal V8 Buffer slice/write methods (ssh2, asn1, etc.)
+            var bProto = BufferCtor.prototype;
+            if (bProto) {
+              var encs = ['utf8', 'ascii', 'latin1', 'binary', 'hex', 'base64', 'ucs2', 'utf16le'];
+              for (var ei = 0; ei < encs.length; ei++) {
+                (function(e) {
+                  if (typeof bProto[e + 'Slice'] !== 'function') {
+                    bProto[e + 'Slice'] = function(start, end) { return this.toString(e, start, end); };
+                  }
+                  if (typeof bProto[e + 'Write'] !== 'function') {
+                    bProto[e + 'Write'] = function(str, offset, length) { return this.write(str, offset, length, e); };
+                  }
+                })(encs[ei]);
+              }
+            }
           }
 
           return result;
@@ -571,100 +587,163 @@
             };
           }
 
-          // Overlay host-backed createCipheriv/createDecipheriv
-          if (typeof _cryptoCipheriv !== 'undefined') {
+          // Overlay host-backed createCipheriv/createDecipheriv.
+          // Uses stateful bridge (create/update/final) so update() returns data
+          // immediately — required by ssh2 AES-GCM streaming encryption.
+          // Falls back to one-shot bridge when stateful bridge is unavailable.
+          var _useStatefulCipher = typeof _cryptoCipherivCreate !== 'undefined';
+
+          if (typeof _cryptoCipheriv !== 'undefined' || _useStatefulCipher) {
             function SandboxCipher(algorithm, key, iv) {
               this._algorithm = algorithm;
               this._key = typeof key === 'string' ? Buffer.from(key, 'utf8') : Buffer.from(key);
               this._iv = typeof iv === 'string' ? Buffer.from(iv, 'utf8') : Buffer.from(iv);
-              this._chunks = [];
               this._authTag = null;
               this._finalized = false;
+              if (_useStatefulCipher) {
+                this._sessionId = _cryptoCipherivCreate.applySync(undefined, [
+                  'cipher', algorithm, this._key.toString('base64'), this._iv.toString('base64'),
+                ]);
+              } else {
+                this._sessionId = -1;
+                this._chunks = [];
+              }
             }
             SandboxCipher.prototype.update = function update(data, inputEncoding, outputEncoding) {
+              var buf;
               if (typeof data === 'string') {
-                this._chunks.push(Buffer.from(data, inputEncoding || 'utf8'));
+                buf = Buffer.from(data, inputEncoding || 'utf8');
               } else {
-                this._chunks.push(Buffer.from(data));
+                buf = Buffer.from(data);
               }
-              // Return empty buffer/string to maintain API shape; real data comes from final()
+              if (this._sessionId >= 0) {
+                var resultBase64 = _cryptoCipherivUpdate.applySync(undefined, [this._sessionId, buf.toString('base64')]);
+                var resultBuffer = Buffer.from(resultBase64, 'base64');
+                if (outputEncoding && outputEncoding !== 'buffer') return resultBuffer.toString(outputEncoding);
+                return resultBuffer;
+              }
+              this._chunks.push(buf);
               if (outputEncoding && outputEncoding !== 'buffer') return '';
               return Buffer.alloc(0);
             };
             SandboxCipher.prototype.final = function final(outputEncoding) {
               if (this._finalized) throw new Error('Attempting to call final() after already finalized');
               this._finalized = true;
-              var combined = Buffer.concat(this._chunks);
-              var resultJson = _cryptoCipheriv.applySync(undefined, [
-                this._algorithm,
-                this._key.toString('base64'),
-                this._iv.toString('base64'),
-                combined.toString('base64'),
-              ]);
-              var parsed = JSON.parse(resultJson);
-              if (parsed.authTag) {
-                this._authTag = Buffer.from(parsed.authTag, 'base64');
+              if (this._sessionId >= 0) {
+                var resultJson = _cryptoCipherivFinal.applySync(undefined, [this._sessionId]);
+                var parsed = JSON.parse(resultJson);
+                if (parsed.authTag) this._authTag = Buffer.from(parsed.authTag, 'base64');
+                var resultBuffer = Buffer.from(parsed.data, 'base64');
+                if (outputEncoding && outputEncoding !== 'buffer') return resultBuffer.toString(outputEncoding);
+                return resultBuffer;
               }
-              var resultBuffer = Buffer.from(parsed.data, 'base64');
-              if (outputEncoding && outputEncoding !== 'buffer') return resultBuffer.toString(outputEncoding);
-              return resultBuffer;
+              var combined = Buffer.concat(this._chunks);
+              var resultJson2 = _cryptoCipheriv.applySync(undefined, [
+                this._algorithm, this._key.toString('base64'), this._iv.toString('base64'), combined.toString('base64'),
+              ]);
+              var parsed2 = JSON.parse(resultJson2);
+              if (parsed2.authTag) this._authTag = Buffer.from(parsed2.authTag, 'base64');
+              var resultBuffer2 = Buffer.from(parsed2.data, 'base64');
+              if (outputEncoding && outputEncoding !== 'buffer') return resultBuffer2.toString(outputEncoding);
+              return resultBuffer2;
             };
             SandboxCipher.prototype.getAuthTag = function getAuthTag() {
               if (!this._finalized) throw new Error('Cannot call getAuthTag before final()');
               if (!this._authTag) throw new Error('Auth tag is only available for GCM ciphers');
               return this._authTag;
             };
-            SandboxCipher.prototype.setAAD = function setAAD() { return this; };
-            SandboxCipher.prototype.setAutoPadding = function setAutoPadding() { return this; };
+            SandboxCipher.prototype.setAAD = function setAAD(data) {
+              if (this._sessionId >= 0) {
+                var buf = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
+                _cryptoCipherivUpdate.applySync(undefined, [this._sessionId, '', JSON.stringify({ setAAD: buf.toString('base64') })]);
+              }
+              return this;
+            };
+            SandboxCipher.prototype.setAutoPadding = function setAutoPadding(autoPadding) {
+              if (this._sessionId >= 0) {
+                _cryptoCipherivUpdate.applySync(undefined, [this._sessionId, '', JSON.stringify({ setAutoPadding: autoPadding !== false })]);
+              }
+              return this;
+            };
             result.createCipheriv = function createCipheriv(algorithm, key, iv) {
               return new SandboxCipher(algorithm, key, iv);
             };
             result.Cipheriv = SandboxCipher;
           }
 
-          if (typeof _cryptoDecipheriv !== 'undefined') {
+          if (typeof _cryptoDecipheriv !== 'undefined' || _useStatefulCipher) {
             function SandboxDecipher(algorithm, key, iv) {
               this._algorithm = algorithm;
               this._key = typeof key === 'string' ? Buffer.from(key, 'utf8') : Buffer.from(key);
               this._iv = typeof iv === 'string' ? Buffer.from(iv, 'utf8') : Buffer.from(iv);
-              this._chunks = [];
               this._authTag = null;
               this._finalized = false;
+              if (_useStatefulCipher) {
+                this._sessionId = _cryptoCipherivCreate.applySync(undefined, [
+                  'decipher', algorithm, this._key.toString('base64'), this._iv.toString('base64'),
+                ]);
+              } else {
+                this._sessionId = -1;
+                this._chunks = [];
+              }
             }
             SandboxDecipher.prototype.update = function update(data, inputEncoding, outputEncoding) {
+              var buf;
               if (typeof data === 'string') {
-                this._chunks.push(Buffer.from(data, inputEncoding || 'utf8'));
+                buf = Buffer.from(data, inputEncoding || 'utf8');
               } else {
-                this._chunks.push(Buffer.from(data));
+                buf = Buffer.from(data);
               }
+              if (this._sessionId >= 0) {
+                var resultBase64 = _cryptoCipherivUpdate.applySync(undefined, [this._sessionId, buf.toString('base64')]);
+                var resultBuffer = Buffer.from(resultBase64, 'base64');
+                if (outputEncoding && outputEncoding !== 'buffer') return resultBuffer.toString(outputEncoding);
+                return resultBuffer;
+              }
+              this._chunks.push(buf);
               if (outputEncoding && outputEncoding !== 'buffer') return '';
               return Buffer.alloc(0);
             };
             SandboxDecipher.prototype.final = function final(outputEncoding) {
               if (this._finalized) throw new Error('Attempting to call final() after already finalized');
               this._finalized = true;
+              if (this._sessionId >= 0) {
+                if (this._authTag) {
+                  _cryptoCipherivUpdate.applySync(undefined, [this._sessionId, '', JSON.stringify({ setAuthTag: this._authTag.toString('base64') })]);
+                }
+                var resultJson = _cryptoCipherivFinal.applySync(undefined, [this._sessionId]);
+                var parsed = JSON.parse(resultJson);
+                var resultBuffer = Buffer.from(parsed.data, 'base64');
+                if (outputEncoding && outputEncoding !== 'buffer') return resultBuffer.toString(outputEncoding);
+                return resultBuffer;
+              }
               var combined = Buffer.concat(this._chunks);
               var options = {};
-              if (this._authTag) {
-                options.authTag = this._authTag.toString('base64');
-              }
+              if (this._authTag) options.authTag = this._authTag.toString('base64');
               var resultBase64 = _cryptoDecipheriv.applySync(undefined, [
-                this._algorithm,
-                this._key.toString('base64'),
-                this._iv.toString('base64'),
-                combined.toString('base64'),
-                JSON.stringify(options),
+                this._algorithm, this._key.toString('base64'), this._iv.toString('base64'), combined.toString('base64'), JSON.stringify(options),
               ]);
-              var resultBuffer = Buffer.from(resultBase64, 'base64');
-              if (outputEncoding && outputEncoding !== 'buffer') return resultBuffer.toString(outputEncoding);
-              return resultBuffer;
+              var resultBuffer2 = Buffer.from(resultBase64, 'base64');
+              if (outputEncoding && outputEncoding !== 'buffer') return resultBuffer2.toString(outputEncoding);
+              return resultBuffer2;
             };
             SandboxDecipher.prototype.setAuthTag = function setAuthTag(tag) {
               this._authTag = typeof tag === 'string' ? Buffer.from(tag, 'base64') : Buffer.from(tag);
               return this;
             };
-            SandboxDecipher.prototype.setAAD = function setAAD() { return this; };
-            SandboxDecipher.prototype.setAutoPadding = function setAutoPadding() { return this; };
+            SandboxDecipher.prototype.setAAD = function setAAD(data) {
+              if (this._sessionId >= 0) {
+                var buf = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
+                _cryptoCipherivUpdate.applySync(undefined, [this._sessionId, '', JSON.stringify({ setAAD: buf.toString('base64') })]);
+              }
+              return this;
+            };
+            SandboxDecipher.prototype.setAutoPadding = function setAutoPadding(autoPadding) {
+              if (this._sessionId >= 0) {
+                _cryptoCipherivUpdate.applySync(undefined, [this._sessionId, '', JSON.stringify({ setAutoPadding: autoPadding !== false })]);
+              }
+              return this;
+            };
             result.createDecipheriv = function createDecipheriv(algorithm, key, iv) {
               return new SandboxDecipher(algorithm, key, iv);
             };
@@ -972,6 +1051,23 @@
               });
             };
 
+            SandboxSubtle.deriveBits = function deriveBits(algorithm, baseKey, length) {
+              return Promise.resolve().then(function() {
+                var algo = normalizeAlgo(algorithm);
+                var reqAlgo = Object.assign({}, algo);
+                if (reqAlgo.hash) reqAlgo.hash = normalizeAlgo(reqAlgo.hash);
+                if (reqAlgo.salt) reqAlgo.salt = toBase64(reqAlgo.salt);
+                var result2 = JSON.parse(subtleCall({
+                  op: 'deriveBits',
+                  algorithm: reqAlgo,
+                  key: baseKey._keyData,
+                  length: length,
+                }));
+                var buf = Buffer.from(result2.data, 'base64');
+                return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+              });
+            };
+
             SandboxSubtle.sign = function sign(algorithm, key, data) {
               return Promise.resolve().then(function() {
                 var result2 = JSON.parse(subtleCall({
@@ -1130,7 +1226,6 @@
 
       // Set up support-tier policy for unimplemented core modules
       const _deferredCoreModules = new Set([
-        'net',
         'tls',
         'readline',
         'perf_hooks',
@@ -1183,8 +1278,37 @@
       };
       __requireExposeCustomGlobal("require", __require);
 
+      // JS-side resolution cache avoids applySyncPromise for previously resolved modules.
+      // This is critical: applySyncPromise cannot run nested inside applySync (e.g. when
+      // require() is called from a net socket data callback dispatched via applySync).
+      const _resolveCache = Object.create(null);
+
+      // Optional synchronous resolution/loading bridges (set by host when available).
+      // Used as fallback when applySyncPromise fails inside applySync contexts.
+      declare const _resolveModuleSync: { applySync(recv: undefined, args: [string, string]): string | null } | undefined;
+      declare const _loadFileSync: { applySync(recv: undefined, args: [string]): string | null } | undefined;
+
       function _resolveFrom(moduleName, fromDir) {
-        const resolved = _resolveModule.applySyncPromise(undefined, [moduleName, fromDir]);
+        const cacheKey = fromDir + '\0' + moduleName;
+        if (cacheKey in _resolveCache) {
+          const cached = _resolveCache[cacheKey];
+          if (cached === null) {
+            const err = new Error("Cannot find module '" + moduleName + "'");
+            err.code = 'MODULE_NOT_FOUND';
+            throw err;
+          }
+          return cached;
+        }
+        // Use synchronous resolution when available (always works, even inside
+        // applySync contexts like net socket data callbacks). Fall back to
+        // applySyncPromise for environments without the sync bridge.
+        let resolved;
+        if (typeof _resolveModuleSync !== 'undefined') {
+          resolved = _resolveModuleSync.applySync(undefined, [moduleName, fromDir]);
+        } else {
+          resolved = _resolveModule.applySyncPromise(undefined, [moduleName, fromDir]);
+        }
+        _resolveCache[cacheKey] = resolved;
         if (resolved === null) {
           const err = new Error("Cannot find module '" + moduleName + "'");
           err.code = 'MODULE_NOT_FOUND';
@@ -1360,6 +1484,22 @@
           return _dnsModule;
         }
 
+        // Special handling for net module
+        if (name === 'net') {
+          if (__internalModuleCache['net']) return __internalModuleCache['net'];
+          __internalModuleCache['net'] = _netModule;
+          _debugRequire('loaded', name, 'net-special');
+          return _netModule;
+        }
+
+        // Special handling for tls module
+        if (name === 'tls') {
+          if (__internalModuleCache['tls']) return __internalModuleCache['tls'];
+          __internalModuleCache['tls'] = _tlsModule;
+          _debugRequire('loaded', name, 'tls-special');
+          return _tlsModule;
+        }
+
         // Special handling for os module
         if (name === 'os') {
           if (__internalModuleCache['os']) return __internalModuleCache['os'];
@@ -1524,8 +1664,18 @@
           throw new Error(name + ' is not supported in sandbox');
         }
 
+        // Check if module is already cached (by raw name) before any bridge calls.
+        // This avoids applySyncPromise in applySync contexts for previously loaded modules.
+        if (__internalModuleCache[name]) {
+          _debugRequire('name-cache-hit', name, name);
+          return __internalModuleCache[name];
+        }
+
         // Try to load polyfill first (for built-in modules like path, events, etc.)
-        const polyfillCode = _loadPolyfill.applySyncPromise(undefined, [name]);
+        // Skip for relative/absolute paths — they're never polyfills and the
+        // applySyncPromise call can't run inside applySync contexts.
+        const isPath = name[0] === '.' || name[0] === '/';
+        const polyfillCode = isPath ? null : _loadPolyfill.applySyncPromise(undefined, [name]);
         if (polyfillCode !== null) {
           if (__internalModuleCache[name]) return __internalModuleCache[name];
 
@@ -1546,6 +1696,18 @@
           return __internalModuleCache[name];
         }
 
+        // Check the resolution cache first (avoids applySyncPromise for cached modules).
+        // This is critical for require() calls inside applySync contexts (e.g. net
+        // socket data callbacks) where applySyncPromise cannot pump the event loop.
+        const resolveCacheKey = fromDir + '\0' + name;
+        if (resolveCacheKey in _resolveCache) {
+          const cachedPath = _resolveCache[resolveCacheKey];
+          if (cachedPath !== null && __internalModuleCache[cachedPath]) {
+            _debugRequire('resolve-cache-hit', name, cachedPath);
+            return __internalModuleCache[cachedPath];
+          }
+        }
+
         // Resolve module path using host-side resolution
         resolved = _resolveFrom(name, fromDir);
 
@@ -1564,8 +1726,14 @@
           return _pendingModules[cacheKey].exports;
         }
 
-        // Load file content
-        const source = _loadFile.applySyncPromise(undefined, [resolved]);
+        // Load file content. Use synchronous loading when available (works
+        // inside applySync contexts). Fall back to applySyncPromise otherwise.
+        let source;
+        if (typeof _loadFileSync !== 'undefined') {
+          source = _loadFileSync.applySync(undefined, [resolved]);
+        } else {
+          source = _loadFile.applySyncPromise(undefined, [resolved]);
+        }
         if (source === null) {
           const err = new Error("Cannot find module '" + resolved + "'");
           err.code = 'MODULE_NOT_FOUND';
@@ -1659,6 +1827,11 @@
 
         // Cache with resolved path
         __internalModuleCache[cacheKey] = module.exports;
+        // Also cache by raw name for non-path requires (avoids bridge calls
+        // for subsequent require() in applySync contexts like data callbacks)
+        if (!isPath && name !== cacheKey) {
+          __internalModuleCache[name] = module.exports;
+        }
         delete _pendingModules[cacheKey];
         _debugRequire('loaded', name, cacheKey);
 

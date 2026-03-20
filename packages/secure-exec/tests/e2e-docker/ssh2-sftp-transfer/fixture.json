@@ -1,9 +1,5 @@
 {
 	"entry": "src/index.js",
-	"expectation": "fail",
-	"services": ["ssh"],
-	"fail": {
-		"code": 1,
-		"stderrIncludes": "net.Socket is not supported in sandbox"
-	}
+	"expectation": "pass",
+	"services": ["ssh"]
 }

@@ -4,6 +4,7 @@ import * as net from "node:net";
 import type { AddressInfo } from "node:net";
 import * as http from "node:http";
 import * as https from "node:https";
+import * as tls from "node:tls";
 import type { Server as HttpServer } from "node:http";
 import * as zlib from "node:zlib";
 import {
@@ -463,6 +464,73 @@ export function createDefaultNetworkAdapter(options?: {
 		setUpgradeSocketCallbacks(callbacks) {
 			onUpgradeSocketData = callbacks.onData;
 			onUpgradeSocketEnd = callbacks.onEnd;
+		},
+
+		// TCP socket (net module) support
+		netSocketConnect(host, port, callbacks) {
+			const socketId = nextUpgradeSocketId++;
+			const socket = new net.Socket();
+
+			socket.on("connect", () => callbacks.onConnect());
+			socket.on("data", (chunk) => callbacks.onData(chunk.toString("base64")));
+			socket.on("end", () => callbacks.onEnd());
+			socket.on("error", (err) => callbacks.onError(err.message));
+			socket.on("close", (hadError) => callbacks.onClose(hadError));
+
+			upgradeSockets.set(socketId, socket);
+			socket.connect(port, host);
+			return socketId;
+		},
+
+		netSocketWrite(socketId, dataBase64) {
+			const socket = upgradeSockets.get(socketId);
+			if (socket && !socket.destroyed) {
+				socket.write(Buffer.from(dataBase64, "base64"));
+			}
+		},
+
+		netSocketEnd(socketId) {
+			const socket = upgradeSockets.get(socketId);
+			if (socket && !socket.destroyed) {
+				socket.end();
+			}
+		},
+
+		netSocketDestroy(socketId) {
+			const socket = upgradeSockets.get(socketId);
+			if (socket) {
+				socket.destroy();
+				upgradeSockets.delete(socketId);
+			}
+		},
+
+		// TLS upgrade: wrap existing TCP socket with TLS
+		netSocketUpgradeTls(socketId, optionsJson, callbacks) {
+			const socket = upgradeSockets.get(socketId);
+			if (!socket) return;
+
+			const opts = JSON.parse(optionsJson);
+			// Remove bridge event listeners from the raw TCP socket so encrypted
+			// data doesn't leak through the old callbacks. Only remove specific
+			// event types to preserve internal Node.js stream listeners.
+			for (const ev of ["data", "end", "error", "close", "connect"]) {
+				socket.removeAllListeners(ev);
+			}
+
+			const tlsSocket = tls.connect({
+				socket: socket as net.Socket,
+				rejectUnauthorized: opts.rejectUnauthorized ?? true,
+				servername: opts.servername,
+			});
+
+			// Wire bridge callbacks to the TLS socket (decrypted data)
+			tlsSocket.on("data", (chunk) => callbacks.onData(chunk.toString("base64")));
+			tlsSocket.on("end", () => callbacks.onEnd());
+			tlsSocket.on("error", (err) => callbacks.onError(err.message));
+			tlsSocket.on("close", (hadError) => callbacks.onClose(hadError));
+			tlsSocket.on("secureConnect", () => callbacks.onSecureConnect());
+
+			upgradeSockets.set(socketId, tlsSocket);
 		},
 
 		async fetch(url, options) {
