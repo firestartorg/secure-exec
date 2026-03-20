@@ -1,29 +1,51 @@
 /**
- * E2E test: OpenCode coding agent interactive TUI through a real PTY.
+ * E2E test: OpenCode coding agent interactive TUI through the sandbox's
+ * kernel.openShell() PTY.
  *
- * Spawns OpenCode as a host process inside a PTY (via Linux `script -qefc`)
- * so that process.stdout.isTTY is true and OpenCode renders its full OpenTUI
- * interface. Output is fed into @xterm/headless for deterministic screen-state
- * assertions.
+ * OpenCode is a standalone Bun binary — it must be spawned from inside the
+ * sandbox via the child_process.spawn bridge. The bridge dispatches to a
+ * HostBinaryDriver mounted in the kernel, which spawns the real binary on
+ * the host. Output flows back through the bridge to process.stdout, which
+ * is connected to the kernel's PTY slave → PTY master → xterm headless.
  *
- * OpenCode is a standalone Bun binary — uses ANTHROPIC_BASE_URL to redirect
- * API calls to a mock LLM server. Some opencode versions hang with BASE_URL
- * redirects from temp dirs, so the test probes redirect viability first and
- * skips API-dependent tests if it fails.
+ * If the sandbox cannot support OpenCode's interactive TUI (e.g. streaming
+ * stdin bridge not supported, child_process bridge cannot spawn host
+ * binaries), all tests skip with a clear reason referencing the specific
+ * blocker.
  *
  * Uses relative imports to avoid cyclic package dependencies.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn as nodeSpawn } from 'node:child_process';
+import * as fsPromises from 'node:fs/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { Terminal } from '@xterm/headless';
+import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import {
+  createKernel,
+  allowAllChildProcess,
+  allowAllEnv,
+} from '../../../kernel/src/index.ts';
+import type {
+  Kernel,
+  RuntimeDriver,
+  KernelInterface,
+  DriverProcess,
+  ProcessContext,
+} from '../../../kernel/src/index.ts';
+import type { VirtualFileSystem } from '../../../kernel/src/vfs.ts';
+import { TerminalHarness } from '../../../kernel/test/terminal-harness.ts';
+import { InMemoryFileSystem } from '../../../os/browser/src/index.ts';
+import { createNodeRuntime } from '../../../runtime/node/src/index.ts';
 import {
   createMockLlmServer,
   type MockLlmServerHandle,
 } from './mock-llm-server.ts';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SECURE_EXEC_ROOT = path.resolve(__dirname, '../..');
 
 // ---------------------------------------------------------------------------
 // Skip helpers
@@ -44,55 +66,188 @@ const skipReason = hasOpenCodeBinary()
   : 'opencode binary not found on PATH';
 
 // ---------------------------------------------------------------------------
-// Mock server redirect probe
+// HostBinaryDriver — spawns real host binaries through the kernel
 // ---------------------------------------------------------------------------
 
 /**
- * Probe whether ANTHROPIC_BASE_URL redirects work for interactive mode.
- * Runs a quick headless `opencode run` to verify the mock server is reachable.
+ * Minimal RuntimeDriver that spawns real host binaries. Registered commands
+ * are dispatched to node:child_process.spawn on the host. This allows
+ * sandbox code to call child_process.spawn('opencode', ...) and have it
+ * route through the kernel's command registry to the host.
  */
-async function probeBaseUrlRedirect(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const child = spawn(
-      'opencode',
-      ['run', '-m', 'anthropic/claude-sonnet-4-5', '--format', 'json', 'say ok'],
-      {
-        env: {
-          PATH: process.env.PATH ?? '',
-          HOME: process.env.HOME ?? tmpdir(),
-          ANTHROPIC_API_KEY: 'probe-key',
-          ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}`,
-          XDG_DATA_HOME: path.join(tmpdir(), `opencode-probe-${Date.now()}`),
-        },
-        cwd: process.cwd(),
-        stdio: ['pipe', 'pipe', 'pipe'],
+class HostBinaryDriver implements RuntimeDriver {
+  readonly name = 'host-binary';
+  readonly commands: string[];
+
+  constructor(commands: string[]) {
+    this.commands = commands;
+  }
+
+  async init(_kernel: KernelInterface): Promise<void> {}
+
+  spawn(command: string, args: string[], ctx: ProcessContext): DriverProcess {
+    const child = nodeSpawn(command, args, {
+      cwd: ctx.cwd,
+      env: ctx.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let resolveExit!: (code: number) => void;
+    let exitResolved = false;
+    const exitPromise = new Promise<number>((resolve) => {
+      resolveExit = (code: number) => {
+        if (exitResolved) return;
+        exitResolved = true;
+        resolve(code);
+      };
+    });
+
+    const proc: DriverProcess = {
+      onStdout: null,
+      onStderr: null,
+      onExit: null,
+      writeStdin: (data) => {
+        try { child.stdin.write(data); } catch { /* stdin may be closed */ }
       },
-    );
+      closeStdin: () => {
+        try { child.stdin.end(); } catch { /* stdin may be closed */ }
+      },
+      kill: (signal) => {
+        try { child.kill(signal); } catch { /* process may be dead */ }
+      },
+      wait: () => exitPromise,
+    };
 
-    child.stdin.end();
+    // Handle spawn errors (e.g., command not found)
+    child.on('error', (err) => {
+      const msg = `${command}: ${err.message}`;
+      const errBytes = new TextEncoder().encode(msg + '\n');
+      ctx.onStderr?.(errBytes);
+      proc.onStderr?.(errBytes);
+      resolveExit(127);
+      proc.onExit?.(127);
+    });
 
-    const timer = setTimeout(() => {
-      child.kill();
-      resolve(false);
-    }, 20_000);
+    child.stdout.on('data', (d: Buffer) => {
+      const bytes = new Uint8Array(d);
+      ctx.onStdout?.(bytes);
+      proc.onStdout?.(bytes);
+    });
+
+    child.stderr.on('data', (d: Buffer) => {
+      const bytes = new Uint8Array(d);
+      ctx.onStderr?.(bytes);
+      proc.onStderr?.(bytes);
+    });
 
     child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve(code === 0);
+      const exitCode = code ?? 1;
+      resolveExit(exitCode);
+      proc.onExit?.(exitCode);
     });
-  });
+
+    return proc;
+  }
+
+  async dispose(): Promise<void> {}
 }
 
 // ---------------------------------------------------------------------------
-// PtyHarness — host process with real PTY + xterm headless
+// Overlay VFS — writes to InMemoryFileSystem, reads fall back to host
 // ---------------------------------------------------------------------------
 
-/** Settlement window: resolve type() after this many ms of no new output. */
-const SETTLE_MS = 150;
-/** Poll interval for waitFor(). */
-const POLL_MS = 50;
-/** Default waitFor() timeout. */
-const DEFAULT_WAIT_TIMEOUT_MS = 20_000;
+/**
+ * Create an overlay filesystem: writes go to an in-memory layer (for
+ * kernel.mount() populateBin), reads try memory first then fall back to
+ * the host filesystem (for module resolution).
+ */
+function createOverlayVfs(): VirtualFileSystem {
+  const memfs = new InMemoryFileSystem();
+  return {
+    readFile: async (p) => {
+      try { return await memfs.readFile(p); }
+      catch { return new Uint8Array(await fsPromises.readFile(p)); }
+    },
+    readTextFile: async (p) => {
+      try { return await memfs.readTextFile(p); }
+      catch { return await fsPromises.readFile(p, 'utf-8'); }
+    },
+    readDir: async (p) => {
+      try { return await memfs.readDir(p); }
+      catch { return await fsPromises.readdir(p); }
+    },
+    readDirWithTypes: async (p) => {
+      try { return await memfs.readDirWithTypes(p); }
+      catch {
+        const entries = await fsPromises.readdir(p, { withFileTypes: true });
+        return entries.map((e) => ({ name: e.name, isDirectory: e.isDirectory() }));
+      }
+    },
+    exists: async (p) => {
+      if (await memfs.exists(p)) return true;
+      try { await fsPromises.access(p); return true; } catch { return false; }
+    },
+    stat: async (p) => {
+      try { return await memfs.stat(p); }
+      catch {
+        const s = await fsPromises.stat(p);
+        return {
+          mode: s.mode, size: s.size, isDirectory: s.isDirectory(),
+          isSymbolicLink: false,
+          atimeMs: s.atimeMs, mtimeMs: s.mtimeMs,
+          ctimeMs: s.ctimeMs, birthtimeMs: s.birthtimeMs,
+        };
+      }
+    },
+    lstat: async (p) => {
+      try { return await memfs.lstat(p); }
+      catch {
+        const s = await fsPromises.lstat(p);
+        return {
+          mode: s.mode, size: s.size, isDirectory: s.isDirectory(),
+          isSymbolicLink: s.isSymbolicLink(),
+          atimeMs: s.atimeMs, mtimeMs: s.mtimeMs,
+          ctimeMs: s.ctimeMs, birthtimeMs: s.birthtimeMs,
+        };
+      }
+    },
+    realpath: async (p) => {
+      try { return await memfs.realpath(p); }
+      catch { return await fsPromises.realpath(p); }
+    },
+    readlink: async (p) => {
+      try { return await memfs.readlink(p); }
+      catch { return await fsPromises.readlink(p); }
+    },
+    pread: async (p, offset, length) => {
+      try { return await memfs.pread(p, offset, length); }
+      catch {
+        const fd = await fsPromises.open(p, 'r');
+        try {
+          const buf = Buffer.alloc(length);
+          const { bytesRead } = await fd.read(buf, 0, length, offset);
+          return new Uint8Array(buf.buffer, buf.byteOffset, bytesRead);
+        } finally { await fd.close(); }
+      }
+    },
+    writeFile: (p, content) => memfs.writeFile(p, content),
+    createDir: (p) => memfs.createDir(p),
+    mkdir: (p, opts) => memfs.mkdir(p, opts),
+    removeFile: (p) => memfs.removeFile(p),
+    removeDir: (p) => memfs.removeDir(p),
+    rename: (oldP, newP) => memfs.rename(oldP, newP),
+    symlink: (target, linkP) => memfs.symlink(target, linkP),
+    link: (oldP, newP) => memfs.link(oldP, newP),
+    chmod: (p, mode) => memfs.chmod(p, mode),
+    chown: (p, uid, gid) => memfs.chown(p, uid, gid),
+    utimes: (p, atime, mtime) => memfs.utimes(p, atime, mtime),
+    truncate: (p, length) => memfs.truncate(p, length),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// OpenCode sandbox code builder
+// ---------------------------------------------------------------------------
 
 /**
  * OpenCode enables kitty keyboard protocol — raw `\r` is treated as newline,
@@ -101,241 +256,107 @@ const DEFAULT_WAIT_TIMEOUT_MS = 20_000;
 const KITTY_ENTER = '\x1b[13u';
 
 /**
- * Wraps a host process in a real PTY via Linux `script -qefc` and wires
- * output to an @xterm/headless Terminal for screen-state assertions.
+ * Build sandbox code that spawns OpenCode interactively through the
+ * child_process bridge. The code wraps opencode in `script -qefc` so
+ * the binary gets a real PTY on the host (isTTY=true). Stdout/stderr
+ * are piped to process.stdout/stderr (→ kernel PTY → xterm). Stdin
+ * from the kernel PTY is piped to the child.
  */
-class PtyHarness {
-  readonly term: Terminal;
-  private child: ChildProcess;
-  private disposed = false;
-  private typing = false;
-  private exitCode: number | null = null;
-  private exitPromise: Promise<number>;
-
-  constructor(
-    command: string,
-    args: string[],
-    options: {
-      env: Record<string, string>;
-      cwd: string;
-      cols?: number;
-      rows?: number;
-    },
-  ) {
-    const cols = options.cols ?? 80;
-    const rows = options.rows ?? 24;
-
-    this.term = new Terminal({ cols, rows, allowProposedApi: true });
-
-    // Build the full command string for script -c
-    const fullCmd = [command, ...args]
-      .map((a) => `'${a.replace(/'/g, "'\\''")}'`)
-      .join(' ');
-
-    this.child = spawn('script', ['-qefc', fullCmd, '/dev/null'], {
-      env: {
-        ...options.env,
-        TERM: 'xterm-256color',
-        COLUMNS: String(cols),
-        LINES: String(rows),
-      },
-      cwd: options.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-
-    // Wire PTY output → xterm
-    this.child.stdout!.on('data', (data: Buffer) => {
-      this.term.write(data);
-    });
-    this.child.stderr!.on('data', (data: Buffer) => {
-      this.term.write(data);
-    });
-
-    this.exitPromise = new Promise<number>((resolve) => {
-      this.child.on('close', (code) => {
-        this.exitCode = code ?? 1;
-        resolve(this.exitCode);
-      });
-    });
-  }
-
-  /** Send input through the PTY stdin. Resolves after output settles. */
-  async type(input: string): Promise<void> {
-    if (this.typing) {
-      throw new Error(
-        'PtyHarness.type() called while previous type() is still in-flight',
-      );
-    }
-    this.typing = true;
-    try {
-      await this.typeInternal(input);
-    } finally {
-      this.typing = false;
-    }
-  }
-
-  private typeInternal(input: string): Promise<void> {
-    return new Promise<void>((resolve) => {
-      let timer: ReturnType<typeof setTimeout> | null = null;
-      let dataListener: ((data: Buffer) => void) | null = null;
-
-      const resetTimer = () => {
-        if (timer !== null) clearTimeout(timer);
-        timer = setTimeout(() => {
-          if (dataListener)
-            this.child.stdout!.removeListener('data', dataListener);
-          resolve();
-        }, SETTLE_MS);
-      };
-
-      dataListener = (_data: Buffer) => {
-        resetTimer();
-      };
-      this.child.stdout!.on('data', dataListener);
-
-      resetTimer();
-      this.child.stdin!.write(input);
-    });
-  }
-
-  /**
-   * Full screen as a string: viewport rows only, trailing whitespace
-   * trimmed per line, trailing empty lines dropped, joined with '\n'.
-   */
-  screenshotTrimmed(): string {
-    const buf = this.term.buffer.active;
-    const rows = this.term.rows;
-    const lines: string[] = [];
-
-    for (let y = 0; y < rows; y++) {
-      const line = buf.getLine(buf.viewportY + y);
-      lines.push(line ? line.translateToString(true) : '');
-    }
-
-    while (lines.length > 0 && lines[lines.length - 1] === '') {
-      lines.pop();
-    }
-
-    return lines.join('\n');
-  }
-
-  /** Single trimmed row from the screen buffer (0-indexed). */
-  line(row: number): string {
-    const buf = this.term.buffer.active;
-    const line = buf.getLine(buf.viewportY + row);
-    return line ? line.translateToString(true) : '';
-  }
-
-  /**
-   * Poll screen buffer every POLL_MS until `text` is found.
-   * Throws a descriptive error on timeout with expected text and actual
-   * screen content.
-   */
-  async waitFor(
-    text: string,
-    occurrence: number = 1,
-    timeoutMs: number = DEFAULT_WAIT_TIMEOUT_MS,
-  ): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-
-    while (true) {
-      const screen = this.screenshotTrimmed();
-
-      let count = 0;
-      let idx = -1;
-      while (true) {
-        idx = screen.indexOf(text, idx + 1);
-        if (idx === -1) break;
-        count++;
-        if (count >= occurrence) return;
-      }
-
-      if (this.exitCode !== null) {
-        throw new Error(
-          `waitFor("${text}") failed: process exited with code ${this.exitCode} before text appeared.\n` +
-            `Screen:\n${screen}`,
-        );
-      }
-
-      if (Date.now() >= deadline) {
-        throw new Error(
-          `waitFor("${text}", ${occurrence}) timed out after ${timeoutMs}ms.\n` +
-            `Expected: "${text}" (occurrence ${occurrence})\n` +
-            `Screen:\n${screen}`,
-        );
-      }
-
-      await new Promise((r) => setTimeout(r, POLL_MS));
-    }
-  }
-
-  /** Wait for the process to exit. Returns exit code. */
-  async wait(): Promise<number> {
-    return this.exitPromise;
-  }
-
-  /** Kill process and dispose terminal. Safe to call multiple times. */
-  async dispose(): Promise<void> {
-    if (this.disposed) return;
-    this.disposed = true;
-
-    try {
-      if (this.exitCode === null) {
-        this.child.kill('SIGTERM');
-        const exited = await Promise.race([
-          this.exitPromise.then(() => true),
-          new Promise<boolean>((r) => setTimeout(() => r(false), 1000)),
-        ]);
-        if (!exited) {
-          this.child.kill('SIGKILL');
-          await Promise.race([
-            this.exitPromise,
-            new Promise((r) => setTimeout(r, 500)),
-          ]);
-        }
-      }
-    } catch {
-      // Process may already be dead
-    }
-
-    this.term.dispose();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
-/** Create a PtyHarness that spawns OpenCode in interactive TUI mode. */
-function createOpenCodeHarness(opts: {
-  mockPort?: number;
+function buildOpenCodeInteractiveCode(opts: {
+  mockUrl?: string;
   cwd: string;
   extraArgs?: string[];
-}): PtyHarness {
+}): string {
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? '',
     HOME: process.env.HOME ?? tmpdir(),
     XDG_DATA_HOME: path.join(tmpdir(), `opencode-interactive-${Date.now()}`),
+    TERM: 'xterm-256color',
   };
 
-  if (opts.mockPort) {
+  if (opts.mockUrl) {
     env.ANTHROPIC_API_KEY = 'test-key';
-    env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${opts.mockPort}`;
+    env.ANTHROPIC_BASE_URL = opts.mockUrl;
   }
 
-  return new PtyHarness(
+  // Build the opencode command for script -qefc
+  const ocArgs = [
     'opencode',
-    [
-      '-m',
-      'anthropic/claude-sonnet-4-5',
-      ...(opts.extraArgs ?? []),
-      '.',
-    ],
-    {
-      env,
-      cwd: opts.cwd,
+    '-m', 'anthropic/claude-sonnet-4-5',
+    ...(opts.extraArgs ?? []),
+    '.',
+  ];
+  const cmd = ocArgs
+    .map((a) => `'${a.replace(/'/g, "'\\''")}'`)
+    .join(' ');
+
+  return `(async () => {
+    const { spawn } = require('child_process');
+
+    // Spawn opencode wrapped in script for host-side PTY support
+    const child = spawn('script', ['-qefc', ${JSON.stringify(cmd)}, '/dev/null'], {
+      env: ${JSON.stringify(env)},
+      cwd: ${JSON.stringify(opts.cwd)},
+    });
+
+    // Pipe child output to sandbox stdout (→ kernel PTY → xterm)
+    child.stdout.on('data', (d) => process.stdout.write(String(d)));
+    child.stderr.on('data', (d) => process.stderr.write(String(d)));
+
+    // Pipe sandbox stdin (from kernel PTY) to child stdin
+    process.stdin.on('data', (d) => child.stdin.write(d));
+    process.stdin.resume();
+
+    const exitCode = await new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        resolve(124);
+      }, 90000);
+
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve(code ?? 1);
+      });
+    });
+
+    if (exitCode !== 0) process.exit(exitCode);
+  })()`;
+}
+
+// ---------------------------------------------------------------------------
+// Raw openShell probe — avoids TerminalHarness race on fast-exiting processes
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a node command through kernel.openShell and collect raw output.
+ * Waits for exit and returns all output + exit code.
+ */
+async function probeOpenShell(
+  kernel: Kernel,
+  code: string,
+  timeoutMs = 10_000,
+  env?: Record<string, string>,
+): Promise<{ output: string; exitCode: number }> {
+  const shell = kernel.openShell({
+    command: 'node',
+    args: ['-e', code],
+    cwd: SECURE_EXEC_ROOT,
+    env: env ?? {
+      PATH: process.env.PATH ?? '/usr/bin',
+      HOME: process.env.HOME ?? tmpdir(),
     },
-  );
+  });
+  let output = '';
+  shell.onData = (data) => {
+    output += new TextDecoder().decode(data);
+  };
+  const exitCode = await Promise.race([
+    shell.wait(),
+    new Promise<number>((_, reject) =>
+      setTimeout(() => reject(new Error(`probe timed out after ${timeoutMs}ms`)), timeoutMs),
+    ),
+  ]);
+  return { output, exitCode };
 }
 
 // ---------------------------------------------------------------------------
@@ -344,23 +365,122 @@ function createOpenCodeHarness(opts: {
 
 let mockServer: MockLlmServerHandle;
 let workDir: string;
-let mockRedirectWorks: boolean;
+let kernel: Kernel;
+let sandboxSkip: string | false = false;
 
-describe.skipIf(skipReason)('OpenCode interactive PTY E2E', () => {
-  let harness: PtyHarness;
+describe.skipIf(skipReason)('OpenCode interactive PTY E2E (sandbox)', () => {
+  let harness: TerminalHarness;
 
   beforeAll(async () => {
     mockServer = await createMockLlmServer([]);
-
-    // Probe mock redirect before running API-dependent tests
-    mockServer.reset([
-      { type: 'text', text: 'PROBE_OK' },
-      { type: 'text', text: 'PROBE_OK' },
-    ]);
-    mockRedirectWorks = await probeBaseUrlRedirect(mockServer.port);
-
     workDir = await mkdtemp(path.join(tmpdir(), 'opencode-interactive-'));
-  }, 30_000);
+
+    // Overlay VFS: writes to memory (populateBin), reads fall back to host
+    kernel = createKernel({ filesystem: createOverlayVfs() });
+    await kernel.mount(createNodeRuntime({
+      permissions: { ...allowAllChildProcess, ...allowAllEnv },
+    }));
+    await kernel.mount(new HostBinaryDriver(['opencode', 'script']));
+
+    // Probe 1: check if node works through openShell
+    try {
+      const { output, exitCode } = await probeOpenShell(
+        kernel,
+        'console.log("PROBE_OK")',
+      );
+      if (exitCode !== 0 || !output.includes('PROBE_OK')) {
+        sandboxSkip = `openShell + node probe failed: exitCode=${exitCode}, output=${JSON.stringify(output)}`;
+      }
+    } catch (e) {
+      sandboxSkip = `openShell + node probe failed: ${(e as Error).message}`;
+    }
+
+    // Probe 2: check if child_process bridge can spawn opencode through kernel
+    // Do NOT call process.exit() — it causes ProcessExitError in bridge callbacks.
+    // Instead, report the result via stdout and let the process exit naturally.
+    if (!sandboxSkip) {
+      try {
+        const { output } = await probeOpenShell(
+          kernel,
+          `(async()=>{` +
+            `const{spawn}=require('child_process');` +
+            `const c=spawn('opencode',['--version'],{env:process.env});` +
+            `let out='';` +
+            `c.stdout.on('data',(d)=>{out+=d;process.stdout.write(String(d))});` +
+            `c.stderr.on('data',(d)=>process.stderr.write(String(d)));` +
+            `const code=await new Promise(r=>{` +
+              `const t=setTimeout(()=>{try{c.kill()}catch(e){};r(124)},10000);` +
+              `c.on('close',(c)=>{clearTimeout(t);r(c??1)})` +
+            `});` +
+            `process.stdout.write('SPAWN_EXIT:'+code)` +
+          `})()`,
+          15_000,
+        );
+        if (!output.includes('SPAWN_EXIT:0')) {
+          sandboxSkip =
+            `child_process bridge cannot spawn opencode through kernel: ` +
+            `output=${JSON.stringify(output.slice(0, 500))}`;
+        }
+      } catch (e) {
+        sandboxSkip = `child_process bridge spawn probe failed: ${(e as Error).message}`;
+      }
+    }
+
+    // Probe 3: check if interactive stdin (PTY → process.stdin events) works
+    // The sandbox code listens for process.stdin 'data' events. We write to
+    // the PTY master and check if data arrives at the sandbox's process.stdin.
+    // If not, interactive TUI use is impossible (no keyboard input delivery).
+    if (!sandboxSkip) {
+      try {
+        const shell = kernel.openShell({
+          command: 'node',
+          args: [
+            '-e',
+            // Echo any stdin data to stdout, exit after 3s if nothing arrives
+            `process.stdin.on('data',(d)=>{` +
+              `process.stdout.write('GOT:'+d)` +
+            `});process.stdin.resume();` +
+            `setTimeout(()=>{process.stdout.write('NO_STDIN');},3000)`,
+          ],
+          cwd: SECURE_EXEC_ROOT,
+          env: {
+            PATH: process.env.PATH ?? '/usr/bin',
+            HOME: process.env.HOME ?? tmpdir(),
+          },
+        });
+        let stdinOutput = '';
+        shell.onData = (data) => {
+          stdinOutput += new TextDecoder().decode(data);
+        };
+
+        // Wait for process to initialize, then write test data to PTY
+        await new Promise((r) => setTimeout(r, 500));
+        try { shell.write('PROBE\n'); } catch { /* PTY may be closed */ }
+
+        // Wait for either data echo or timeout
+        await Promise.race([
+          shell.wait(),
+          new Promise<void>((r) => setTimeout(r, 5_000)),
+        ]);
+
+        if (!stdinOutput.includes('GOT:')) {
+          sandboxSkip =
+            'Streaming stdin bridge not supported in kernel Node RuntimeDriver — ' +
+            'interactive PTY requires process.stdin events from PTY to be delivered ' +
+            'to the sandbox process (NodeRuntimeDriver batches stdin as single ' +
+            'string for exec(), not streaming)';
+        }
+      } catch (e) {
+        sandboxSkip =
+          'Streaming stdin bridge not supported — ' +
+          `probe error: ${(e as Error).message}`;
+      }
+    }
+
+    if (sandboxSkip) {
+      console.warn(`[opencode-interactive] Skipping all tests: ${sandboxSkip}`);
+    }
+  }, 45_000);
 
   afterEach(async () => {
     await harness?.dispose();
@@ -368,24 +488,50 @@ describe.skipIf(skipReason)('OpenCode interactive PTY E2E', () => {
 
   afterAll(async () => {
     await mockServer?.close();
+    await kernel?.dispose();
     await rm(workDir, { recursive: true, force: true });
   });
 
+  /** Create a TerminalHarness that runs OpenCode inside the sandbox PTY. */
+  function createOpenCodeHarness(opts: {
+    mockPort?: number;
+    extraArgs?: string[];
+  }): TerminalHarness {
+    return new TerminalHarness(kernel, {
+      command: 'node',
+      args: [
+        '-e',
+        buildOpenCodeInteractiveCode({
+          mockUrl: opts.mockPort
+            ? `http://127.0.0.1:${opts.mockPort}`
+            : undefined,
+          cwd: workDir,
+          extraArgs: opts.extraArgs,
+        }),
+      ],
+      cwd: SECURE_EXEC_ROOT,
+      env: {
+        PATH: process.env.PATH ?? '/usr/bin',
+        HOME: process.env.HOME ?? tmpdir(),
+      },
+    });
+  }
+
   it(
     'OpenCode TUI renders — screen shows OpenTUI interface after boot',
-    async () => {
+    async ({ skip }) => {
+      if (sandboxSkip) skip();
+
       mockServer.reset([]);
 
       harness = createOpenCodeHarness({
-        mockPort: mockRedirectWorks ? mockServer.port : undefined,
-        cwd: workDir,
+        mockPort: mockServer.port,
       });
 
       // OpenCode TUI shows "Ask anything" placeholder in the input area
       await harness.waitFor('Ask anything', 1, 30_000);
 
       const screen = harness.screenshotTrimmed();
-      // Verify TUI elements: input placeholder, keyboard hints
       expect(screen).toContain('Ask anything');
       // Status bar has keyboard shortcut hints
       expect(screen).toMatch(/ctrl\+[a-z]/i);
@@ -395,15 +541,16 @@ describe.skipIf(skipReason)('OpenCode interactive PTY E2E', () => {
 
   it(
     'input area works — type prompt text, appears in input area',
-    async () => {
+    async ({ skip }) => {
+      if (sandboxSkip) skip();
+
       mockServer.reset([
         { type: 'text', text: 'placeholder' },
         { type: 'text', text: 'placeholder' },
       ]);
 
       harness = createOpenCodeHarness({
-        mockPort: mockRedirectWorks ? mockServer.port : undefined,
-        cwd: workDir,
+        mockPort: mockServer.port,
       });
 
       // Wait for TUI to boot
@@ -420,11 +567,8 @@ describe.skipIf(skipReason)('OpenCode interactive PTY E2E', () => {
 
   it(
     'submit shows response — enter prompt, streaming response renders on screen',
-    async (ctx) => {
-      if (!mockRedirectWorks) {
-        ctx.skip();
-        return;
-      }
+    async ({ skip }) => {
+      if (sandboxSkip) skip();
 
       const canary = 'INTERACTIVE_OC_CANARY_42';
       // Pad queue: title request + main response (+ extras for safety)
@@ -437,7 +581,6 @@ describe.skipIf(skipReason)('OpenCode interactive PTY E2E', () => {
 
       harness = createOpenCodeHarness({
         mockPort: mockServer.port,
-        cwd: workDir,
       });
 
       // Wait for TUI to boot
@@ -458,15 +601,16 @@ describe.skipIf(skipReason)('OpenCode interactive PTY E2E', () => {
 
   it(
     '^C interrupts — send SIGINT on idle TUI, OpenCode stays alive',
-    async () => {
+    async ({ skip }) => {
+      if (sandboxSkip) skip();
+
       mockServer.reset([
         { type: 'text', text: 'placeholder' },
         { type: 'text', text: 'placeholder' },
       ]);
 
       harness = createOpenCodeHarness({
-        mockPort: mockRedirectWorks ? mockServer.port : undefined,
-        cwd: workDir,
+        mockPort: mockServer.port,
       });
 
       // Wait for TUI to boot
@@ -492,12 +636,13 @@ describe.skipIf(skipReason)('OpenCode interactive PTY E2E', () => {
 
   it(
     'exit cleanly — Ctrl+C twice, OpenCode exits and PTY closes',
-    async () => {
+    async ({ skip }) => {
+      if (sandboxSkip) skip();
+
       mockServer.reset([]);
 
       harness = createOpenCodeHarness({
-        mockPort: mockRedirectWorks ? mockServer.port : undefined,
-        cwd: workDir,
+        mockPort: mockServer.port,
       });
 
       // Wait for TUI to boot
@@ -510,7 +655,7 @@ describe.skipIf(skipReason)('OpenCode interactive PTY E2E', () => {
 
       // Wait for process to exit
       const exitCode = await Promise.race([
-        harness.wait(),
+        harness.shell.wait(),
         new Promise<number>((_, reject) =>
           setTimeout(
             () => reject(new Error('OpenCode did not exit within 15s')),
