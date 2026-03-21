@@ -1,4 +1,4 @@
-// Re-exported from @secure-exec/nodejs — canonical source is packages/secure-exec-nodejs/src/module-resolver.ts
+// Re-exported from @secure-exec/nodejs — canonical source is packages/nodejs/src/module-resolver.ts
 export {
 	getNearestPackageType,
 	getModuleFormat,

@@ -83,6 +83,7 @@ type CompilerTools = {
 
 const DEFAULT_COMPILER_RUNTIME_MEMORY_LIMIT = 512;
 const COMPILER_RUNTIME_FILE_PATH = "/root/__secure_exec_typescript_compiler__.js";
+const DEFAULT_COMPILER_SPECIFIER = "/root/node_modules/typescript/lib/typescript.js";
 
 export function createTypeScriptTools(
 	options: TypeScriptToolsOptions,
@@ -91,25 +92,25 @@ export function createTypeScriptTools(
 		typecheckProject: async (requestOptions = {}) =>
 			runCompilerRequest<TypeCheckResult>(options, {
 				kind: "typecheckProject",
-				compilerSpecifier: options.compilerSpecifier ?? "typescript",
+				compilerSpecifier: options.compilerSpecifier ?? DEFAULT_COMPILER_SPECIFIER,
 				options: requestOptions,
 			}),
 		compileProject: async (requestOptions = {}) =>
 			runCompilerRequest<ProjectCompileResult>(options, {
 				kind: "compileProject",
-				compilerSpecifier: options.compilerSpecifier ?? "typescript",
+				compilerSpecifier: options.compilerSpecifier ?? DEFAULT_COMPILER_SPECIFIER,
 				options: requestOptions,
 			}),
 		typecheckSource: async (requestOptions) =>
 			runCompilerRequest<TypeCheckResult>(options, {
 				kind: "typecheckSource",
-				compilerSpecifier: options.compilerSpecifier ?? "typescript",
+				compilerSpecifier: options.compilerSpecifier ?? DEFAULT_COMPILER_SPECIFIER,
 				options: requestOptions,
 			}),
 		compileSource: async (requestOptions) =>
 			runCompilerRequest<SourceCompileResult>(options, {
 				kind: "compileSource",
-				compilerSpecifier: options.compilerSpecifier ?? "typescript",
+				compilerSpecifier: options.compilerSpecifier ?? DEFAULT_COMPILER_SPECIFIER,
 				options: requestOptions,
 			}),
 	};
@@ -190,7 +191,32 @@ function buildCompilerRuntimeSource(request: CompilerRequest): string {
 function compilerRuntimeMain(request: CompilerRequest): CompilerResponse {
 	const fs = require("node:fs") as typeof import("node:fs");
 	const path = require("node:path") as typeof import("node:path");
-	const ts = require(request.compilerSpecifier) as typeof import("typescript");
+	const ts = loadCompiler(request.compilerSpecifier);
+
+	function loadCompiler(
+		compilerSpecifier: string,
+	): typeof import("typescript") {
+		const candidates = new Set<string>([compilerSpecifier]);
+		if (compilerSpecifier === "typescript") {
+			candidates.add("/root/node_modules/typescript/lib/typescript.js");
+		}
+		if (compilerSpecifier === "/root/node_modules/typescript/lib/typescript.js") {
+			candidates.add("typescript");
+		}
+
+		let lastError: unknown;
+		for (const candidate of candidates) {
+			try {
+				return require(candidate) as typeof import("typescript");
+			} catch (error) {
+				lastError = error;
+			}
+		}
+
+		throw lastError instanceof Error
+			? lastError
+			: new Error(`Cannot load TypeScript compiler from '${compilerSpecifier}'`);
+	}
 
 	function toDiagnostic(
 		diagnostic: import("typescript").Diagnostic,

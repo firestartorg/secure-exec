@@ -1,4 +1,4 @@
-// Re-exported from @secure-exec/nodejs — canonical source is packages/secure-exec-nodejs/src/driver.ts
+// Re-exported from @secure-exec/nodejs — canonical source is packages/nodejs/src/driver.ts
 export {
 	createDefaultNetworkAdapter,
 	createNodeDriver,

@@ -278,7 +278,7 @@ When disabled, snapshots are created lazily on first Execute (same as the fallba
 
 ### Host-side changes
 
-**File: `packages/secure-exec-v8/src/runtime.ts`**
+**File: `packages/v8/src/runtime.ts`**
 
 After `ipcClient.authenticate()`, send the warm-up message:
 

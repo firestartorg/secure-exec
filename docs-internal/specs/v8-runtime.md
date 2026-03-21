@@ -441,7 +441,7 @@ serde = { version = "1", features = ["derive"] }
 ## NPM Package Structure
 
 ```
-packages/secure-exec-v8/
+packages/v8/
 ├── package.json              # @secure-exec/v8
 ├── src/
 │   └── index.ts              # JS wrapper: spawn process, manage sessions, IPC
@@ -539,7 +539,7 @@ Expected binary size: ~40-60MB per platform (V8 is large).
 - Host function injection for sync bridge calls
 
 ### Phase 2: Build the JS wrapper
-- `packages/secure-exec-v8/` with process management and IPC client
+- `packages/v8/` with process management and IPC client
 - Session abstraction matching what `NodeExecutionDriver` needs
 
 ### Phase 3: Swap execution driver

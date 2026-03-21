@@ -57,17 +57,17 @@
 - the WasmVM runtime requires standalone WASM binaries in `native/wasmvm/target/wasm32-wasip1/release/commands/`
 - build them locally: `cd native/wasmvm && make wasm` (requires Rust nightly + wasm32-wasip1 target + rust-src component + wasm-opt/binaryen)
 - the Rust toolchain is pinned in `native/wasmvm/rust-toolchain.toml` — rustup will auto-install it
-- CI builds the binaries before tests; a CI-only guard test in `packages/secure-exec-wasmvm/test/driver.test.ts` fails if they're missing
+- CI builds the binaries before tests; a CI-only guard test in `packages/wasmvm/test/driver.test.ts` fails if they're missing
 - tests gated behind `skipIf(!hasWasmBinaries)` or `skipUnlessWasmBuilt()` will skip locally if binaries aren't built
 - see `native/wasmvm/CLAUDE.md` for full build details and architecture
 
 ## WasmVM Syscall Coverage
 
 - every function in the `host_process` and `host_user` import modules (declared in `native/wasmvm/crates/wasi-ext/src/lib.rs`) must have at least one C parity test exercising it through libc
-- when adding a new host import, add a matching test case to `native/wasmvm/c/programs/syscall_coverage.c` and its parity test in `packages/secure-exec-wasmvm/test/c-parity.test.ts`
+- when adding a new host import, add a matching test case to `native/wasmvm/c/programs/syscall_coverage.c` and its parity test in `packages/wasmvm/test/c-parity.test.ts`
 - the canonical source of truth for import signatures is `native/wasmvm/crates/wasi-ext/src/lib.rs` — C patches and JS host implementations must match exactly
 - C patches in `native/wasmvm/patches/wasi-libc/` must be kept in sync with wasi-ext — ABI drift between C, Rust, and JS is a P0 bug
-- permission tier enforcement must cover ALL write/spawn/kill/pipe/dup operations — audit `packages/secure-exec-wasmvm/src/kernel-worker.ts` when adding new syscalls
+- permission tier enforcement must cover ALL write/spawn/kill/pipe/dup operations — audit `packages/wasmvm/src/kernel-worker.ts` when adding new syscalls
 - `PATCHED_PROGRAMS` in `native/wasmvm/c/Makefile` must include all programs that use `host_process` or `host_user` imports (programs linking the patched sysroot)
 
 ## Terminology

@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { TerminalHarness } from '../../../secure-exec-core/test/kernel/terminal-harness.ts';
+import { TerminalHarness } from '../../../core/test/kernel/terminal-harness.ts';
 import {
   createIntegrationKernel,
   skipUnlessWasmBuilt,

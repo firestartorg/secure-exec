@@ -305,7 +305,7 @@ When an isolate is created from a snapshot that used `set_default_context()`, th
 
 ### Phase 1: Fix setupFsFacade (prerequisite)
 
-**File: `packages/secure-exec-core/isolate-runtime/src/inject/setup-fs-facade.ts`**
+**File: `packages/core/isolate-runtime/src/inject/setup-fs-facade.ts`**
 
 Replace direct property assignment with getter-based delegation. Every `_fs.xxx` property becomes a getter that looks up `globalThis._fsXxx` at call time.
 
@@ -313,8 +313,8 @@ Replace direct property assignment with getter-based delegation. Every `_fs.xxx`
 
 ### Phase 2: Defer config-dependent setup (prerequisite)
 
-**File: `packages/secure-exec-core/isolate-runtime/src/inject/bridge-initial-globals.ts`**
-**File: `packages/secure-exec-core/isolate-runtime/src/inject/apply-timing-mitigation-freeze.ts`**
+**File: `packages/core/isolate-runtime/src/inject/bridge-initial-globals.ts`**
+**File: `packages/core/isolate-runtime/src/inject/apply-timing-mitigation-freeze.ts`**
 
 1. Make `__jsonPayloadLimitBytes` and `__payloadLimitErrorCode` read from globals at call time instead of capturing at setup
 2. Add `globalThis.__runtimeApplyConfig(config)` function that applies timing mitigation and config values post-restore
@@ -367,7 +367,7 @@ Add `replace_bridge_fns(scope, ctx, buffers, sync_fns, async_fns)` — overwrite
 
 ### Phase 7: Post-restore init script
 
-**File: `packages/secure-exec-v8/src/runtime.ts`**
+**File: `packages/v8/src/runtime.ts`**
 
 Add a `postRestoreScript` field to the Execute message (or compose it on the Rust side from config). This short script:
 - Calls `__runtimeApplyConfig(...)` with session config

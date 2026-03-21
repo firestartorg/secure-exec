@@ -24,7 +24,7 @@ Standalone WebAssembly binaries providing a comprehensive Unix userland, paired 
 - `crates/` contains Rust workspace crates (within `native/wasmvm/`)
 - `crates/commands/` contains standalone binary crates
 - `crates/libs/` contains shared library crates
-- `packages/secure-exec-wasmvm/` contains the TypeScript host runtime
+- `packages/wasmvm/` contains the TypeScript host runtime
 
 ## Build
 - Targets `wasm32-wasip1`

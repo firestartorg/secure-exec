@@ -21,12 +21,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { createKernel } from '../../../secure-exec-core/src/kernel/index.ts';
-import type { Kernel } from '../../../secure-exec-core/src/kernel/index.ts';
-import type { VirtualFileSystem } from '../../../secure-exec-core/src/kernel/index.ts';
-import { TerminalHarness } from '../../../secure-exec-core/test/kernel/terminal-harness.ts';
-import { InMemoryFileSystem } from '../../../secure-exec-browser/src/os-filesystem.ts';
-import { createNodeRuntime } from '../../../secure-exec-nodejs/src/kernel-runtime.ts';
+import { createKernel } from '../../../core/src/kernel/index.ts';
+import type { Kernel } from '../../../core/src/kernel/index.ts';
+import type { VirtualFileSystem } from '../../../core/src/kernel/index.ts';
+import { TerminalHarness } from '../../../core/test/kernel/terminal-harness.ts';
+import { InMemoryFileSystem } from '../../../browser/src/os-filesystem.ts';
+import { createNodeRuntime } from '../../../nodejs/src/kernel-runtime.ts';
 import {
   createMockLlmServer,
   type MockLlmServerHandle,

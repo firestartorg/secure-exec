@@ -44,6 +44,14 @@ import { connect as tcpConnect, type Socket } from 'node:net';
 import { connect as tlsConnect, type TLSSocket } from 'node:tls';
 import { lookup } from 'node:dns/promises';
 
+function getKernelWorkerUrl(): URL {
+  const siblingWorkerUrl = new URL('./kernel-worker.js', import.meta.url);
+  if (existsSync(siblingWorkerUrl)) {
+    return siblingWorkerUrl;
+  }
+  return new URL('../dist/kernel-worker.js', import.meta.url);
+}
+
 /**
  * All commands available in the WasmVM runtime.
  * Used as fallback when no commandDirs are configured (legacy mode).
@@ -554,7 +562,7 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
       permissionTier,
     };
 
-    const workerUrl = new URL('./kernel-worker.js', import.meta.url);
+    const workerUrl = getKernelWorkerUrl();
 
     this._workerAdapter.spawn(workerUrl, { workerData }).then(
       (worker) => {

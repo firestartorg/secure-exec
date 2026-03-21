@@ -12,12 +12,12 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createKernel } from '../../../secure-exec-core/src/kernel/index.ts';
-import type { Kernel, VirtualFileSystem } from '../../../secure-exec-core/src/kernel/index.ts';
-import { InMemoryFileSystem } from '../../../secure-exec-browser/src/os-filesystem.ts';
-import { createWasmVmRuntime } from '../../../secure-exec-wasmvm/src/index.ts';
-import { createNodeRuntime } from '../../../secure-exec-nodejs/src/kernel-runtime.ts';
-import { createPythonRuntime } from '../../../secure-exec-python/src/kernel-runtime.ts';
+import { createKernel } from '../../../core/src/kernel/index.ts';
+import type { Kernel, VirtualFileSystem } from '../../../core/src/kernel/index.ts';
+import { InMemoryFileSystem } from '../../../browser/src/os-filesystem.ts';
+import { createWasmVmRuntime } from '../../../wasmvm/src/index.ts';
+import { createNodeRuntime } from '../../../nodejs/src/kernel-runtime.ts';
+import { createPythonRuntime } from '../../../python/src/kernel-runtime.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

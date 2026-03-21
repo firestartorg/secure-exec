@@ -822,6 +822,13 @@ function buildPostRestoreScript(
 	} else {
 		// run mode — still need CommonJS module globals
 		parts.push(getIsolateRuntimeSource("initCommonjsModuleGlobals"));
+		if (filePath) {
+			const dirname = filePath.includes("/")
+				? filePath.substring(0, filePath.lastIndexOf("/")) || "/"
+				: "/";
+			parts.push(`globalThis.__runtimeCommonJsFileConfig = ${JSON.stringify({ filePath, dirname })};`);
+			parts.push(getIsolateRuntimeSource("setCommonjsFileGlobals"));
+		}
 	}
 
 	// Apply custom global exposure policy

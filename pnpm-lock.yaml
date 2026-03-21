@@ -37,7 +37,7 @@ importers:
         version: 3.0.63(zod@3.25.76)
       '@secure-exec/typescript':
         specifier: workspace:*
-        version: link:../../packages/secure-exec-typescript
+        version: link:../../packages/typescript
       ai:
         specifier: ^6.0.116
         version: 6.0.134(zod@3.25.76)
@@ -125,7 +125,7 @@ importers:
     dependencies:
       '@secure-exec/typescript':
         specifier: workspace:*
-        version: link:../../packages/secure-exec-typescript
+        version: link:../../packages/typescript
       secure-exec:
         specifier: workspace:*
         version: link:../../packages/secure-exec
@@ -214,7 +214,7 @@ importers:
         version: 1.19.9(hono@4.12.2)
       '@secure-exec/typescript':
         specifier: workspace:*
-        version: link:../../packages/secure-exec-typescript
+        version: link:../../packages/typescript
       hono:
         specifier: ^4.7.2
         version: 4.12.2
@@ -261,80 +261,11 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
-  packages/playground:
-    dependencies:
-      '@secure-exec/browser':
-        specifier: workspace:*
-        version: link:../secure-exec-browser
-      secure-exec:
-        specifier: workspace:*
-        version: link:../secure-exec
-    devDependencies:
-      esbuild:
-        specifier: ^0.27.1
-        version: 0.27.4
-      monaco-editor:
-        specifier: 0.52.2
-        version: 0.52.2
-      pyodide:
-        specifier: 0.28.3
-        version: 0.28.3
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-
-  packages/secure-exec:
+  packages/browser:
     dependencies:
       '@secure-exec/core':
         specifier: workspace:*
-        version: link:../secure-exec-core
-      '@secure-exec/nodejs':
-        specifier: workspace:*
-        version: link:../secure-exec-nodejs
-    optionalDependencies:
-      '@secure-exec/browser':
-        specifier: workspace:*
-        version: link:../secure-exec-browser
-      '@secure-exec/python':
-        specifier: workspace:*
-        version: link:../secure-exec-python
-    devDependencies:
-      '@mariozechner/pi-coding-agent':
-        specifier: ^0.60.0
-        version: 0.60.0(zod@3.25.76)
-      '@opencode-ai/sdk':
-        specifier: ^1.2.27
-        version: 1.2.27
-      '@secure-exec/v8':
-        specifier: workspace:*
-        version: link:../secure-exec-v8
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.19.3
-      '@vitest/browser':
-        specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.19.3)(playwright@1.58.2)(typescript@5.9.3)(vitest@2.1.9)
-      '@xterm/headless':
-        specifier: ^6.0.0
-        version: 6.0.0
-      playwright:
-        specifier: ^1.52.0
-        version: 1.58.2
-      tsx:
-        specifier: ^4.19.2
-        version: 4.21.0
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
-
-  packages/secure-exec-browser:
-    dependencies:
-      '@secure-exec/core':
-        specifier: workspace:*
-        version: link:../secure-exec-core
+        version: link:../core
       sucrase:
         specifier: ^3.35.0
         version: 3.35.1
@@ -346,7 +277,7 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
-  packages/secure-exec-core:
+  packages/core:
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -361,14 +292,14 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
 
-  packages/secure-exec-nodejs:
+  packages/nodejs:
     dependencies:
       '@secure-exec/core':
         specifier: workspace:*
-        version: link:../secure-exec-core
+        version: link:../core
       '@secure-exec/v8':
         specifier: workspace:*
-        version: link:../secure-exec-v8
+        version: link:../v8
       esbuild:
         specifier: ^0.27.1
         version: 0.27.4
@@ -398,11 +329,33 @@ importers:
         specifier: ^15.1.0
         version: 15.1.0
 
-  packages/secure-exec-python:
+  packages/playground:
+    dependencies:
+      '@secure-exec/browser':
+        specifier: workspace:*
+        version: link:../browser
+      secure-exec:
+        specifier: workspace:*
+        version: link:../secure-exec
+    devDependencies:
+      esbuild:
+        specifier: ^0.27.1
+        version: 0.27.4
+      monaco-editor:
+        specifier: 0.52.2
+        version: 0.52.2
+      pyodide:
+        specifier: 0.28.3
+        version: 0.28.3
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/python:
     dependencies:
       '@secure-exec/core':
         specifier: workspace:*
-        version: link:../secure-exec-core
+        version: link:../core
       pyodide:
         specifier: ^0.28.3
         version: 0.28.3
@@ -417,11 +370,58 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
 
-  packages/secure-exec-typescript:
+  packages/secure-exec:
     dependencies:
       '@secure-exec/core':
         specifier: workspace:*
-        version: link:../secure-exec-core
+        version: link:../core
+      '@secure-exec/nodejs':
+        specifier: workspace:*
+        version: link:../nodejs
+    optionalDependencies:
+      '@secure-exec/browser':
+        specifier: workspace:*
+        version: link:../browser
+      '@secure-exec/python':
+        specifier: workspace:*
+        version: link:../python
+    devDependencies:
+      '@mariozechner/pi-coding-agent':
+        specifier: ^0.60.0
+        version: 0.60.0(zod@3.25.76)
+      '@opencode-ai/sdk':
+        specifier: ^1.2.27
+        version: 1.2.27
+      '@secure-exec/v8':
+        specifier: workspace:*
+        version: link:../v8
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.3
+      '@vitest/browser':
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.3)(playwright@1.58.2)(typescript@5.9.3)(vitest@2.1.9)
+      '@xterm/headless':
+        specifier: ^6.0.0
+        version: 6.0.0
+      playwright:
+        specifier: ^1.52.0
+        version: 1.58.2
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
+
+  packages/typescript:
+    dependencies:
+      '@secure-exec/core':
+        specifier: workspace:*
+        version: link:../core
       secure-exec:
         specifier: workspace:*
         version: link:../secure-exec
@@ -436,7 +436,7 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
 
-  packages/secure-exec-v8:
+  packages/v8:
     optionalDependencies:
       '@secure-exec/v8-darwin-arm64':
         specifier: 0.1.1-rc.3
@@ -451,11 +451,11 @@ importers:
         specifier: 0.1.1-rc.3
         version: 0.1.1-rc.3
 
-  packages/secure-exec-wasmvm:
+  packages/wasmvm:
     dependencies:
       '@secure-exec/core':
         specifier: workspace:*
-        version: link:../secure-exec-core
+        version: link:../core
     devDependencies:
       '@types/node':
         specifier: ^22.10.2

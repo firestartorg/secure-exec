@@ -7,10 +7,10 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { createKernel } from '../../../secure-exec-core/src/kernel/index.ts';
-import type { Kernel } from '../../../secure-exec-core/src/kernel/index.ts';
-import { InMemoryFileSystem } from '../../../secure-exec-browser/src/os-filesystem.ts';
-import { createNodeRuntime } from '../../../secure-exec-nodejs/src/kernel-runtime.ts';
+import { createKernel } from '../../../core/src/kernel/index.ts';
+import type { Kernel } from '../../../core/src/kernel/index.ts';
+import { InMemoryFileSystem } from '../../../browser/src/os-filesystem.ts';
+import { createNodeRuntime } from '../../../nodejs/src/kernel-runtime.ts';
 
 async function createNodeKernel(): Promise<{ kernel: Kernel; dispose: () => Promise<void> }> {
   const vfs = new InMemoryFileSystem();

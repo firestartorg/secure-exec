@@ -1,4 +1,4 @@
-// Re-exported from @secure-exec/nodejs — canonical source is packages/secure-exec-nodejs/src/isolate-bootstrap.ts
+// Re-exported from @secure-exec/nodejs — canonical source is packages/nodejs/src/isolate-bootstrap.ts
 export type {
 	NodeExecutionDriverOptions,
 	BudgetState,

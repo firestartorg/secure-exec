@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 // Resolve @secure-exec/core package root (isolate-runtime source and generated files live in core).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const coreRoot = path.resolve(__dirname, "..", "..", "secure-exec-core");
+const coreRoot = path.resolve(__dirname, "..", "..", "core");
 
 const runtimeSourceDir = path.join(coreRoot, "isolate-runtime", "src");
 const runtimeInjectDir = path.join(runtimeSourceDir, "inject");

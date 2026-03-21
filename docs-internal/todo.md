@@ -146,7 +146,7 @@ docs-internal/specs/cli-tool-e2e.md
   - Adapt the chosen suite to run inside WasmVM (may need to compile test harness to WASM or run as shell scripts through brush-shell).
   - Integrate as a CI-runnable test target that produces a compliance scorecard (pass/fail/skip counts per POSIX category).
   - Track results in `docs/posix-compatibility.md` and use regressions as P0 bugs.
-  - Files: `packages/secure-exec-wasmvm/test/`, `native/wasmvm/c/programs/`, `docs/posix-compatibility.md`
+  - Files: `packages/wasmvm/test/`, `native/wasmvm/c/programs/`, `docs/posix-compatibility.md`
 
 ## Priority 3: Examples, Validation Breadth, and Product Direction
 
@@ -192,7 +192,7 @@ See `docs-internal/specs/v8-perf-research.md` for detailed profiling data and an
 - [ ] Merge InjectGlobals into Execute message (save 0.1–0.2ms per execution)
   - Currently two IPC messages per execution: InjectGlobals + Execute
   - Include globals payload in Execute frame to save one UDS round-trip
-  - Files: `native/v8-runtime/src/ipc_binary.rs`, `native/v8-runtime/src/session.rs`, `packages/secure-exec-v8/src/ipc-binary.ts`, `packages/secure-exec-v8/src/runtime.ts`
+  - Files: `native/v8-runtime/src/ipc_binary.rs`, `native/v8-runtime/src/session.rs`, `packages/v8/src/ipc-binary.ts`, `packages/v8/src/runtime.ts`
 
 ### P2 — Medium Effort
 
@@ -205,13 +205,13 @@ See `docs-internal/specs/v8-perf-research.md` for detailed profiling data and an
 - [ ] Reduce snapshot blob size (save 0.1–0.6ms context clone time)
   - Minimize bridge IIFE state footprint: lazy-init large data structures, compact representations
   - Profile V8 heap snapshot contents to identify savings
-  - Files: `packages/secure-exec-core/isolate-runtime/`
+  - Files: `packages/core/isolate-runtime/`
 
 ### P3 — When Needed
 
 - [ ] Per-session sockets (one UDS per session instead of shared)
   - Only relevant for concurrent sessions with large payloads (head-of-line blocking)
-  - Files: `native/v8-runtime/src/main.rs`, `packages/secure-exec-v8/src/runtime.ts`
+  - Files: `native/v8-runtime/src/main.rs`, `packages/v8/src/runtime.ts`
 
 - [ ] V8 code caching for user code (save <0.2ms, only for repeated executions)
   - User code compilation is already 0.02–0.08ms for typical scripts
@@ -226,15 +226,15 @@ See `docs-internal/specs/v8-perf-research.md` for detailed profiling data and an
 
 - [ ] Cap and cache `package.json` parsing in resolver paths
   - Prevent repeated large-file reads and large JSON parse overhead in package resolution
-  - Files: `packages/secure-exec-nodejs/src/`, `packages/secure-exec-core/src/`
+  - Files: `packages/nodejs/src/`, `packages/core/src/`
 
 - [ ] Module-access prefix indexing and canonicalization memoization
   - Reduce per-lookup overhead in module-access checks
-  - Files: `packages/secure-exec-nodejs/src/module-access.ts`
+  - Files: `packages/nodejs/src/module-access.ts`
 
 - [ ] Offset-based fd read/write primitives (replace whole-file sync emulation)
   - Current approach reads/writes entire file contents; offset-based ops reduce large-file pressure
-  - Files: `packages/secure-exec-core/src/bridge/fs.ts`
+  - Files: `packages/core/src/bridge/fs.ts`
 
 ## Custom Bindings
 
@@ -242,7 +242,7 @@ See `docs-internal/specs/v8-perf-research.md` for detailed profiling data and an
   - Spec: `docs-internal/specs/custom-bindings.md`
   - Nested object registration on host, auto-inflated to frozen `SecureExec.bindings.*` namespace in sandbox.
   - No Rust changes needed — piggybacks on existing `bridgeHandlers` mechanism.
-  - Files: `packages/secure-exec-core/src/runtime.ts`, `packages/secure-exec-nodejs/src/execution-driver.ts`, `packages/secure-exec-core/src/runtime-driver.ts`
+  - Files: `packages/core/src/runtime.ts`, `packages/nodejs/src/execution-driver.ts`, `packages/core/src/runtime-driver.ts`
 
 ## CI and Automation
 
@@ -266,7 +266,7 @@ See `docs-internal/specs/v8-perf-research.md` for detailed profiling data and an
 
 - [ ] Fix V8 crash isolation test timeouts.
   - crash-isolation.test.ts and process-isolation.test.ts timeout at 30s. V8 process crash detection or IPC cleanup too slow.
-  - Files: `packages/secure-exec-v8/test/crash-isolation.test.ts`, `packages/secure-exec-v8/test/process-isolation.test.ts`
+  - Files: `packages/v8/test/crash-isolation.test.ts`, `packages/v8/test/process-isolation.test.ts`
 
 - [ ] Fix crossterm vendor patch auto-apply in patch-vendor.sh.
   - `patch -R --dry-run` gives false positives for patches that add new files. Forward-apply check should run first.
@@ -274,11 +274,11 @@ See `docs-internal/specs/v8-perf-research.md` for detailed profiling data and an
 
 - [ ] Fix C parity test WASM exit code 17 for non-patched programs.
   - All C programs compiled against patched wasi-libc import host_user.isatty. Verify host_user imports are provided correctly for C-built WASM binaries and isatty signature matches between C sysroot patch and kernel-worker.ts.
-  - Files: `packages/secure-exec-wasmvm/src/kernel-worker.ts`, `native/wasmvm/c/Makefile`, `native/wasmvm/patches/wasi-libc/`
+  - Files: `packages/wasmvm/src/kernel-worker.ts`, `native/wasmvm/c/Makefile`, `native/wasmvm/patches/wasi-libc/`
 
 - [ ] Fix secure-exec main test suite failures from build cascade.
   - UpgradeSocket bridge refs fix (already committed) should resolve most failures. Verify after rebuild. Remaining failures may be Node runtime driver issues (above) or missing pyodide.
-  - Files: `packages/secure-exec-core/src/shared/bridge-contract.ts`
+  - Files: `packages/core/src/shared/bridge-contract.ts`
 
 ## WasmVM: GNU Make (real upstream, not reimplementation)
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 // Resolve @secure-exec/core package root (generated files live in core).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const coreRoot = path.resolve(__dirname, "..", "..", "secure-exec-core");
+const coreRoot = path.resolve(__dirname, "..", "..", "core");
 
 const alias = {};
 for (const [name, modulePath] of Object.entries(stdLibBrowser)) {

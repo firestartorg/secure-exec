@@ -2,7 +2,7 @@
 
 ```
   Kernel-first API (createKernel + mount + exec)
-  packages/secure-exec-core/
+  packages/core/
 
   Legacy facade: NodeRuntime (packages/secure-exec/src/runtime.ts)
          │
@@ -16,35 +16,35 @@
 
 Package index:
 
-  @secure-exec/core        packages/secure-exec-core/
+  @secure-exec/core        packages/core/
     Kernel (VFS, FD table, process table, device layer, pipes, PTY,
     command registry, permissions), shared types, utilities,
     isolate-runtime source, in-memory filesystem
 
-  @secure-exec/v8          packages/secure-exec-v8/
+  @secure-exec/v8          packages/v8/
     V8 runtime process manager (spawns Rust binary, IPC client,
     session abstraction). MessagePack framing over UDS.
 
-  @secure-exec/nodejs      packages/secure-exec-nodejs/
+  @secure-exec/nodejs      packages/nodejs/
     Node execution driver, bridge polyfills, bridge-handlers,
     bridge-loader, module-access overlay, ESM compiler,
     module resolver, package bundler, kernel runtime driver
     (createNodeRuntime), createNodeDriver, createNodeRuntimeDriverFactory
 
-  @secure-exec/browser     packages/secure-exec-browser/
+  @secure-exec/browser     packages/browser/
     Web Worker execution driver, browser VFS (InMemoryFileSystem),
     browser worker adapter, createBrowserDriver,
     createBrowserRuntimeDriverFactory
 
-  @secure-exec/python      packages/secure-exec-python/
+  @secure-exec/python      packages/python/
     Pyodide execution driver, kernel runtime driver
     (createPythonRuntime), createPyodideRuntimeDriverFactory
 
-  @secure-exec/wasmvm      packages/secure-exec-wasmvm/
+  @secure-exec/wasmvm      packages/wasmvm/
     WasmVM runtime driver (createWasmVmRuntime), WASI polyfill,
     kernel worker management. WASM binaries in native/wasmvm/target/
 
-  @secure-exec/typescript  packages/secure-exec-typescript/
+  @secure-exec/typescript  packages/typescript/
     Optional TypeScript compiler tools (type-checking, compilation)
 
   secure-exec              packages/secure-exec/
@@ -54,7 +54,7 @@ Package index:
 
 ## Kernel (createKernel)
 
-`packages/secure-exec-core/src/kernel/kernel.ts`
+`packages/core/src/kernel/kernel.ts`
 
 Primary API. Creates a kernel with shared VFS, FD table, process table, device layer, pipes, PTY, and command registry.
 
@@ -79,7 +79,7 @@ Legacy facade for direct code execution. Delegates to execution drivers.
 
 ## SystemDriver
 
-`packages/secure-exec-core/src/types.ts`
+`packages/core/src/types.ts`
 
 Config object that bundles what the isolate can access. Deny-by-default. Used by the legacy NodeRuntime facade.
 
@@ -90,7 +90,7 @@ Config object that bundles what the isolate can access. Deny-by-default. Used by
 
 ## NodeRuntimeDriverFactory / PythonRuntimeDriverFactory
 
-`packages/secure-exec-core/src/runtime-driver.ts`
+`packages/core/src/runtime-driver.ts`
 
 Factory abstraction for constructing execution drivers from normalized runtime options.
 
@@ -98,7 +98,7 @@ Factory abstraction for constructing execution drivers from normalized runtime o
 
 ### createNodeDriver()
 
-`packages/secure-exec-nodejs/src/driver.ts`
+`packages/nodejs/src/driver.ts`
 
 Factory that builds a `SystemDriver` with Node-native adapters.
 
@@ -107,7 +107,7 @@ Factory that builds a `SystemDriver` with Node-native adapters.
 
 ### createNodeRuntimeDriverFactory()
 
-`packages/secure-exec-nodejs/src/driver.ts`
+`packages/nodejs/src/driver.ts`
 
 Factory that builds a Node-backed execution driver factory.
 
@@ -116,7 +116,7 @@ Factory that builds a Node-backed execution driver factory.
 
 ### createNodeRuntime()
 
-`packages/secure-exec-nodejs/src/kernel-runtime.ts`
+`packages/nodejs/src/kernel-runtime.ts`
 
 Factory that creates a kernel-compatible Node RuntimeDriver for use with `kernel.mount()`.
 
@@ -126,7 +126,7 @@ Factory that creates a kernel-compatible Node RuntimeDriver for use with `kernel
 
 ### createBrowserDriver()
 
-`packages/secure-exec-browser/src/driver.ts`
+`packages/browser/src/driver.ts`
 
 Factory that builds a browser `SystemDriver` with browser-native adapters.
 
@@ -136,7 +136,7 @@ Factory that builds a browser `SystemDriver` with browser-native adapters.
 
 ### createBrowserRuntimeDriverFactory()
 
-`packages/secure-exec-browser/src/runtime-driver.ts`
+`packages/browser/src/runtime-driver.ts`
 
 Factory that builds a browser-backed execution driver factory.
 
@@ -146,7 +146,7 @@ Factory that builds a browser-backed execution driver factory.
 
 ### createPyodideRuntimeDriverFactory()
 
-`packages/secure-exec-python/src/driver.ts`
+`packages/python/src/driver.ts`
 
 Factory that builds a Python-backed execution driver factory.
 
@@ -155,7 +155,7 @@ Factory that builds a Python-backed execution driver factory.
 
 ### createPythonRuntime()
 
-`packages/secure-exec-python/src/kernel-runtime.ts`
+`packages/python/src/kernel-runtime.ts`
 
 Factory that creates a kernel-compatible Python RuntimeDriver for use with `kernel.mount()`.
 
@@ -164,7 +164,7 @@ Factory that creates a kernel-compatible Python RuntimeDriver for use with `kern
 
 ### createWasmVmRuntime()
 
-`packages/secure-exec-wasmvm/src/runtime.ts`
+`packages/wasmvm/src/runtime.ts`
 
 Factory that creates a kernel-compatible WasmVM RuntimeDriver for use with `kernel.mount()`.
 
@@ -174,7 +174,7 @@ Factory that creates a kernel-compatible WasmVM RuntimeDriver for use with `kern
 
 ## @secure-exec/v8 (V8 Runtime)
 
-`packages/secure-exec-v8/`
+`packages/v8/`
 
 Manages the Rust V8 child process and provides the session API.
 
@@ -200,7 +200,7 @@ The Rust V8 runtime process. One OS thread per session, each owning a `v8::Isola
 
 ## NodeExecutionDriver
 
-`packages/secure-exec-nodejs/src/execution-driver.ts`
+`packages/nodejs/src/execution-driver.ts`
 
 The engine. Obtains a V8 session from the shared `@secure-exec/v8` runtime and bridges host capabilities in.
 
@@ -211,7 +211,7 @@ The engine. Obtains a V8 session from the shared `@secure-exec/v8` runtime and b
 
 ## BrowserRuntimeDriver
 
-`packages/secure-exec-browser/src/runtime-driver.ts`
+`packages/browser/src/runtime-driver.ts`
 
 Browser execution driver that owns worker lifecycle and message marshalling.
 
@@ -222,7 +222,7 @@ Browser execution driver that owns worker lifecycle and message marshalling.
 
 ### Browser Worker Runtime
 
-`packages/secure-exec-browser/src/worker.ts`
+`packages/browser/src/worker.ts`
 
 Worker-side runtime implementation used by the browser execution driver.
 
@@ -233,7 +233,7 @@ Worker-side runtime implementation used by the browser execution driver.
 
 ## PyodideRuntimeDriver
 
-`packages/secure-exec-python/src/driver.ts`
+`packages/python/src/driver.ts`
 
 Python execution driver that owns a Node worker running Pyodide.
 
@@ -245,7 +245,7 @@ Python execution driver that owns a Node worker running Pyodide.
 
 ## TypeScript Tools
 
-`packages/secure-exec-typescript/src/index.ts`
+`packages/typescript/src/index.ts`
 
 Optional companion package for isolated TypeScript compiler work (`@secure-exec/typescript`).
 
@@ -255,7 +255,7 @@ Optional companion package for isolated TypeScript compiler work (`@secure-exec/
 
 ## ModuleAccessFileSystem
 
-`packages/secure-exec-nodejs/src/module-access.ts`
+`packages/nodejs/src/module-access.ts`
 
 Filesystem overlay that makes host `node_modules` available read-only at `/root/node_modules`.
 
@@ -265,7 +265,7 @@ Filesystem overlay that makes host `node_modules` available read-only at `/root/
 
 ## Permissions
 
-`packages/secure-exec-core/src/shared/permissions.ts`
+`packages/core/src/shared/permissions.ts`
 
 Wraps each adapter with allow/deny checks before calls reach the host.
 

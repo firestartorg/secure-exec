@@ -12,14 +12,14 @@ function readSource(relativePath: string): string {
 
 function readCoreSource(relativePath: string): string {
 	return readFileSync(
-		new URL(`../../secure-exec-core/${relativePath}`, import.meta.url),
+		new URL(`../../core/${relativePath}`, import.meta.url),
 		"utf8",
 	);
 }
 
 function readNodeSource(relativePath: string): string {
 	return readFileSync(
-		new URL(`../../secure-exec-nodejs/${relativePath}`, import.meta.url),
+		new URL(`../../nodejs/${relativePath}`, import.meta.url),
 		"utf8",
 	);
 }
