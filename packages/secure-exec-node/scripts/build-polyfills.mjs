@@ -2,6 +2,11 @@ import * as esbuild from "esbuild";
 import stdLibBrowser from "node-stdlib-browser";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Resolve @secure-exec/core package root (generated files live in core).
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const coreRoot = path.resolve(__dirname, "..", "..", "secure-exec-core");
 
 const alias = {};
 for (const [name, modulePath] of Object.entries(stdLibBrowser)) {
@@ -49,7 +54,7 @@ for (const name of Object.keys(stdLibBrowser)) {
 }
 
 const output = `export const POLYFILL_CODE_MAP = ${JSON.stringify(polyfills, null, 2)};\n`;
-const outPath = path.join(process.cwd(), "src", "generated", "polyfills.ts");
+const outPath = path.join(coreRoot, "src", "generated", "polyfills.ts");
 await fs.mkdir(path.dirname(outPath), { recursive: true });
 await fs.writeFile(outPath, output, "utf8");
 console.log(`Wrote ${Object.keys(polyfills).length} polyfills to ${outPath}`);

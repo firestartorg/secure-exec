@@ -83,7 +83,11 @@
   },
   "scripts": {
     "check-types": "tsc --noEmit",
-    "build": "tsc",
+    "build:bridge": "node scripts/build-bridge.mjs",
+    "build:polyfills": "node scripts/build-polyfills.mjs",
+    "build:isolate-runtime": "node scripts/build-isolate-runtime.mjs",
+    "build:generated": "pnpm run build:bridge && pnpm run build:polyfills && pnpm run build:isolate-runtime",
+    "build": "pnpm run build:generated && tsc",
     "test": "echo 'no tests yet'"
   },
   "dependencies": {
@@ -96,6 +100,7 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "buffer": "^6.0.3",
+    "sucrase": "^3.35.0",
     "text-encoding-utf-8": "^1.0.2",
     "typescript": "^5.7.2",
     "whatwg-url": "^15.1.0"

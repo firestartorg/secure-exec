@@ -1,12 +1,17 @@
 import * as esbuild from "esbuild";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const runtimeSourceDir = path.join(process.cwd(), "isolate-runtime", "src");
+// Resolve @secure-exec/core package root (isolate-runtime source and generated files live in core).
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const coreRoot = path.resolve(__dirname, "..", "..", "secure-exec-core");
+
+const runtimeSourceDir = path.join(coreRoot, "isolate-runtime", "src");
 const runtimeInjectDir = path.join(runtimeSourceDir, "inject");
-const runtimeDistDir = path.join(process.cwd(), "dist", "isolate-runtime");
+const runtimeDistDir = path.join(coreRoot, "dist", "isolate-runtime");
 const generatedManifestPath = path.join(
-	process.cwd(),
+	coreRoot,
 	"src",
 	"generated",
 	"isolate-runtime.ts",

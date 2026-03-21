@@ -84,21 +84,12 @@
   "scripts": {
     "check-types:src": "tsc --noEmit",
     "check-types:isolate-runtime": "tsc -p tsconfig.isolate-runtime.json --noEmit",
-    "check-types": "pnpm run build:generated && pnpm run check-types:src && pnpm run check-types:isolate-runtime",
-    "build:polyfills": "node scripts/build-polyfills.mjs",
-    "build:isolate-runtime": "node scripts/build-isolate-runtime.mjs",
-    "build:generated": "pnpm run build:polyfills && pnpm run build:isolate-runtime",
-    "build": "pnpm run build:generated && tsc",
+    "check-types": "pnpm run check-types:src && pnpm run check-types:isolate-runtime",
+    "build": "tsc",
     "test": "echo 'no tests yet'"
   },
   "dependencies": {
-    "@secure-exec/kernel": "workspace:*",
-    "buffer": "^6.0.3",
-    "esbuild": "^0.27.1",
-    "node-stdlib-browser": "^1.3.1",
-    "sucrase": "^3.35.0",
-    "text-encoding-utf-8": "^1.0.2",
-    "whatwg-url": "^15.1.0"
+    "@secure-exec/kernel": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
