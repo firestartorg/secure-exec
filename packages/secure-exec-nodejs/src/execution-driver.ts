@@ -481,6 +481,10 @@ export class NodeExecutionDriver implements RuntimeDriver {
 						onPtySetRawMode: s.onPtySetRawMode,
 						stdinIsTTY: s.processConfig.stdinIsTTY,
 					}),
+					// Custom bindings dispatched through _loadPolyfill
+					...(this.flattenedBindings ? Object.fromEntries(
+						this.flattenedBindings.map(b => [b.key, b.handler])
+					) : {}),
 				}),
 				...buildTimerBridgeHandlers({
 					budgetState: s.budgetState,
@@ -830,14 +834,20 @@ function getOsConfigGlobalKey(): string { return HOST_BRIDGE_GLOBAL_KEYS.osConfi
 
 /** Build the JS snippet that inflates __bind.* globals into a frozen SecureExec.bindings tree. */
 function buildBindingsInflationSnippet(bindingKeys: string[]): string {
+	// Build dispatch wrappers for each binding key and assign directly to the
+	// tree nodes. Uses _loadPolyfill as the dispatch multiplexer (same as the
+	// static dispatch shim for internal bridge globals).
 	return `(function(){
 var __bindingKeys__=${JSON.stringify(bindingKeys)};
 var tree={};
+function makeBindFn(bk){
+return function(){var args=Array.prototype.slice.call(arguments);var encoded="__bd:"+bk+":"+JSON.stringify(args);var r=_loadPolyfill.applySyncPromise(undefined,[encoded]);if(r===null)return undefined;try{var p=JSON.parse(r);if(p.__bd_error)throw new Error(p.__bd_error);return p.__bd_result;}catch(e){if(e.message&&e.message.startsWith("No handler:"))return undefined;throw e;}};
+}
 for(var i=0;i<__bindingKeys__.length;i++){
 var parts=__bindingKeys__[i].split(".");
 var node=tree;
 for(var j=0;j<parts.length-1;j++){node[parts[j]]=node[parts[j]]||{};node=node[parts[j]];}
-node[parts[parts.length-1]]=globalThis["__bind."+__bindingKeys__[i]];
+node[parts[parts.length-1]]=makeBindFn("__bind."+__bindingKeys__[i]);
 }
 function deepFreeze(obj){
 var vals=Object.values(obj);
@@ -845,6 +855,5 @@ for(var k=0;k<vals.length;k++){if(typeof vals[k]==="object"&&vals[k]!==null)deep
 return Object.freeze(obj);
 }
 Object.defineProperty(globalThis,"SecureExec",{value:Object.freeze({bindings:deepFreeze(tree)}),writable:false,enumerable:true,configurable:false});
-for(var i=0;i<__bindingKeys__.length;i++){delete globalThis["__bind."+__bindingKeys__[i]];}
 })();`;
 }
