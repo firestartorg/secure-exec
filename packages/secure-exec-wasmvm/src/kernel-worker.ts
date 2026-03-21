@@ -13,9 +13,9 @@
 
 import { workerData, parentPort } from 'node:worker_threads';
 import { readFile } from 'node:fs/promises';
-import { WasiPolyfill, WasiProcExit } from './wasi-polyfill.ts';
-import { UserManager } from './user.ts';
-import { FDTable } from './fd-table.ts';
+import { WasiPolyfill, WasiProcExit } from './wasi-polyfill.js';
+import { UserManager } from './user.js';
+import { FDTable } from './fd-table.js';
 import {
   FILETYPE_CHARACTER_DEVICE,
   FILETYPE_REGULAR_FILE,
@@ -25,11 +25,11 @@ import {
   ERRNO_ECHILD,
   ERRNO_EINVAL,
   ERRNO_EBADF,
-} from './wasi-constants.ts';
-import { VfsError } from './wasi-types.ts';
-import type { WasiVFS, WasiInode, VfsStat, VfsSnapshotEntry } from './wasi-types.ts';
-import type { WasiFileIO } from './wasi-file-io.ts';
-import type { WasiProcessIO } from './wasi-process-io.ts';
+} from './wasi-constants.js';
+import { VfsError } from './wasi-types.js';
+import type { WasiVFS, WasiInode, VfsStat, VfsSnapshotEntry } from './wasi-types.js';
+import type { WasiFileIO } from './wasi-file-io.js';
+import type { WasiProcessIO } from './wasi-process-io.js';
 import {
   SIG_IDX_STATE,
   SIG_IDX_ERRNO,
@@ -40,14 +40,14 @@ import {
   RPC_WAIT_TIMEOUT_MS,
   type WorkerInitData,
   type SyscallRequest,
-} from './syscall-rpc.ts';
+} from './syscall-rpc.js';
 import {
   isWriteBlocked as _isWriteBlocked,
   isSpawnBlocked as _isSpawnBlocked,
   isNetworkBlocked as _isNetworkBlocked,
   isPathInCwd as _isPathInCwd,
   validatePermissionTier,
-} from './permission-check.ts';
+} from './permission-check.js';
 import { normalize } from 'node:path';
 
 const port = parentPort!;

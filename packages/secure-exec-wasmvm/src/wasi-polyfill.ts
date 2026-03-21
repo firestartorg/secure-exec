@@ -45,9 +45,9 @@ import {
   ERRNO_SUCCESS,
   ERRNO_EBADF,
   ERRNO_EINVAL,
-} from './wasi-constants.ts';
+} from './wasi-constants.js';
 
-import { VfsError } from './wasi-types.ts';
+import { VfsError } from './wasi-types.js';
 import type {
   WasiFiletype,
   FDEntry,
@@ -55,9 +55,9 @@ import type {
   VfsErrorCode,
   WasiFDTable,
   WasiVFS,
-} from './wasi-types.ts';
-import type { WasiFileIO } from './wasi-file-io.ts';
-import type { WasiProcessIO } from './wasi-process-io.ts';
+} from './wasi-types.js';
+import type { WasiFileIO } from './wasi-file-io.js';
+import type { WasiProcessIO } from './wasi-process-io.js';
 
 // Additional WASI errno codes
 export const ERRNO_ESPIPE: number = 70;

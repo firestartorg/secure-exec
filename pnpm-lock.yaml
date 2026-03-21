@@ -371,19 +371,16 @@ importers:
       '@secure-exec/kernel':
         specifier: workspace:*
         version: link:../../kernel
+      '@secure-exec/wasmvm':
+        specifier: workspace:*
+        version: link:../../secure-exec-wasmvm
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.3
-      '@xterm/headless':
-        specifier: ^6.0.0
-        version: 6.0.0
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
 
   packages/secure-exec:
     dependencies:
@@ -555,6 +552,25 @@ importers:
       '@secure-exec/v8-linux-x64-gnu':
         specifier: 0.1.1-rc.3
         version: 0.1.1-rc.3
+
+  packages/secure-exec-wasmvm:
+    dependencies:
+      '@secure-exec/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.3
+      '@xterm/headless':
+        specifier: ^6.0.0
+        version: 6.0.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
 
   packages/website:
     dependencies:

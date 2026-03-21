@@ -6,8 +6,8 @@
  * getuid, getgid, geteuid, getegid, isatty, getpwuid.
  */
 
-import { FILETYPE_CHARACTER_DEVICE } from './wasi-constants.ts';
-import type { WasiFDTable } from './wasi-types.ts';
+import { FILETYPE_CHARACTER_DEVICE } from './wasi-constants.js';
+import type { WasiFDTable } from './wasi-types.js';
 
 const ERRNO_SUCCESS = 0;
 const ERRNO_EBADF = 8;

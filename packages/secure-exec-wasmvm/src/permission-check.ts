@@ -5,7 +5,7 @@
  * is allowed under the command's permission tier. Extracted for testability.
  */
 
-import type { PermissionTier } from './syscall-rpc.ts';
+import type { PermissionTier } from './syscall-rpc.js';
 import { resolve as resolvePath, normalize } from 'node:path';
 
 const VALID_TIERS: ReadonlySet<string> = new Set(['full', 'read-write', 'read-only', 'isolated']);

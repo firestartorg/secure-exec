@@ -17,8 +17,8 @@ import type {
   ProcessContext,
   DriverProcess,
 } from '@secure-exec/kernel';
-import type { WorkerHandle } from './worker-adapter.ts';
-import { WorkerAdapter } from './worker-adapter.ts';
+import type { WorkerHandle } from './worker-adapter.js';
+import { WorkerAdapter } from './worker-adapter.js';
 import {
   SIGNAL_BUFFER_BYTES,
   DATA_BUFFER_BYTES,
@@ -32,11 +32,11 @@ import {
   type SyscallRequest,
   type WorkerInitData,
   type PermissionTier,
-} from './syscall-rpc.ts';
-import { ERRNO_MAP, ERRNO_EIO } from './wasi-constants.ts';
-import { isWasmBinary, isWasmBinarySync } from './wasm-magic.ts';
-import { resolvePermissionTier } from './permission-check.ts';
-import { ModuleCache } from './module-cache.ts';
+} from './syscall-rpc.js';
+import { ERRNO_MAP, ERRNO_EIO } from './wasi-constants.js';
+import { isWasmBinary, isWasmBinarySync } from './wasm-magic.js';
+import { resolvePermissionTier } from './permission-check.js';
+import { ModuleCache } from './module-cache.js';
 import { readdir, stat } from 'node:fs/promises';
 import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -554,7 +554,7 @@ class WasmVmRuntimeDriver implements RuntimeDriver {
       permissionTier,
     };
 
-    const workerUrl = new URL('./kernel-worker.ts', import.meta.url);
+    const workerUrl = new URL('./kernel-worker.js', import.meta.url);
 
     this._workerAdapter.spawn(workerUrl, { workerData }).then(
       (worker) => {

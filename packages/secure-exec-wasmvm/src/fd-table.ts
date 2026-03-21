@@ -15,18 +15,18 @@ import {
   RIGHTS_DIR_ALL,
   ERRNO_SUCCESS,
   ERRNO_EBADF,
-} from './wasi-constants.ts';
+} from './wasi-constants.js';
 
 import {
   FDEntry,
   FileDescription,
-} from './wasi-types.ts';
+} from './wasi-types.js';
 
 import type {
   WasiFDTable,
   FDResource,
   FDOpenOptions,
-} from './wasi-types.ts';
+} from './wasi-types.js';
 
 // ---------------------------------------------------------------------------
 // FDTable

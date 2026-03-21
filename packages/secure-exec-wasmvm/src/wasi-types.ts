@@ -6,8 +6,8 @@
  * or test helpers (testing).
  */
 
-import type { WasiFiletype } from './wasi-constants.ts';
-export type { WasiFiletype } from './wasi-constants.ts';
+import type { WasiFiletype } from './wasi-constants.js';
+export type { WasiFiletype } from './wasi-constants.js';
 
 // ---------------------------------------------------------------------------
 // VFS error types
