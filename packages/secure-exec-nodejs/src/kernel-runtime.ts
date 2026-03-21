@@ -12,13 +12,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type {
-  RuntimeDriver,
+  KernelRuntimeDriver as RuntimeDriver,
   KernelInterface,
   ProcessContext,
   DriverProcess,
   Permissions,
   VirtualFileSystem,
-} from '@secure-exec/kernel';
+} from '@secure-exec/core';
 import { NodeExecutionDriver } from './execution-driver.js';
 import { createNodeDriver } from './driver.js';
 import {

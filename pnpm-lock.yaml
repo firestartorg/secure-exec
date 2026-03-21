@@ -261,54 +261,6 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
-  packages/kernel:
-    dependencies:
-      '@secure-exec/core':
-        specifier: workspace:*
-        version: link:../secure-exec-core
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.19.3
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
-  packages/os/browser:
-    dependencies:
-      '@secure-exec/browser':
-        specifier: workspace:*
-        version: link:../../secure-exec-browser
-      '@secure-exec/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
-
-  packages/os/node:
-    dependencies:
-      '@secure-exec/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-      '@secure-exec/nodejs':
-        specifier: workspace:*
-        version: link:../../secure-exec-nodejs
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.19.3
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
-
   packages/playground:
     dependencies:
       '@secure-exec/browser':
@@ -331,65 +283,11 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
-  packages/runtime/node:
-    dependencies:
-      '@secure-exec/core':
-        specifier: workspace:*
-        version: link:../../secure-exec-core
-      '@secure-exec/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-      '@secure-exec/nodejs':
-        specifier: workspace:*
-        version: link:../../secure-exec-nodejs
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.19.3
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.19.3)(@vitest/browser@2.1.9)
-
-  packages/runtime/python:
-    dependencies:
-      '@secure-exec/python':
-        specifier: workspace:*
-        version: link:../../secure-exec-python
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.19.3
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
-  packages/runtime/wasmvm:
-    dependencies:
-      '@secure-exec/kernel':
-        specifier: workspace:*
-        version: link:../../kernel
-      '@secure-exec/wasmvm':
-        specifier: workspace:*
-        version: link:../../secure-exec-wasmvm
-    devDependencies:
-      '@types/node':
-        specifier: ^22.10.2
-        version: 22.19.3
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
   packages/secure-exec:
     dependencies:
       '@secure-exec/core':
         specifier: workspace:*
         version: link:../secure-exec-core
-      '@secure-exec/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@secure-exec/nodejs':
         specifier: workspace:*
         version: link:../secure-exec-nodejs
@@ -437,9 +335,6 @@ importers:
       '@secure-exec/core':
         specifier: workspace:*
         version: link:../secure-exec-core
-      '@secure-exec/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       sucrase:
         specifier: ^3.35.0
         version: 3.35.1
@@ -471,9 +366,6 @@ importers:
       '@secure-exec/core':
         specifier: workspace:*
         version: link:../secure-exec-core
-      '@secure-exec/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       '@secure-exec/v8':
         specifier: workspace:*
         version: link:../secure-exec-v8
@@ -511,9 +403,6 @@ importers:
       '@secure-exec/core':
         specifier: workspace:*
         version: link:../secure-exec-core
-      '@secure-exec/kernel':
-        specifier: workspace:*
-        version: link:../kernel
       pyodide:
         specifier: ^0.28.3
         version: 0.28.3
@@ -564,9 +453,9 @@ importers:
 
   packages/secure-exec-wasmvm:
     dependencies:
-      '@secure-exec/kernel':
+      '@secure-exec/core':
         specifier: workspace:*
-        version: link:../kernel
+        version: link:../secure-exec-core
     devDependencies:
       '@types/node':
         specifier: ^22.10.2

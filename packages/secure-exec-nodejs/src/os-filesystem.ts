@@ -8,7 +8,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import type { VirtualFileSystem, VirtualStat, VirtualDirEntry } from "@secure-exec/kernel";
+import type { VirtualFileSystem, VirtualStat, VirtualDirEntry } from "@secure-exec/core";
 
 export interface HostNodeFileSystemOptions {
 	/** Root directory on the host — all paths are relative to this. */

@@ -17,7 +17,7 @@ import type {
 import type {
   KernelInterface,
   ProcessContext,
-} from '@secure-exec/kernel';
+} from '@secure-exec/core';
 
 // Minimal valid WASM module bytes
 const MINIMAL_WASM = new Uint8Array([

@@ -12,11 +12,11 @@
  */
 
 import type {
-  RuntimeDriver,
+  KernelRuntimeDriver as RuntimeDriver,
   KernelInterface,
   ProcessContext,
   DriverProcess,
-} from '@secure-exec/kernel';
+} from '@secure-exec/core';
 import type { WorkerHandle } from './worker-adapter.js';
 import { WorkerAdapter } from './worker-adapter.js';
 import {

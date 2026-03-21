@@ -33,7 +33,6 @@
   },
   "dependencies": {
     "@secure-exec/core": "workspace:*",
-    "@secure-exec/kernel": "workspace:*",
     "pyodide": "^0.28.3"
   },
   "peerDependencies": {

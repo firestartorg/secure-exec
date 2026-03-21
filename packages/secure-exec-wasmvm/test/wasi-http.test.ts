@@ -13,8 +13,8 @@
 
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import { createWasmVmRuntime } from '../src/driver.ts';
-import { createKernel } from '@secure-exec/kernel';
-import type { Kernel } from '@secure-exec/kernel';
+import { createKernel } from '@secure-exec/core';
+import type { Kernel } from '@secure-exec/core';
 import { createServer as createHttpServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createServer as createHttpsServer, type Server as HttpsServer } from 'node:https';
 import { execSync } from 'node:child_process';

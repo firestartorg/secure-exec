@@ -107,7 +107,6 @@
   },
   "dependencies": {
     "@secure-exec/core": "workspace:*",
-    "@secure-exec/kernel": "workspace:*",
     "@secure-exec/v8": "workspace:*",
     "esbuild": "^0.27.1",
     "node-stdlib-browser": "^1.3.1"

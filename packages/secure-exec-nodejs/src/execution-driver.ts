@@ -62,7 +62,7 @@ import {
 import type {
 	Permissions,
 	VirtualFileSystem,
-} from "@secure-exec/kernel";
+} from "@secure-exec/core";
 import type {
 	CommandExecutor,
 	SpawnedProcess,

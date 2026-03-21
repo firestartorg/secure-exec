@@ -7,7 +7,7 @@
  */
 
 import { Terminal } from "@xterm/headless";
-import type { Kernel } from "@secure-exec/kernel";
+import type { Kernel } from "@secure-exec/core";
 
 type ShellHandle = ReturnType<Kernel["openShell"]>;
 

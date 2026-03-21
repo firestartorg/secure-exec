@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import type {
 	Permissions,
 	VirtualFileSystem,
-} from "@secure-exec/kernel";
+} from "@secure-exec/core";
 import type {
 	CommandExecutor,
 	NetworkAdapter,

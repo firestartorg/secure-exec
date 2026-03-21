@@ -11,11 +11,11 @@ import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type {
-  RuntimeDriver,
+  KernelRuntimeDriver as RuntimeDriver,
   KernelInterface,
   ProcessContext,
   DriverProcess,
-} from '@secure-exec/kernel';
+} from '@secure-exec/core';
 
 export interface PythonRuntimeOptions {
   /** CPU time limit in ms for each Python execution (no limit by default). */

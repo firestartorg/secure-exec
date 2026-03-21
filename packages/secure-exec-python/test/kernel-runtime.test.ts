@@ -11,14 +11,14 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createPythonRuntime } from '../src/kernel-runtime.ts';
 import type { PythonRuntimeOptions } from '../src/kernel-runtime.ts';
-import { createKernel } from '@secure-exec/kernel';
+import { createKernel } from '@secure-exec/core';
 import type {
-  RuntimeDriver,
+  KernelRuntimeDriver as RuntimeDriver,
   KernelInterface,
   ProcessContext,
   DriverProcess,
   Kernel,
-} from '@secure-exec/kernel';
+} from '@secure-exec/core';
 
 // Check if pyodide is available for integration tests
 let pyodideAvailable = false;

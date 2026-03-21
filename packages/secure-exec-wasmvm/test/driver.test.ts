@@ -10,14 +10,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createWasmVmRuntime, WASMVM_COMMANDS, mapErrorToErrno } from '../src/driver.ts';
 import type { WasmVmRuntimeOptions } from '../src/driver.ts';
 import { DATA_BUFFER_BYTES } from '../src/syscall-rpc.ts';
-import { createKernel, KernelError } from '@secure-exec/kernel';
+import { createKernel, KernelError } from '@secure-exec/core';
 import type {
-  RuntimeDriver,
+  KernelRuntimeDriver as RuntimeDriver,
   KernelInterface,
   ProcessContext,
   DriverProcess,
   Kernel,
-} from '@secure-exec/kernel';
+} from '@secure-exec/core';
 import { ERRNO_MAP } from '../src/wasi-constants.ts';
 import { existsSync } from 'node:fs';
 import { writeFile, mkdir, rm, symlink } from 'node:fs/promises';

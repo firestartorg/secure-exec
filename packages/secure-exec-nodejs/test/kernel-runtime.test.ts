@@ -9,14 +9,14 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createNodeRuntime } from '../src/kernel-runtime.ts';
 import type { NodeRuntimeOptions } from '../src/kernel-runtime.ts';
-import { createKernel } from '@secure-exec/kernel';
+import { createKernel } from '@secure-exec/core';
 import type {
-  RuntimeDriver,
+  KernelRuntimeDriver as RuntimeDriver,
   KernelInterface,
   ProcessContext,
   DriverProcess,
   Kernel,
-} from '@secure-exec/kernel';
+} from '@secure-exec/core';
 
 /**
  * Minimal mock RuntimeDriver for testing cross-runtime dispatch.

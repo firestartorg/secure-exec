@@ -1,4 +1,4 @@
-// VFS and permission types — canonical source is @secure-exec/kernel
+// VFS and permission types — canonical source is @secure-exec/core
 export type {
 	ChildProcessAccessRequest,
 	EnvAccessRequest,
@@ -10,7 +10,7 @@ export type {
 	VirtualDirEntry,
 	VirtualFileSystem,
 	VirtualStat,
-} from "@secure-exec/kernel";
+} from "@secure-exec/core";
 
 // Core-only types
 export type {

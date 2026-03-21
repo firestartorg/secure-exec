@@ -50,7 +50,7 @@ import type {
 	NetworkAdapter,
 	SpawnedProcess,
 } from "@secure-exec/core";
-import type { VirtualFileSystem } from "@secure-exec/kernel";
+import type { VirtualFileSystem } from "@secure-exec/core";
 import type { ResolutionCache } from "./package-bundler.js";
 import type {
 	StdioEvent,

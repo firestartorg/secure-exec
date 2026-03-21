@@ -12,14 +12,14 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createWasmVmRuntime, WASMVM_COMMANDS } from '../src/driver.ts';
 import type { WasmVmRuntimeOptions } from '../src/driver.ts';
-import { createKernel } from '@secure-exec/kernel';
+import { createKernel } from '@secure-exec/core';
 import type {
-  RuntimeDriver,
+  KernelRuntimeDriver as RuntimeDriver,
   KernelInterface,
   ProcessContext,
   DriverProcess,
   Kernel,
-} from '@secure-exec/kernel';
+} from '@secure-exec/core';
 import { writeFile, mkdir, rm, symlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';

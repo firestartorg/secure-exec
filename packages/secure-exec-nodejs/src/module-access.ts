@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as fsSync from "node:fs";
 import path from "node:path";
 import { createEaccesError } from "@secure-exec/core/internal/shared/errors";
-import type { VirtualDirEntry, VirtualFileSystem, VirtualStat } from "@secure-exec/kernel";
+import type { VirtualDirEntry, VirtualFileSystem, VirtualStat } from "@secure-exec/core";
 
 /**
  * Options controlling which host node_modules are projected into the sandbox.

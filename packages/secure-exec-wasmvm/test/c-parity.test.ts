@@ -9,8 +9,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createWasmVmRuntime } from '../src/driver.ts';
-import { createKernel } from '@secure-exec/kernel';
-import type { Kernel } from '@secure-exec/kernel';
+import { createKernel } from '@secure-exec/core';
+import type { Kernel } from '@secure-exec/core';
 import { existsSync } from 'node:fs';
 import { writeFile as fsWriteFile, readFile as fsReadFile, mkdtemp, rm, mkdir as fsMkdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
