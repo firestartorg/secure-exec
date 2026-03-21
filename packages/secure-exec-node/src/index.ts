@@ -38,6 +38,21 @@ export {
 	createProcessConfigForExecution,
 } from "./bridge-handlers.js";
 
+// Kernel runtime driver (RuntimeDriver for kernel.mount())
+export { createNodeRuntime } from "./kernel-runtime.js";
+export type { NodeRuntimeOptions } from "./kernel-runtime.js";
+export {
+	createKernelCommandExecutor,
+	createKernelVfsAdapter,
+	createHostFallbackVfs,
+} from "./kernel-runtime.js";
+
+// OS platform adapters (host filesystem with root, worker threads)
+export { HostNodeFileSystem } from "./os-filesystem.js";
+export type { HostNodeFileSystemOptions } from "./os-filesystem.js";
+export { NodeWorkerAdapter } from "./worker-adapter.js";
+export type { WorkerHandle } from "./worker-adapter.js";
+
 // Timeout utilities (re-exported from core)
 export {
 	TIMEOUT_EXIT_CODE,

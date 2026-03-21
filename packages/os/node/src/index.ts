@@ -1,9 +1,6 @@
 /**
- * @secure-exec/os-node
- *
- * Node.js platform adapter — provides filesystem (wrapping node:fs)
- * and worker thread abstractions for the kernel.
+ * @deprecated Canonical source moved to @secure-exec/node.
+ * This package re-exports for backward compatibility.
  */
-
-export { NodeFileSystem } from "./filesystem.js";
-export { NodeWorkerAdapter } from "./worker.js";
+export { HostNodeFileSystem as NodeFileSystem } from '@secure-exec/node';
+export { NodeWorkerAdapter } from '@secure-exec/node';
