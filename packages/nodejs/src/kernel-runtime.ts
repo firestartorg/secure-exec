@@ -22,6 +22,7 @@ import type {
 import { NodeExecutionDriver } from './execution-driver.js';
 import { createNodeDriver } from './driver.js';
 import type { BindingTree } from './bindings.js';
+import { isESM } from '@secure-exec/core/internal/shared/esm-utils';
 import {
   allowAllChildProcess,
   allowAllFs,
@@ -484,12 +485,16 @@ class NodeRuntimeDriver implements RuntimeDriver {
       });
       this._activeDrivers.set(ctx.pid, executionDriver);
 
+      // Detect ESM files and use V8 native module system
+      const useEsm = isESM(code, filePath);
+
       // Execute with stdout/stderr capture and stdin data
       const result = await executionDriver.exec(code, {
         filePath,
         env: ctx.env,
         cwd: ctx.cwd,
         stdin: stdinData,
+        esm: useEsm,
         onStdio: (event) => {
           const data = new TextEncoder().encode(event.message + '\n');
           if (event.channel === 'stdout') {

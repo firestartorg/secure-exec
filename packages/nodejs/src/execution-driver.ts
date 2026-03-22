@@ -387,7 +387,7 @@ export class NodeExecutionDriver implements RuntimeDriver {
 
 	async exec(code: string, options?: ExecOptions): Promise<ExecResult> {
 		const result = await this.executeInternal({
-			mode: "exec",
+			mode: options?.esm ? "run" : "exec",
 			code,
 			filePath: options?.filePath,
 			env: options?.env,
@@ -461,7 +461,9 @@ export class NodeExecutionDriver implements RuntimeDriver {
 					maxOutputBytes: s.maxOutputBytes,
 				}),
 				...buildModuleLoadingBridgeHandlers({
-					filesystem: s.filesystem,
+					// Module resolution uses the raw (unwrapped) filesystem — bypasses
+					// user-level permissions since it's an internal V8 operation
+					filesystem: this.rawFilesystem ?? s.filesystem,
 					resolutionCache: s.resolutionCache,
 					sandboxToHostPath: (p) => {
 						const rfs = this.rawFilesystem as any;
@@ -796,39 +798,27 @@ function buildPostRestoreScript(
 		parts.push(getIsolateRuntimeSource("applyTimingMitigationOff"));
 	}
 
-	// Apply execution overrides (env, cwd, stdin) for exec mode
-	if (mode === "exec") {
-		if (processConfig.env) {
-			parts.push(`globalThis.__runtimeProcessEnvOverride = ${JSON.stringify(processConfig.env)};`);
-			parts.push(getIsolateRuntimeSource("overrideProcessEnv"));
-		}
-		if (processConfig.cwd) {
-			parts.push(`globalThis.__runtimeProcessCwdOverride = ${JSON.stringify(processConfig.cwd)};`);
-			parts.push(getIsolateRuntimeSource("overrideProcessCwd"));
-		}
-		if (bridgeConfig.stdin !== undefined) {
-			parts.push(`globalThis.__runtimeStdinData = ${JSON.stringify(bridgeConfig.stdin)};`);
-			parts.push(getIsolateRuntimeSource("setStdinData"));
-		}
-		// Set CommonJS globals
-		parts.push(getIsolateRuntimeSource("initCommonjsModuleGlobals"));
-		if (filePath) {
-			const dirname = filePath.includes("/")
-				? filePath.substring(0, filePath.lastIndexOf("/")) || "/"
-				: "/";
-			parts.push(`globalThis.__runtimeCommonJsFileConfig = ${JSON.stringify({ filePath, dirname })};`);
-			parts.push(getIsolateRuntimeSource("setCommonjsFileGlobals"));
-		}
-	} else {
-		// run mode — still need CommonJS module globals
-		parts.push(getIsolateRuntimeSource("initCommonjsModuleGlobals"));
-		if (filePath) {
-			const dirname = filePath.includes("/")
-				? filePath.substring(0, filePath.lastIndexOf("/")) || "/"
-				: "/";
-			parts.push(`globalThis.__runtimeCommonJsFileConfig = ${JSON.stringify({ filePath, dirname })};`);
-			parts.push(getIsolateRuntimeSource("setCommonjsFileGlobals"));
-		}
+	// Apply execution overrides (env, cwd, stdin) for both exec and run modes
+	if (processConfig.env) {
+		parts.push(`globalThis.__runtimeProcessEnvOverride = ${JSON.stringify(processConfig.env)};`);
+		parts.push(getIsolateRuntimeSource("overrideProcessEnv"));
+	}
+	if (processConfig.cwd) {
+		parts.push(`globalThis.__runtimeProcessCwdOverride = ${JSON.stringify(processConfig.cwd)};`);
+		parts.push(getIsolateRuntimeSource("overrideProcessCwd"));
+	}
+	if (bridgeConfig.stdin !== undefined) {
+		parts.push(`globalThis.__runtimeStdinData = ${JSON.stringify(bridgeConfig.stdin)};`);
+		parts.push(getIsolateRuntimeSource("setStdinData"));
+	}
+	// Set CommonJS globals (needed in both modes for require() compatibility)
+	parts.push(getIsolateRuntimeSource("initCommonjsModuleGlobals"));
+	if (filePath) {
+		const dirname = filePath.includes("/")
+			? filePath.substring(0, filePath.lastIndexOf("/")) || "/"
+			: "/";
+		parts.push(`globalThis.__runtimeCommonJsFileConfig = ${JSON.stringify({ filePath, dirname })};`);
+		parts.push(getIsolateRuntimeSource("setCommonjsFileGlobals"));
 	}
 
 	// Apply custom global exposure policy

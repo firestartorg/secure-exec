@@ -12,11 +12,11 @@ import type { Kernel } from '../../../core/src/kernel/index.ts';
 import { InMemoryFileSystem } from '../../../browser/src/os-filesystem.ts';
 import { createNodeRuntime } from '../../../nodejs/src/kernel-runtime.ts';
 
-async function createNodeKernel(): Promise<{ kernel: Kernel; dispose: () => Promise<void> }> {
+async function createNodeKernel(): Promise<{ kernel: Kernel; vfs: InMemoryFileSystem; dispose: () => Promise<void> }> {
   const vfs = new InMemoryFileSystem();
   const kernel = createKernel({ filesystem: vfs });
   await kernel.mount(createNodeRuntime());
-  return { kernel, dispose: () => kernel.dispose() };
+  return { kernel, vfs, dispose: () => kernel.dispose() };
 }
 
 /** Collect all output from a PTY-backed process spawned via openShell. */
@@ -138,5 +138,106 @@ describe('bridge gap: setRawMode via PTY', () => {
     const output = stderr.join('');
     expect(output).toContain('ERR:');
     expect(output).toContain('not a TTY');
+  }, 15_000);
+});
+
+// ---------------------------------------------------------------------------
+// Native ESM mode (V8 module system)
+// ---------------------------------------------------------------------------
+
+describe('native ESM execution via V8 module system', () => {
+  let ctx: { kernel: Kernel; vfs: InMemoryFileSystem; dispose: () => Promise<void> };
+
+  afterEach(async () => {
+    await ctx?.dispose();
+  });
+
+  it('ESM module with import/export runs correctly via kernel.spawn()', async () => {
+    ctx = await createNodeKernel();
+    // Write an ESM file to VFS
+    await ctx.vfs.writeFile('/app/main.mjs', `
+      const msg = 'ESM_OK';
+      console.log(msg);
+    `);
+
+    const stdout: string[] = [];
+    const proc = ctx.kernel.spawn('node', ['/app/main.mjs'], {
+      onStdout: (data) => stdout.push(new TextDecoder().decode(data)),
+    });
+    const exitCode = await proc.wait();
+
+    expect(exitCode).toBe(0);
+    expect(stdout.join('')).toContain('ESM_OK');
+  }, 15_000);
+
+  it('CJS module with require() still runs correctly via kernel.spawn()', async () => {
+    ctx = await createNodeKernel();
+    // CJS code — no import/export syntax, uses require
+    const stdout: string[] = [];
+    const proc = ctx.kernel.spawn('node', ['-e', "const os = require('os'); console.log('CJS_OK:' + os.platform())"], {
+      onStdout: (data) => stdout.push(new TextDecoder().decode(data)),
+    });
+    const exitCode = await proc.wait();
+
+    expect(exitCode).toBe(0);
+    expect(stdout.join('')).toContain('CJS_OK:');
+  }, 15_000);
+
+  it('ESM file with static import resolves via V8 module_resolve_callback', async () => {
+    ctx = await createNodeKernel();
+    // Write two ESM files — main imports from helper
+    await ctx.vfs.writeFile('/app/helper.mjs', `
+      export const greeting = 'HELLO_FROM_ESM';
+    `);
+    await ctx.vfs.writeFile('/app/main.mjs', `
+      import { greeting } from './helper.mjs';
+      console.log(greeting);
+    `);
+
+    const stdout: string[] = [];
+    const proc = ctx.kernel.spawn('node', ['/app/main.mjs'], {
+      onStdout: (data) => stdout.push(new TextDecoder().decode(data)),
+    });
+    const exitCode = await proc.wait();
+
+    expect(exitCode).toBe(0);
+    expect(stdout.join('')).toContain('HELLO_FROM_ESM');
+  }, 15_000);
+
+  it('import.meta.url is populated for ESM modules', async () => {
+    ctx = await createNodeKernel();
+    await ctx.vfs.writeFile('/app/meta.mjs', `
+      console.log('META_URL:' + import.meta.url);
+    `);
+
+    const stdout: string[] = [];
+    const proc = ctx.kernel.spawn('node', ['/app/meta.mjs'], {
+      onStdout: (data) => stdout.push(new TextDecoder().decode(data)),
+    });
+    const exitCode = await proc.wait();
+
+    expect(exitCode).toBe(0);
+    const output = stdout.join('');
+    expect(output).toContain('META_URL:file:///app/meta.mjs');
+  }, 15_000);
+
+  it('dynamic import() works in ESM via V8 native callback', async () => {
+    ctx = await createNodeKernel();
+    await ctx.vfs.writeFile('/app/dynamic-dep.mjs', `
+      export const value = 'DYNAMIC_IMPORT_OK';
+    `);
+    await ctx.vfs.writeFile('/app/dynamic-main.mjs', `
+      const mod = await import('./dynamic-dep.mjs');
+      console.log(mod.value);
+    `);
+
+    const stdout: string[] = [];
+    const proc = ctx.kernel.spawn('node', ['/app/dynamic-main.mjs'], {
+      onStdout: (data) => stdout.push(new TextDecoder().decode(data)),
+    });
+    const exitCode = await proc.wait();
+
+    expect(exitCode).toBe(0);
+    expect(stdout.join('')).toContain('DYNAMIC_IMPORT_OK');
   }, 15_000);
 });

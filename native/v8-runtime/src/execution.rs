@@ -589,6 +589,40 @@ fn clear_module_state() {
 /// Must be called after isolate creation (not captured in snapshots).
 pub fn enable_dynamic_import(isolate: &mut v8::OwnedIsolate) {
     isolate.set_host_import_module_dynamically_callback(dynamic_import_callback);
+    isolate.set_host_initialize_import_meta_object_callback(import_meta_callback);
+}
+
+/// V8 HostInitializeImportMetaObjectCallback — populates import.meta for ES modules.
+///
+/// Sets import.meta.url to "file://<path>" using the module's resolved path
+/// from MODULE_RESOLVE_STATE.module_names.
+extern "C" fn import_meta_callback(
+    context: v8::Local<v8::Context>,
+    module: v8::Local<v8::Module>,
+    meta: v8::Local<v8::Object>,
+) {
+    // Look up the module's file path from thread-local state
+    let hash = module.get_identity_hash();
+    let url = MODULE_RESOLVE_STATE.with(|cell| {
+        let borrow = cell.borrow();
+        borrow.as_ref().and_then(|state| {
+            state.module_names.get(&hash).map(|path| {
+                if path.starts_with("file://") {
+                    path.clone()
+                } else {
+                    format!("file://{}", path)
+                }
+            })
+        })
+    });
+
+    if let Some(url) = url {
+        // SAFETY: callback is invoked within V8 execution scope
+        let scope = unsafe { &mut v8::CallbackScope::new(context) };
+        let key = v8::String::new(scope, "url").unwrap();
+        let val = v8::String::new(scope, &url).unwrap();
+        meta.create_data_property(scope, key.into(), val.into());
+    }
 }
 
 /// V8 HostImportModuleDynamicallyCallback — called when import() is evaluated.

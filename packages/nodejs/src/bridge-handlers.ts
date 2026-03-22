@@ -1365,10 +1365,10 @@ export function buildModuleLoadingBridgeHandlers(
 			return `const _p = (function(){var module={exports:{}};var exports=module.exports;${code};return module.exports})();\nexport default _p;\n` +
 				`for(const[k,v]of Object.entries(_p)){if(k!=='default'&&/^[A-Za-z_$]/.test(k))globalThis['__esm_'+k]=v;}\n`;
 		}
-		// Regular file — keep ESM source intact for V8 module system
+		// Regular file — keep source intact for V8 module system
+		// V8 handles import() natively via dynamic_import_callback (US-023)
 		const source = await loadFile(p, deps.filesystem);
-		if (source === null) return null;
-		return transformDynamicImport(source);
+		return source;
 	};
 
 	return handlers;
