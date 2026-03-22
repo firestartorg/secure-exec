@@ -119,6 +119,7 @@ impl SessionManager {
         };
         let join_handle = thread::Builder::new()
             .name(format!("session-{}", name_prefix))
+            .stack_size(32 * 1024 * 1024) // 32 MiB — V8 with large module graphs needs extra stack
             .spawn(move || {
                 session_thread(
                     heap_limit_mb,

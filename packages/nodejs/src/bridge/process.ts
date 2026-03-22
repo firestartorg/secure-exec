@@ -772,7 +772,14 @@ const process: Record<string, unknown> & {
   },
 
   nextTick(callback: (...args: unknown[]) => void, ...args: unknown[]): void {
-    if (typeof queueMicrotask === "function") {
+    // Route through bridge timer to avoid infinite microtask loops in V8's
+    // perform_microtask_checkpoint() — TUI render cycles (Pi) use nextTick
+    // in requestRender → doRender → requestRender loops
+    if (typeof _scheduleTimer !== "undefined") {
+      _scheduleTimer
+        .apply(undefined, [0], { result: { promise: true } })
+        .then(() => callback(...args));
+    } else if (typeof queueMicrotask === "function") {
       queueMicrotask(() => callback(...args));
     } else {
       Promise.resolve().then(() => callback(...args));
@@ -1076,13 +1083,22 @@ function _checkTimerBudget(): void {
   }
 }
 
-// queueMicrotask fallback
+// queueMicrotask — route through bridge timer when available to prevent
+// infinite microtask loops in V8's perform_microtask_checkpoint().
+// TUI frameworks (Ink/React) schedule renders via queueMicrotask, which
+// creates unbounded microtask chains that block the V8 event loop.
 const _queueMicrotask =
-  typeof queueMicrotask === "function"
-    ? queueMicrotask
-    : function (fn: () => void): void {
-        Promise.resolve().then(fn);
-      };
+  typeof _scheduleTimer !== "undefined"
+    ? function (fn: () => void): void {
+        _scheduleTimer
+          .apply(undefined, [0], { result: { promise: true } })
+          .then(fn);
+      }
+    : typeof queueMicrotask === "function"
+      ? queueMicrotask
+      : function (fn: () => void): void {
+          Promise.resolve().then(fn);
+        };
 
 /**
  * Timer handle that mimics Node.js Timeout (ref/unref/Symbol.toPrimitive).
@@ -1125,11 +1141,9 @@ export function setTimeout(
 
   const actualDelay = delay ?? 0;
 
-  // Use host timer for actual delays if available and delay > 0
-  if (typeof _scheduleTimer !== "undefined" && actualDelay > 0) {
-    // _scheduleTimer.apply() returns a Promise that resolves after the delay
-    // Using { result: { promise: true } } tells the V8 runtime to wait for the
-    // host Promise to resolve before resolving the apply() Promise
+  // Route ALL timers through bridge when available (including delay=0) to
+  // avoid infinite microtask loops in V8's perform_microtask_checkpoint()
+  if (typeof _scheduleTimer !== "undefined") {
     _scheduleTimer
       .apply(undefined, [actualDelay], { result: { promise: true } })
       .then(() => {
@@ -1143,7 +1157,7 @@ export function setTimeout(
         }
       });
   } else {
-    // Use microtask for zero delay or when host timer is unavailable
+    // Use microtask only when host timer bridge is unavailable
     _queueMicrotask(() => {
       if (_timers.has(id)) {
         _timers.delete(id);
@@ -1184,8 +1198,8 @@ export function setInterval(
   const scheduleNext = () => {
     if (!_intervals.has(id)) return; // Interval was cleared
 
-    if (typeof _scheduleTimer !== "undefined" && actualDelay > 0) {
-      // Use host timer for actual delays
+    if (typeof _scheduleTimer !== "undefined") {
+      // Route through bridge timer to avoid microtask loops
       _scheduleTimer
         .apply(undefined, [actualDelay], { result: { promise: true } })
         .then(() => {
@@ -1200,7 +1214,7 @@ export function setInterval(
           }
         });
     } else {
-      // Use microtask for zero delay or when host timer unavailable
+      // Use microtask only when host timer bridge is unavailable
       _queueMicrotask(() => {
         if (_intervals.has(id)) {
           try {
@@ -1336,10 +1350,9 @@ export function setupGlobals(): void {
   g.setImmediate = setImmediate;
   g.clearImmediate = clearImmediate;
 
-  // queueMicrotask
-  if (typeof g.queueMicrotask === "undefined") {
-    g.queueMicrotask = _queueMicrotask;
-  }
+  // queueMicrotask — always override to route through bridge timer when
+  // available, preventing infinite microtask loops from TUI render cycles
+  g.queueMicrotask = _queueMicrotask;
 
   // URL
   if (typeof g.URL === "undefined") {
