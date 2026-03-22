@@ -378,6 +378,7 @@ pub fn execute_script(
                 None => (1, None),
             };
         }
+
     }
 
     if bridge_ctx.is_some() {
@@ -562,12 +563,12 @@ fn build_os_config<'s>(
 
 /// Thread-local state for module resolution during execute_module.
 /// Avoids passing user data through V8's ResolveModuleCallback (which is a plain fn pointer).
-struct ModuleResolveState {
-    bridge_ctx: *const BridgeCallContext,
+pub(crate) struct ModuleResolveState {
+    pub(crate) bridge_ctx: *const BridgeCallContext,
     /// identity_hash → resource_name for referrer lookup
-    module_names: HashMap<NonZeroI32, String>,
+    pub(crate) module_names: HashMap<NonZeroI32, String>,
     /// resolved_path → Global<Module> cache
-    module_cache: HashMap<String, v8::Global<v8::Module>>,
+    pub(crate) module_cache: HashMap<String, v8::Global<v8::Module>>,
 }
 
 // SAFETY: ModuleResolveState is only accessed from the session thread
@@ -576,7 +577,7 @@ struct ModuleResolveState {
 unsafe impl Send for ModuleResolveState {}
 
 thread_local! {
-    static MODULE_RESOLVE_STATE: RefCell<Option<ModuleResolveState>> = const { RefCell::new(None) };
+    pub(crate) static MODULE_RESOLVE_STATE: RefCell<Option<ModuleResolveState>> = const { RefCell::new(None) };
 }
 
 fn clear_module_state() {

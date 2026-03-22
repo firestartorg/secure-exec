@@ -511,18 +511,33 @@ fn session_thread(
                             )
                         };
 
+                        // Re-initialize module resolve state for the event loop.
+                        // execute_script/execute_module clear MODULE_RESOLVE_STATE
+                        // on return, but dynamic import() calls during the event loop
+                        // (e.g. from timer callbacks) need it to resolve modules.
+                        execution::MODULE_RESOLVE_STATE.with(|cell| {
+                            if cell.borrow().is_none() {
+                                *cell.borrow_mut() = Some(execution::ModuleResolveState {
+                                    bridge_ctx: &bridge_ctx as *const _,
+                                    module_names: std::collections::HashMap::new(),
+                                    module_cache: std::collections::HashMap::new(),
+                                });
+                            }
+                        });
+
                         // Run event loop if there are pending async promises
                         let mut terminated = if pending.len() > 0 {
                             let scope = &mut v8::HandleScope::new(iso);
                             let ctx = v8::Local::new(scope, &exec_context);
                             let scope = &mut v8::ContextScope::new(scope, ctx);
-                            !run_event_loop(
+                            let result = run_event_loop(
                                 scope,
                                 &rx,
                                 &pending,
                                 maybe_abort_rx.as_ref(),
                                 Some(&deferred_queue),
-                            )
+                            );
+                            !result
                         } else {
                             false
                         };
@@ -559,6 +574,11 @@ fn session_thread(
                                 }
                             }
                         }
+
+                        // Clear module resolve state after event loop completes
+                        execution::MODULE_RESOLVE_STATE.with(|cell| {
+                            *cell.borrow_mut() = None;
+                        });
 
                         // Check if timeout fired
                         let timed_out = timeout_guard.as_ref().is_some_and(|g| g.timed_out());
@@ -737,7 +757,6 @@ pub(crate) fn run_event_loop(
                     Err(_) => return false,
                 },
                 recv(abort) -> _ => {
-                    // Timeout fired — abort channel closed
                     scope.terminate_execution();
                     return false;
                 },
@@ -778,13 +797,13 @@ fn dispatch_event_loop_frame(
             let (result, error) = if status == 1 {
                 (None, Some(String::from_utf8_lossy(&payload).to_string()))
             } else if !payload.is_empty() {
-                // status=0: V8-serialized, status=2: raw binary (Uint8Array)
+                // V8-serialized or raw binary
                 (Some(payload), None)
             } else {
                 (None, None)
             };
             let _ = crate::bridge::resolve_pending_promise(scope, pending, call_id, result, error);
-            // Microtasks already flushed in resolve_pending_promise
+            scope.perform_microtask_checkpoint();
             true
         }
         BinaryFrame::StreamEvent {
@@ -846,6 +865,10 @@ impl ChannelResponseReceiver {
 }
 
 impl crate::host_call::ResponseReceiver for ChannelResponseReceiver {
+    fn defer(&self, frame: BinaryFrame) {
+        self.deferred.lock().unwrap().push_back(frame);
+    }
+
     fn recv_response(&self) -> Result<BinaryFrame, String> {
         loop {
             // Wait for next command, with optional abort monitoring
