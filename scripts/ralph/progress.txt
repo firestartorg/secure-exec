@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- V8 SIGSEGV on v134.5.0 during Pi interactive TUI init is a confirmed blocker — not a stack overflow, not a bridge issue, crash is inside V8 JIT/C++ code after ~1600 modules loaded
+- process.nextTick, queueMicrotask, and setTimeout(fn, 0) all route through _scheduleTimer bridge call (not V8 microtasks) — prevents perform_microtask_checkpoint() infinite loops
 - Kernel VFS canonical source is now packages/secure-exec-core/src/kernel/vfs.ts — includes realpath, pread, full VirtualStat (ino, nlink, uid, gid)
 - @secure-exec/kernel package has been deleted — all kernel types/functions import from @secure-exec/core directly
 - Use `KernelRuntimeDriver as RuntimeDriver` when importing kernel RuntimeDriver from @secure-exec/core (core also exports an SDK-level `RuntimeDriver` which is different)
@@ -1053,4 +1055,26 @@ Started: Sat Mar 21 02:49:43 AM PDT 2026
   - V8 MicrotasksPolicy::Explicit is NOT a drop-in fix — it breaks sync bridge calls that depend on auto-microtask processing within CJS require() chains
   - The real fix is to implement a Node.js-like nextTick queue that runs between event loop phases, not as V8 microtasks
   - Pi's TUI framework (pi-tui) uses requestRender → process.nextTick(doRender) pattern that creates infinite microtask loops in V8 sandbox
+---
+
+## 2026-03-22 - US-028 (continued - bridge timer routing + V8 SIGSEGV confirmed)
+- Routed process.nextTick, queueMicrotask, and setTimeout(fn, 0) through _scheduleTimer bridge handler instead of V8 microtasks
+- Overrode global queueMicrotask unconditionally to prevent TUI framework (Ink/React) microtask loops
+- Changed setTimeout/setInterval to always use bridge timer when _scheduleTimer available (not just delay > 0)
+- Increased session thread stack size to 32 MiB for V8 with large module graphs
+- Verified: simple ESM interactive process stays alive correctly (keepalive timer + bridge timers work)
+- Verified: Pi module import succeeds, TUI initialization starts (escape sequences visible), then V8 SIGSEGV
+- **V8 SIGSEGV confirmed on v134.5.0**: child process exit handler reports signal=SIGSEGV
+  - Crash occurs AFTER successful module import (~1600 modules) during Pi's interactive TUI initialization
+  - Pi headless mode works fine (same module count) — crash is specific to interactive mode event loop
+  - 32 MiB stack size did not help — not a stack overflow
+  - No stderr output from V8 process before crash — likely internal V8 JIT/C++ code fault
+- All existing tests pass: 79/79 node test suite, 16/16 bridge-gap, 5/6 pi-headless (bash test pre-existing WASM skip)
+- Files changed: native/v8-runtime/src/session.rs, packages/nodejs/src/bridge/process.ts
+- **Learnings for future iterations:**
+  - process.nextTick via _scheduleTimer(0) bridge call correctly prevents microtask checkpoint hangs — each callback becomes an event loop iteration, not a microtask within perform_microtask_checkpoint()
+  - Promise.resolve().then() chains CANNOT be intercepted by overriding queueMicrotask — they create V8-internal PromiseReactionJobs
+  - The V8 SIGSEGV on v134.5.0 is distinct from the v130.0.7 NULL dereference — different crash point, same symptom
+  - V8 sidecar "IPC connection closed" error flows: session.execute() rejects → executeInternal() catch → returns { code: 1, errorMessage } → kernel-runtime resolves (not rejects)
+  - To debug V8 SIGSEGV: need to run binary under GDB or with ASAN (release builds strip symbols, backtrace_symbols_fd returns unhelpful addresses)
 ---
