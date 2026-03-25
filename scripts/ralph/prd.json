@@ -172,7 +172,7 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "runtime.run() completes with exit code 0 but result.exports is always undefined. The export extraction in runtimeDriver.run() isn't capturing module.exports. May be related to US-008 bridge bootstrap issue \u2014 if require is undefined, module.exports assignment can't work either."
     },
     {

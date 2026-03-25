@@ -7,6 +7,7 @@
 - `bridge-initial-globals.ts` intentionally removes `SharedArrayBuffer`; when vendored conformance files hard-require it, classify the expectation as a `security-constraint` instead of treating the failure as a crypto implementation bug
 - When a crypto/node-conformance expectation reason looks stale, temporarily remove just that entry and rerun the exact vendored file filter; the runner prints the real sandbox stderr, which is often a missing fixture or error-shape mismatch rather than the older bridge-gap guess
 - Host-side ESM packages in `packages/nodejs/src/` cannot use bare `require(...)`; standalone `dist/` execution runs them as real ESM, so bridge helpers must use static imports or `createRequire()`
+- Standalone `dist/` smoke tests that spawn `node --input-type=module -e ...` should flush `process.stdout.write(...)` via a callback and then `process.exit(0)`; otherwise the verification script can print the right JSON but linger long enough for Vitest to hit its timeout
 - Conformance tests live in packages/secure-exec/tests/node-conformance/ — vendored Node.js v22.14.0 test/parallel/
 - Runner is packages/secure-exec/tests/node-conformance/runner.test.ts — run with: pnpm vitest run packages/secure-exec/tests/node-conformance/runner.test.ts
 - Expectations are in packages/secure-exec/tests/node-conformance/expectations.json — each entry has expected (pass/fail/skip), reason, category
@@ -103,4 +104,12 @@
   - Standalone `dist/` verification has to exercise the built package from a real host `node` process; vitest-importing source files can hide ESM-only failures in host bridge code.
   - `packages/nodejs/src/bridge-handlers.ts` runs on the host as ESM, so any leftover `require("@secure-exec/core")` calls will only fail once the published-style `dist/` path is used.
   - When a spawned verification script only needs to report pass/fail state, explicitly flushing stdout and exiting keeps the smoke test focused on bootstrap behavior instead of shared-runtime process lifetime.
+---
+## [2026-03-25 04:31 PDT] - US-009
+- Verified the underlying `runtime.run()` export capture issue is already fixed on the current branch and added standalone `dist/` regression coverage for CommonJS object/scalar/nested `module.exports` plus ESM named exports.
+- Files changed: `packages/secure-exec/tests/runtime-driver/node/standalone-dist-smoke.test.ts`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`
+- **Learnings for future iterations:**
+  - `US-008`'s standalone bootstrap fix also restored `runtime.run()` export capture from `packages/secure-exec/dist/index.js`; the missing piece was regression coverage, not another runtime patch.
+  - A standalone smoke that validates multiple `run()` calls should flush stdout through the write callback and exit explicitly after `runtime.terminate()` to keep Vitest from timing out on a lingering host process.
+  - This test area is best exercised against built `dist/` imports, because source-level Vitest coverage already passes and does not prove publish-style behavior.
 ---
