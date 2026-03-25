@@ -269,6 +269,26 @@ export const NODE_CUSTOM_GLOBAL_INVENTORY: readonly CustomGlobalInventoryEntry[]
 		rationale: "Host prime generation bridge reference.",
 	},
 	{
+		name: "_cryptoDiffieHellman",
+		classification: "hardened",
+		rationale: "Host stateless Diffie-Hellman bridge reference.",
+	},
+	{
+		name: "_cryptoDiffieHellmanGroup",
+		classification: "hardened",
+		rationale: "Host Diffie-Hellman group bridge reference.",
+	},
+	{
+		name: "_cryptoDiffieHellmanSessionCreate",
+		classification: "hardened",
+		rationale: "Host Diffie-Hellman/ECDH session creation bridge reference.",
+	},
+	{
+		name: "_cryptoDiffieHellmanSessionCall",
+		classification: "hardened",
+		rationale: "Host Diffie-Hellman/ECDH session method bridge reference.",
+	},
+	{
 		name: "_cryptoSubtle",
 		classification: "hardened",
 		rationale: "Host WebCrypto subtle bridge reference.",

@@ -44,6 +44,10 @@ export const HOST_BRIDGE_GLOBAL_KEYS = {
 	cryptoGenerateKeyPairSync: "_cryptoGenerateKeyPairSync",
 	cryptoGenerateKeySync: "_cryptoGenerateKeySync",
 	cryptoGeneratePrimeSync: "_cryptoGeneratePrimeSync",
+	cryptoDiffieHellman: "_cryptoDiffieHellman",
+	cryptoDiffieHellmanGroup: "_cryptoDiffieHellmanGroup",
+	cryptoDiffieHellmanSessionCreate: "_cryptoDiffieHellmanSessionCreate",
+	cryptoDiffieHellmanSessionCall: "_cryptoDiffieHellmanSessionCall",
 	cryptoSubtle: "_cryptoSubtle",
 	fsReadFile: "_fsReadFile",
 	fsWriteFile: "_fsWriteFile",
@@ -228,6 +232,13 @@ export type CryptoGenerateKeySyncBridgeRef = BridgeApplySyncRef<
 	string
 >;
 export type CryptoGeneratePrimeSyncBridgeRef = BridgeApplySyncRef<
+	[number, string],
+	string
+>;
+export type CryptoDiffieHellmanBridgeRef = BridgeApplySyncRef<[string], string>;
+export type CryptoDiffieHellmanGroupBridgeRef = BridgeApplySyncRef<[string], string>;
+export type CryptoDiffieHellmanSessionCreateBridgeRef = BridgeApplySyncRef<[string], number>;
+export type CryptoDiffieHellmanSessionCallBridgeRef = BridgeApplySyncRef<
 	[number, string],
 	string
 >;

@@ -94,6 +94,19 @@ Bridge-provided randomness for global `crypto` APIs MUST delegate to host `node:
 - **WHEN** host `node:crypto` randomness primitives are unavailable or fail
 - **THEN** the bridge MUST throw a deterministic error matching the unsupported API format (`"<module>.<api> is not supported in sandbox"`) for the invoked randomness API and MUST NOT fall back to non-cryptographic randomness
 
+### Requirement: Diffie-Hellman And ECDH Bridge Uses Host Node Crypto Objects
+Bridge-provided `crypto` Diffie-Hellman and ECDH APIs SHALL delegate to host `node:crypto` objects so constructor validation, session state, encodings, and shared-secret derivation match Node.js semantics.
+
+#### Scenario: Sandbox creates a Diffie-Hellman session
+- **WHEN** sandboxed code calls `crypto.createDiffieHellman(...)`, `crypto.getDiffieHellman(...)`, or `crypto.createECDH(...)`
+- **THEN** the bridge MUST construct the corresponding host `node:crypto` object
+- **AND** subsequent method calls such as `generateKeys()`, `computeSecret()`, `getPublicKey()`, and `setPrivateKey()` MUST execute against that host object rather than an isolate-local reimplementation
+
+#### Scenario: Sandbox uses stateless crypto.diffieHellman
+- **WHEN** sandboxed code calls `crypto.diffieHellman({ privateKey, publicKey })`
+- **THEN** the bridge MUST delegate to host `node:crypto.diffieHellman`
+- **AND** the returned shared secret and thrown validation errors MUST preserve Node-compatible behavior
+
 ### Requirement: Bridge FS Open Flag Translation Uses Named Constants
 The bridge `fs` implementation MUST express string-flag translation using named open-flag constants (for example `O_WRONLY | O_CREAT | O_TRUNC`) aligned with Node `fs.constants` semantics, and MUST NOT rely on undocumented numeric literals.
 

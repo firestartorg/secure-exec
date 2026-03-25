@@ -1606,4 +1606,56 @@ export function runNodeCryptoSuite(context: NodeSuiteContext): void {
 		expect(exports.match).toBe(true);
 		expect(exports.keyType).toBe("secret");
 	});
+
+	it("Diffie-Hellman group exchange preserves Buffer and encoded secret outputs", async () => {
+		const runtime = await context.createRuntime();
+		const result = await runtime.run(`
+			const crypto = require('crypto');
+			const alice = crypto.createDiffieHellmanGroup('modp5');
+			const bob = crypto.createDiffieHellmanGroup('modp5');
+			const aliceKey = alice.generateKeys();
+			const bobKeyHex = bob.generateKeys('hex');
+			const aliceSecret = alice.computeSecret(bobKeyHex, 'hex', 'base64');
+			const bobSecret = bob.computeSecret(aliceKey, 'buffer', 'base64');
+
+			module.exports = {
+				match: aliceSecret === bobSecret,
+				verifyError: alice.verifyError,
+				publicKeyIsBuffer: Buffer.isBuffer(alice.getPublicKey()),
+				privateKeyIsBuffer: Buffer.isBuffer(alice.getPrivateKey()),
+			};
+		`);
+		expect(result.code).toBe(0);
+		const exports = result.exports as any;
+		expect(exports.match).toBe(true);
+		expect(exports.verifyError).toBe(0);
+		expect(exports.publicKeyIsBuffer).toBe(true);
+		expect(exports.privateKeyIsBuffer).toBe(true);
+	});
+
+	it("stateless crypto.diffieHellman matches x25519 shared secret", async () => {
+		const runtime = await context.createRuntime();
+		const result = await runtime.run(`
+			const crypto = require('crypto');
+			const alice = crypto.generateKeyPairSync('x25519');
+			const bob = crypto.generateKeyPairSync('x25519');
+			const aliceSecret = crypto.diffieHellman({
+				privateKey: alice.privateKey,
+				publicKey: bob.publicKey,
+			}).toString('hex');
+			const bobSecret = crypto.diffieHellman({
+				privateKey: bob.privateKey,
+				publicKey: alice.publicKey,
+			}).toString('hex');
+
+			module.exports = {
+				match: aliceSecret === bobSecret,
+				length: aliceSecret.length,
+			};
+		`);
+		expect(result.code).toBe(0);
+		const exports = result.exports as any;
+		expect(exports.match).toBe(true);
+		expect(exports.length).toBeGreaterThan(0);
+	});
 }

@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Dispatch-multiplexed bridge globals must preserve `undefined` positional args plus host error `name`/`code`; raw `JSON.stringify(args)` and message-only errors break Node conformance in subtle ways
+- For stateful Node crypto APIs that browserify only partially emulates, bridge the real host objects by session id and forward methods instead of trying to recreate DH/ECDH state inside the isolate
 - Conformance tests live in packages/secure-exec/tests/node-conformance/ — vendored Node.js v22.14.0 test/parallel/
 - Runner is packages/secure-exec/tests/node-conformance/runner.test.ts — run with: pnpm vitest run packages/secure-exec/tests/node-conformance/runner.test.ts
 - Expectations are in packages/secure-exec/tests/node-conformance/expectations.json — each entry has expected (pass/fail/skip), reason, category
@@ -39,4 +40,14 @@
   - Async crypto wrappers need Node-style split behavior: synchronous throw for argument validation, callback delivery for operational keygen failures.
   - Bridge dispatch bugs can masquerade as API bugs; preserve both `undefined` arguments and structured errors before debugging higher-level crypto behavior.
   - When a conformance expected-fail starts passing, remove the expectation first and rerun the exact file filter to confirm it is a genuine pass before regenerating the report.
+---
+
+## [2026-03-25 03:01 PDT] - US-003
+- Implemented host-backed Diffie-Hellman and ECDH session bridging, including `createDiffieHellman`, `createDiffieHellmanGroup`/`getDiffieHellman`, `createECDH`, and stateless `crypto.diffieHellman()` so key generation, shared-secret derivation, and encoding handling use native Node crypto semantics.
+- Added focused runtime coverage for DH group exchange and stateless X25519 key agreement, removed the stale `test-crypto-dh-padding.js` conformance expectation, and regenerated the conformance report.
+- Files changed: `.agent/contracts/node-bridge.md`, `packages/nodejs/src/bridge-contract.ts`, `packages/core/src/shared/bridge-contract.ts`, `packages/core/src/shared/global-exposure.ts`, `packages/nodejs/src/bridge-handlers.ts`, `packages/core/isolate-runtime/src/inject/require-setup.ts`, `packages/core/src/generated/isolate-runtime.ts`, `packages/secure-exec/tests/test-suite/node/crypto.ts`, `packages/secure-exec/tests/node-conformance/expectations.json`, `packages/secure-exec/tests/node-conformance/conformance-report.json`, `docs/nodejs-conformance-report.mdx`, `scripts/ralph/prd.json`
+- **Learnings for future iterations:**
+  - Host-managed crypto objects with mutable internal state are safer to expose through a session-id bridge than by trying to mirror their state in sandbox JavaScript.
+  - `crypto.getDiffieHellman()` returns a different host type than `createDiffieHellman()`, so shared bridge maps should type for both `DiffieHellman` and `DiffieHellmanGroup`.
+  - Rebuilding `@secure-exec/nodejs` is what refreshes `packages/core/src/generated/isolate-runtime.ts`; commit the generated manifest alongside `require-setup.ts` changes.
 ---

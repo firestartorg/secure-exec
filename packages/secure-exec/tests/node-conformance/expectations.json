@@ -1896,11 +1896,6 @@
       "category": "implementation-gap",
       "expected": "fail"
     },
-    "test-crypto-dh-padding.js": {
-      "reason": "DiffieHellman.computeSecret() produces incorrect result — key exchange computation has bridge-level fidelity gap",
-      "category": "implementation-gap",
-      "expected": "fail"
-    },
     "test-crypto-dh-stateless.js": {
       "reason": "crypto.diffieHellman() stateless key exchange function not implemented in bridge",
       "category": "implementation-gap",

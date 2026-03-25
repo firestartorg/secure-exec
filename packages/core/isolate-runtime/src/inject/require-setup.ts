@@ -826,6 +826,216 @@
             };
           }
 
+          if (
+            typeof _cryptoDiffieHellmanSessionCreate !== 'undefined' &&
+            typeof _cryptoDiffieHellmanSessionCall !== 'undefined'
+          ) {
+            function serializeDhKeyObject(value) {
+              if (value.type === 'secret') {
+                return {
+                  type: 'secret',
+                  raw: Buffer.from(value.export()).toString('base64'),
+                };
+              }
+              return {
+                type: value.type,
+                pem: value._pem || value.export({
+                  type: value.type === 'private' ? 'pkcs8' : 'spki',
+                  format: 'pem',
+                }),
+              };
+            }
+
+            function serializeDhValue(value) {
+              if (
+                value === null ||
+                typeof value === 'string' ||
+                typeof value === 'number' ||
+                typeof value === 'boolean'
+              ) {
+                return value;
+              }
+              if (Buffer.isBuffer(value)) {
+                return {
+                  __type: 'buffer',
+                  value: Buffer.from(value).toString('base64'),
+                };
+              }
+              if (value instanceof ArrayBuffer) {
+                return {
+                  __type: 'buffer',
+                  value: Buffer.from(new Uint8Array(value)).toString('base64'),
+                };
+              }
+              if (ArrayBuffer.isView(value)) {
+                return {
+                  __type: 'buffer',
+                  value: Buffer.from(value.buffer, value.byteOffset, value.byteLength).toString('base64'),
+                };
+              }
+              if (typeof value === 'bigint') {
+                return {
+                  __type: 'bigint',
+                  value: value.toString(),
+                };
+              }
+              if (
+                value &&
+                typeof value === 'object' &&
+                (value.type === 'public' || value.type === 'private' || value.type === 'secret') &&
+                typeof value.export === 'function'
+              ) {
+                return {
+                  __type: 'keyObject',
+                  value: serializeDhKeyObject(value),
+                };
+              }
+              if (Array.isArray(value)) {
+                return value.map(serializeDhValue);
+              }
+              if (value && typeof value === 'object') {
+                var output = {};
+                var keys = Object.keys(value);
+                for (var i = 0; i < keys.length; i++) {
+                  if (value[keys[i]] !== undefined) {
+                    output[keys[i]] = serializeDhValue(value[keys[i]]);
+                  }
+                }
+                return output;
+              }
+              return String(value);
+            }
+
+            function restoreDhValue(value) {
+              if (!value || typeof value !== 'object') {
+                return value;
+              }
+              if (value.__type === 'buffer') {
+                return Buffer.from(value.value, 'base64');
+              }
+              if (value.__type === 'bigint') {
+                return BigInt(value.value);
+              }
+              if (Array.isArray(value)) {
+                return value.map(restoreDhValue);
+              }
+              var output = {};
+              var keys = Object.keys(value);
+              for (var i = 0; i < keys.length; i++) {
+                output[keys[i]] = restoreDhValue(value[keys[i]]);
+              }
+              return output;
+            }
+
+            function createDhSession(type, name, argsLike) {
+              var args = [];
+              for (var i = 0; i < argsLike.length; i++) {
+                args.push(serializeDhValue(argsLike[i]));
+              }
+              return _cryptoDiffieHellmanSessionCreate.applySync(undefined, [
+                JSON.stringify({
+                  type: type,
+                  name: name,
+                  args: args,
+                }),
+              ]);
+            }
+
+            function callDhSession(sessionId, method, argsLike) {
+              var args = [];
+              for (var i = 0; i < argsLike.length; i++) {
+                args.push(serializeDhValue(argsLike[i]));
+              }
+              var response = JSON.parse(_cryptoDiffieHellmanSessionCall.applySync(undefined, [
+                sessionId,
+                JSON.stringify({
+                  method: method,
+                  args: args,
+                }),
+              ]));
+              if (response && response.hasResult === false) {
+                return undefined;
+              }
+              return restoreDhValue(response && response.result);
+            }
+
+            function SandboxDiffieHellman(sessionId) {
+              this._sessionId = sessionId;
+            }
+
+            Object.defineProperty(SandboxDiffieHellman.prototype, 'verifyError', {
+              get: function getVerifyError() {
+                return callDhSession(this._sessionId, 'verifyError', []);
+              },
+            });
+
+            SandboxDiffieHellman.prototype.generateKeys = function generateKeys(encoding) {
+              if (arguments.length === 0) return callDhSession(this._sessionId, 'generateKeys', []);
+              return callDhSession(this._sessionId, 'generateKeys', [encoding]);
+            };
+            SandboxDiffieHellman.prototype.computeSecret = function computeSecret(key, inputEncoding, outputEncoding) {
+              return callDhSession(this._sessionId, 'computeSecret', Array.prototype.slice.call(arguments));
+            };
+            SandboxDiffieHellman.prototype.getPrime = function getPrime(encoding) {
+              if (arguments.length === 0) return callDhSession(this._sessionId, 'getPrime', []);
+              return callDhSession(this._sessionId, 'getPrime', [encoding]);
+            };
+            SandboxDiffieHellman.prototype.getGenerator = function getGenerator(encoding) {
+              if (arguments.length === 0) return callDhSession(this._sessionId, 'getGenerator', []);
+              return callDhSession(this._sessionId, 'getGenerator', [encoding]);
+            };
+            SandboxDiffieHellman.prototype.getPublicKey = function getPublicKey(encoding) {
+              if (arguments.length === 0) return callDhSession(this._sessionId, 'getPublicKey', []);
+              return callDhSession(this._sessionId, 'getPublicKey', [encoding]);
+            };
+            SandboxDiffieHellman.prototype.getPrivateKey = function getPrivateKey(encoding) {
+              if (arguments.length === 0) return callDhSession(this._sessionId, 'getPrivateKey', []);
+              return callDhSession(this._sessionId, 'getPrivateKey', [encoding]);
+            };
+            SandboxDiffieHellman.prototype.setPublicKey = function setPublicKey(key, encoding) {
+              return callDhSession(this._sessionId, 'setPublicKey', Array.prototype.slice.call(arguments));
+            };
+            SandboxDiffieHellman.prototype.setPrivateKey = function setPrivateKey(key, encoding) {
+              return callDhSession(this._sessionId, 'setPrivateKey', Array.prototype.slice.call(arguments));
+            };
+
+            function SandboxECDH(sessionId) {
+              SandboxDiffieHellman.call(this, sessionId);
+            }
+            SandboxECDH.prototype = Object.create(SandboxDiffieHellman.prototype);
+            SandboxECDH.prototype.constructor = SandboxECDH;
+            SandboxECDH.prototype.getPublicKey = function getPublicKey(encoding, format) {
+              return callDhSession(this._sessionId, 'getPublicKey', Array.prototype.slice.call(arguments));
+            };
+
+            result.createDiffieHellman = function createDiffieHellman() {
+              return new SandboxDiffieHellman(createDhSession('dh', undefined, arguments));
+            };
+
+            result.getDiffieHellman = function getDiffieHellman(name) {
+              return new SandboxDiffieHellman(createDhSession('group', name, []));
+            };
+
+            result.createDiffieHellmanGroup = result.getDiffieHellman;
+
+            result.createECDH = function createECDH(curve) {
+              return new SandboxECDH(createDhSession('ecdh', curve, []));
+            };
+
+            if (typeof _cryptoDiffieHellman !== 'undefined') {
+              result.diffieHellman = function diffieHellman(options) {
+                var resultJson = _cryptoDiffieHellman.applySync(undefined, [
+                  JSON.stringify(serializeDhValue(options)),
+                ]);
+                return restoreDhValue(JSON.parse(resultJson));
+              };
+            }
+
+            result.DiffieHellman = SandboxDiffieHellman;
+            result.DiffieHellmanGroup = SandboxDiffieHellman;
+            result.ECDH = SandboxECDH;
+          }
+
           // Overlay host-backed generateKeyPairSync/generateKeyPair and KeyObject helpers
           if (typeof _cryptoGenerateKeyPairSync !== 'undefined') {
             function restoreBridgeValue(value) {

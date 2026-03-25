@@ -58,7 +58,7 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "9 tests fail. DH.generateKeys() returns undefined, computeSecret() returns undefined, buffer encoding not supported, stateless diffieHellman() not implemented."
     },
     {

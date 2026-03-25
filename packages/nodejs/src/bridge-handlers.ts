@@ -27,6 +27,10 @@ import {
 	createPrivateKey,
 	createPublicKey,
 	createSecretKey,
+	createDiffieHellman,
+	getDiffieHellman,
+	createECDH,
+	diffieHellman,
 	generateKeySync,
 	generatePrimeSync,
 	publicEncrypt,
@@ -157,6 +161,11 @@ interface SerializedDispatchError {
 	code?: string;
 	stack?: string;
 }
+
+type DiffieHellmanSession =
+	| ReturnType<typeof createDiffieHellman>
+	| ReturnType<typeof getDiffieHellman>
+	| ReturnType<typeof createECDH>;
 
 function serializeKeyDetails(details: unknown): Record<string, unknown> | undefined {
 	if (!details || typeof details !== "object") {
@@ -421,6 +430,8 @@ export function buildCryptoBridgeHandlers(): CryptoBridgeResult {
 	// create/update/final bridge calls (needed for ssh2 streaming AES-GCM).
 	const cipherSessions = new Map<number, CipherSession>();
 	let nextCipherSessionId = 1;
+	const diffieHellmanSessions = new Map<number, DiffieHellmanSession>();
+	let nextDiffieHellmanSessionId = 1;
 
 	// Secure randomness — cap matches Web Crypto API spec (65536 bytes).
 	handlers[K.cryptoRandomFill] = (byteLength: unknown) => {
@@ -717,6 +728,93 @@ export function buildCryptoBridgeHandlers(): CryptoBridgeResult {
 				? generatePrimeSync(size as any)
 				: generatePrimeSync(size as any, options as any);
 		return JSON.stringify(serializeBridgeValue(prime));
+	};
+
+	// Diffie-Hellman/ECDH — keep native host objects alive by session id so
+	// sandbox calls preserve Node's return values, validation, and stateful key material.
+	handlers[K.cryptoDiffieHellman] = (optionsJson: unknown) => {
+		const options = deserializeBridgeValue(
+			JSON.parse(String(optionsJson)) as SerializedBridgeValue,
+		) as Parameters<typeof diffieHellman>[0];
+		return JSON.stringify(
+			serializeBridgeValue(diffieHellman(options)),
+		);
+	};
+
+	handlers[K.cryptoDiffieHellmanGroup] = (name: unknown) => {
+		const group = getDiffieHellman(String(name));
+		return JSON.stringify({
+			prime: serializeBridgeValue(group.getPrime()),
+			generator: serializeBridgeValue(group.getGenerator()),
+		});
+	};
+
+	handlers[K.cryptoDiffieHellmanSessionCreate] = (requestJson: unknown) => {
+		const request = JSON.parse(String(requestJson)) as {
+			type: "dh" | "group" | "ecdh";
+			name?: string;
+			args?: SerializedBridgeValue[];
+		};
+		const args = (request.args ?? []).map((value) =>
+			deserializeBridgeValue(value),
+		);
+
+		let session: DiffieHellmanSession;
+		switch (request.type) {
+			case "dh":
+				session = createDiffieHellman(...(args as Parameters<typeof createDiffieHellman>));
+				break;
+			case "group":
+				session = getDiffieHellman(String(request.name));
+				break;
+			case "ecdh":
+				session = createECDH(String(request.name));
+				break;
+			default:
+				throw new Error(`Unsupported Diffie-Hellman session type: ${String((request as any).type)}`);
+		}
+
+		const sessionId = nextDiffieHellmanSessionId++;
+		diffieHellmanSessions.set(sessionId, session);
+		return sessionId;
+	};
+
+	handlers[K.cryptoDiffieHellmanSessionCall] = (
+		sessionId: unknown,
+		requestJson: unknown,
+	) => {
+		const session = diffieHellmanSessions.get(Number(sessionId));
+		if (!session) {
+			throw new Error(`Diffie-Hellman session ${String(sessionId)} not found`);
+		}
+
+		const request = JSON.parse(String(requestJson)) as {
+			method: string;
+			args?: SerializedBridgeValue[];
+		};
+		const args = (request.args ?? []).map((value) =>
+			deserializeBridgeValue(value),
+		);
+
+		const sessionRecord = session as unknown as Record<string, unknown>;
+
+		if (request.method === "verifyError") {
+			return JSON.stringify({
+				result: typeof sessionRecord.verifyError === "number" ? sessionRecord.verifyError : undefined,
+				hasResult: typeof sessionRecord.verifyError === "number",
+			});
+		}
+
+		const method = sessionRecord[request.method];
+		if (typeof method !== "function") {
+			throw new Error(`Unsupported Diffie-Hellman method: ${request.method}`);
+		}
+
+		const result = (method as (...callArgs: unknown[]) => unknown).apply(session, args);
+		return JSON.stringify({
+			result: result === undefined ? null : serializeBridgeValue(result),
+			hasResult: result !== undefined,
+		});
 	};
 
 	// crypto.subtle — single dispatcher for all Web Crypto API operations.
@@ -1176,6 +1274,7 @@ export function buildCryptoBridgeHandlers(): CryptoBridgeResult {
 
 	const dispose = () => {
 		cipherSessions.clear();
+		diffieHellmanSessions.clear();
 	};
 
 	return { handlers, dispose };
