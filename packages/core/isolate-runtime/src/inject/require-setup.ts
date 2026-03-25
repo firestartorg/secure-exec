@@ -2651,6 +2651,17 @@
           return _httpModule;
         }
 
+        if (name === '_http_agent') {
+          if (__internalModuleCache['_http_agent']) return __internalModuleCache['_http_agent'];
+          const httpAgentModule = {
+            Agent: _httpModule.Agent,
+            globalAgent: _httpModule.globalAgent,
+          };
+          __internalModuleCache['_http_agent'] = httpAgentModule;
+          _debugRequire('loaded', name, 'http-agent-special');
+          return httpAgentModule;
+        }
+
         // Special handling for https module
         if (name === 'https') {
           if (__internalModuleCache['https']) return __internalModuleCache['https'];

@@ -5,13 +5,13 @@
   "generatedAt": "2026-03-26",
   "summary": {
     "total": 3532,
-    "pass": 781,
-    "genuinePass": 748,
+    "pass": 787,
+    "genuinePass": 754,
     "vacuousPass": 33,
-    "fail": 2680,
+    "fail": 2674,
     "skip": 71,
-    "passRate": "22.1%",
-    "genuinePassRate": "21.2%"
+    "passRate": "22.3%",
+    "genuinePassRate": "21.3%"
   },
   "modules": {
     "abortcontroller": {
@@ -618,9 +618,9 @@
     },
     "http": {
       "total": 377,
-      "pass": 237,
+      "pass": 243,
       "vacuousPass": 1,
-      "fail": 139,
+      "fail": 133,
       "skip": 1
     },
     "http2": {
@@ -1472,13 +1472,13 @@
     }
   },
   "categories": {
-    "implementation-gap": 1377,
+    "implementation-gap": 1372,
     "native-addon": 3,
     "requires-exec-path": 200,
     "requires-v8-flags": 239,
     "security-constraint": 2,
     "test-infra": 68,
-    "unsupported-api": 124,
+    "unsupported-api": 123,
     "unsupported-module": 738,
     "vacuous-skip": 33
   }

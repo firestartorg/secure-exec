@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- Vendored Node conformance helpers in `packages/secure-exec/tests/node-conformance/common/` must include sibling support files like `countdown.js`; missing common shims can masquerade as runtime regressions across many unrelated tests
+- `http.Agent` pool progress under `maxTotalSockets` depends on evicting idle free sockets from other origins when the total socket budget is exhausted; otherwise cross-origin queues can deadlock even if per-origin logic looks correct
 - Dispatch-multiplexed bridge globals must preserve `undefined` positional args plus host error `name`/`code`; raw `JSON.stringify(args)` and message-only errors break Node conformance in subtle ways
 - For stateful Node crypto APIs that browserify only partially emulates, bridge the real host objects by session id and forward methods instead of trying to recreate DH/ECDH state inside the isolate
 - Global WebCrypto is split across `packages/nodejs/src/bridge/process.ts` and `packages/core/isolate-runtime/src/inject/require-setup.ts`; keep `globalThis.crypto` and `require('crypto').webcrypto` aliased to the same object or conformance diverges
@@ -112,4 +114,13 @@
   - `US-008`'s standalone bootstrap fix also restored `runtime.run()` export capture from `packages/secure-exec/dist/index.js`; the missing piece was regression coverage, not another runtime patch.
   - A standalone smoke that validates multiple `run()` calls should flush stdout through the write callback and exit explicitly after `runtime.terminate()` to keep Vitest from timing out on a lingering host process.
   - This test area is best exercised against built `dist/` imports, because source-level Vitest coverage already passes and does not prove publish-style behavior.
+---
+## [2026-03-25 04:59 PDT] - US-010
+- Implemented a real `http.Agent` pool in the bridge with Node-style `getName()`, `requests`/`sockets`/`freeSockets` bookkeeping, `_http_agent` module exposure, destroyed-socket replacement, `maxTotalSockets` enforcement via idle-socket eviction, callable `http.Server(...)`, and idle free-socket timeout cleanup.
+- Added vendored `common/countdown.js`, added runtime-driver coverage for `_http_agent` aliasing and destroyed keepalive sockets, removed stale conformance expectations for newly passing HTTP agent files, and regenerated the node conformance report.
+- Files changed: `.agent/contracts/node-bridge.md`, `packages/nodejs/src/bridge/network.ts`, `packages/core/isolate-runtime/src/inject/require-setup.ts`, `packages/core/src/generated/isolate-runtime.ts`, `packages/core/src/generated/polyfills.ts`, `packages/secure-exec/tests/runtime-driver/node/index.test.ts`, `packages/secure-exec/tests/node-conformance/common/countdown.js`, `packages/secure-exec/tests/node-conformance/expectations.json`, `packages/secure-exec/tests/node-conformance/conformance-report.json`, `docs/nodejs-conformance-report.mdx`, `scripts/ralph/progress.txt`
+- **Learnings for future iterations:**
+  - Vendored HTTP conformance tests inspect internal agent state directly, so the bridge has to preserve `request.reusedSocket`, listener counts, and visible pool objects, not just user-facing request success.
+  - Loopback server responses in the bridge are serialized as base64; `IncomingMessage` must honor the serialized `bodyEncoding`, not only an `x-body-encoding` header, or higher-level HTTP tests read encoded text and fail in misleading ways.
+  - `test-http-agent-maxsockets-respected.js` still times out under the full conformance runner even after the pool fixes; the remaining gap looks runner/teardown-related rather than a missing `maxSockets` queue itself, so this story should stay open until that vendored file is green.
 ---

@@ -12,10 +12,10 @@ description: Node.js v22 test/parallel/ conformance results for the secure-exec 
 | Node.js version | 22.14.0 |
 | Source | v22.14.0 (test/parallel/) |
 | Total tests | 3532 |
-| Passing (genuine) | 748 (21.2%) |
+| Passing (genuine) | 754 (21.3%) |
 | Passing (vacuous self-skip) | 33 |
-| Passing (total) | 781 (22.1%) |
-| Expected fail | 2680 |
+| Passing (total) | 787 (22.3%) |
+| Expected fail | 2674 |
 | Skip | 71 |
 | Last updated | 2026-03-26 |
 
@@ -23,11 +23,11 @@ description: Node.js v22 test/parallel/ conformance results for the secure-exec 
 
 | Category | Tests |
 | --- | --- |
-| implementation-gap | 1377 |
+| implementation-gap | 1372 |
 | unsupported-module | 738 |
 | requires-v8-flags | 239 |
 | requires-exec-path | 200 |
-| unsupported-api | 124 |
+| unsupported-api | 123 |
 | test-infra | 68 |
 | vacuous-skip | 33 |
 | native-addon | 3 |
@@ -123,7 +123,7 @@ description: Node.js v22 test/parallel/ conformance results for the secure-exec 
 | heap | 11 | 0 | 11 | 0 | 0.0% |
 | heapdump | 1 | 1 | 0 | 0 | 100.0% |
 | heapsnapshot | 2 | 0 | 2 | 0 | 0.0% |
-| http | 377 | 237 (1 vacuous) | 139 | 1 | 63.0% |
+| http | 377 | 243 (1 vacuous) | 133 | 1 | 64.6% |
 | http2 | 256 | 4 | 252 | 0 | 1.6% |
 | https | 62 | 4 | 58 | 0 | 6.5% |
 | icu | 5 | 0 | 5 | 0 | 0.0% |
@@ -245,11 +245,11 @@ description: Node.js v22 test/parallel/ conformance results for the secure-exec 
 | wrap | 4 | 0 | 4 | 0 | 0.0% |
 | x509 | 1 | 0 | 1 | 0 | 0.0% |
 | zlib | 53 | 17 | 33 | 3 | 34.0% |
-| **Total** | **3532** | **781** | **2680** | **71** | **22.6%** |
+| **Total** | **3532** | **787** | **2674** | **71** | **22.7%** |
 
 ## Expectations Detail
 
-### implementation-gap (696 entries)
+### implementation-gap (691 entries)
 
 **Glob patterns:**
 
@@ -260,7 +260,7 @@ description: Node.js v22 test/parallel/ conformance results for the secure-exec 
 - `test-https-*.js` — https depends on tls — most tests fail on missing TLS fixture files or crypto API gaps
 - `test-http2-*.js` — http2 module bridged via kernel — most tests fail on API gaps, missing fixtures, or protocol handling
 
-*690 individual tests — see expectations.json for full list.*
+*685 individual tests — see expectations.json for full list.*
 
 ### unsupported-module (191 entries)
 
@@ -465,7 +465,7 @@ description: Node.js v22 test/parallel/ conformance results for the secure-exec 
 
 </Accordion>
 
-### unsupported-api (79 entries)
+### unsupported-api (78 entries)
 
 **Glob patterns:**
 
@@ -473,7 +473,7 @@ description: Node.js v22 test/parallel/ conformance results for the secure-exec 
 - `test-shadow-*.js` — ShadowRealm is experimental and not supported in sandbox
 - `test-compile-*.js` — V8 compile cache/code cache features not available in sandbox
 
-<Accordion title="76 individual tests">
+<Accordion title="75 individual tests">
 
 | Test | Reason |
 | --- | --- |
@@ -505,7 +505,6 @@ description: Node.js v22 test/parallel/ conformance results for the secure-exec 
 | `test-fs-promises-file-handle-writeFile.js` | Readable.from is not available in the browser — stream.Readable.from() factory not implemented in sandbox stream polyfill |
 | `test-fs-promises-writefile.js` | Readable.from is not available in the browser — stream.Readable.from() factory not implemented; used by writeFile() Readable/iterable overload |
 | `test-http-addrequest-localaddress.js` | TypeError: agent.addRequest is not a function — http.Agent.addRequest() internal method not implemented in http polyfill |
-| `test-http-agent-getname.js` | TypeError: agent.getName() is not a function — http.Agent.getName() not implemented in http polyfill |
 | `test-http-header-validators.js` | TypeError: Cannot read properties of undefined (reading 'constructor') — validateHeaderName/validateHeaderValue not exported from http polyfill module |
 | `test-http-import-websocket.js` | ReferenceError: WebSocket is not defined — WebSocket global not available in sandbox; undici WebSocket not polyfilled as a global |
 | `test-http-incoming-matchKnownFields.js` | TypeError: incomingMessage._addHeaderLine is not a function — http.IncomingMessage._addHeaderLine() internal method not implemented in http polyfill |

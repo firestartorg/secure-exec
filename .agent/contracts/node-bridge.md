@@ -206,3 +206,21 @@ Bridge globals routed through the `_loadPolyfill` dispatch multiplexer SHALL pre
 - **WHEN** a dispatch-multiplexed bridge handler throws a host error with `name` and `code` (for example `TypeError` + `ERR_INVALID_ARG_VALUE`)
 - **THEN** the sandbox-visible error MUST preserve that `name` and `code`
 - **AND** the bridge MUST NOT collapse the error to a plain `Error` with only a message
+
+### Requirement: HTTP Agent Bridge Preserves Node Pooling Semantics
+Bridge-provided `http.Agent` behavior SHALL preserve the observable pooling state that Node.js userland and conformance tests inspect.
+
+#### Scenario: Sandboxed code inspects agent bookkeeping
+- **WHEN** sandboxed code uses `http.Agent` or `require('_http_agent').Agent`
+- **THEN** the bridge MUST expose matching `Agent` constructors through both module paths
+- **AND** `getName()`, `requests`, `sockets`, `freeSockets`, and `totalSocketCount` MUST reflect request queueing and socket reuse state with Node-compatible key shapes
+
+#### Scenario: Keepalive sockets are reused or discarded
+- **WHEN** sandboxed code enables `keepAlive` and reuses pooled HTTP connections
+- **THEN** the bridge MUST mark reused requests via `request.reusedSocket`
+- **AND** destroyed or remotely closed sockets MUST be removed from the pool instead of being reassigned to queued requests
+
+#### Scenario: Total socket limits are configured
+- **WHEN** sandboxed code constructs an `http.Agent` with `maxSockets`, `maxFreeSockets`, or `maxTotalSockets`
+- **THEN** invalid argument types and ranges MUST throw Node-compatible `ERR_INVALID_ARG_TYPE` / `ERR_OUT_OF_RANGE` errors
+- **AND** queued requests across origins MUST respect both per-origin and total socket limits

@@ -4255,42 +4255,12 @@
       "category": "implementation-gap",
       "expected": "fail"
     },
-    "test-http-agent-destroyed-socket.js": {
-      "reason": "uses http.createServer/listen — HTTP server behavior has gaps in sandbox",
-      "category": "implementation-gap",
-      "expected": "fail"
-    },
-    "test-http-agent-getname.js": {
-      "reason": "TypeError: agent.getName() is not a function — http.Agent.getName() not implemented in http polyfill",
-      "category": "unsupported-api",
-      "expected": "fail"
-    },
-    "test-http-agent-keepalive-delay.js": {
-      "reason": "uses http.createServer/listen — HTTP server behavior has gaps in sandbox",
-      "category": "implementation-gap",
-      "expected": "fail"
-    },
     "test-http-agent-keepalive.js": {
       "reason": "uses http.createServer/listen — HTTP server behavior has gaps in sandbox",
       "category": "implementation-gap",
       "expected": "fail"
     },
     "test-http-agent-maxsockets-respected.js": {
-      "reason": "uses http.createServer/listen — HTTP server behavior has gaps in sandbox",
-      "category": "implementation-gap",
-      "expected": "fail"
-    },
-    "test-http-agent-maxsockets.js": {
-      "reason": "uses http.createServer/listen — HTTP server behavior has gaps in sandbox",
-      "category": "implementation-gap",
-      "expected": "fail"
-    },
-    "test-http-agent-maxtotalsockets.js": {
-      "reason": "needs http.createServer with real connection handling + maxTotalSockets API",
-      "category": "implementation-gap",
-      "expected": "fail"
-    },
-    "test-http-agent.js": {
       "reason": "uses http.createServer/listen — HTTP server behavior has gaps in sandbox",
       "category": "implementation-gap",
       "expected": "fail"
