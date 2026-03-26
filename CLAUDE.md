@@ -146,6 +146,7 @@
 - vendored `http2` nghttp2 error-path tests patch `internal/test/binding` `Http2Stream.prototype.respond`; keep that shim wired to the same bridge-facing `Http2Stream` / `internal/http2/util`.`NghttpError` constructors the runtime uses, or the tests stop exercising the real wrapper logic
 - bridge exports that userland constructs with `new` must be assigned as constructable function properties, not object-literal method shorthands; shorthand methods like `createReadStream() {}` are not constructable and vendored fs coverage calls `new fs.createReadStream(...)`
 - `/proc/sys/kernel/hostname` conformance hits both kernel-backed and standalone NodeRuntime paths; a procfs fix that only lands in the kernel layer still leaves `createTestNodeRuntime()` fs/FileHandle coverage red
+- require-transformed ESM must not rely on the CommonJS wrapper's `__filename` / `__dirname` parameter names; keep wrapper internals on private names, synthesize local CJS bindings only for plain CommonJS sources, and compute transformed `import.meta.url` from `pathToFileURL(__secureExecFilename).href`
 
 ## Virtual Kernel Architecture
 
@@ -172,7 +173,7 @@
 - instead, use proper tooling: `es-module-lexer` / `cjs-module-lexer` (the same WASM-based lexers Node.js uses), or run the transformation inside the V8 isolate where the JS engine handles parsing correctly
 - if a source transformation is needed at the bridge/host level, prefer a battle-tested library over hand-rolled regex
 - the V8 runtime already has dual-mode execution (`execute_script` for CJS, `execute_module` for ESM) — lean on V8's native module system rather than pre-transforming source on the host side
-- existing regex-based transforms (e.g., `convertEsmToCjs`, `transformDynamicImport`, `isESM`) are known technical debt and should be replaced
+- existing regex-based transforms (e.g., `convertEsmToCjs`, `transformDynamicImport`, `isESM`) are known technical debt and should be replaced; when `require()` compatibility needs `import.meta.url`, inject an internal file-URL helper instead of rewriting to the wrapper `__filename`
 
 
 ## Contracts (CRITICAL)

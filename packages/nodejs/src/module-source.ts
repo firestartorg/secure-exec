@@ -1,6 +1,9 @@
 import { transform, transformSync } from "esbuild";
 import { init, initSync, parse } from "es-module-lexer";
 
+const REQUIRE_TRANSFORM_MARKER = "/*__secure_exec_require_esm__*/";
+const IMPORT_META_URL_HELPER = "__secureExecImportMetaUrl__";
+
 function isJavaScriptLikePath(filePath: string | undefined): boolean {
 	return filePath === undefined || /\.[cm]?[jt]sx?$/.test(filePath);
 }
@@ -12,21 +15,26 @@ function parseSourceSyntax(source: string, filePath?: string) {
 	return { hasModuleSyntax, hasDynamicImport, hasImportMeta };
 }
 
-function shouldTransformForRequire(source: string, filePath?: string): boolean {
-	if (!isJavaScriptLikePath(filePath)) {
-		return false;
+function getRequireTransformOptions(
+	filePath: string,
+	syntax: ReturnType<typeof parseSourceSyntax>,
+) {
+	const requiresEsmWrapper =
+		syntax.hasModuleSyntax || syntax.hasImportMeta;
+	const bannerLines = requiresEsmWrapper ? [REQUIRE_TRANSFORM_MARKER] : [];
+	if (syntax.hasImportMeta) {
+		bannerLines.push(
+			`const ${IMPORT_META_URL_HELPER} = require("node:url").pathToFileURL(__secureExecFilename).href;`,
+		);
 	}
 
-	const { hasModuleSyntax, hasDynamicImport, hasImportMeta } =
-		parseSourceSyntax(source, filePath);
-	return hasModuleSyntax || hasDynamicImport || hasImportMeta;
-}
-
-function getRequireTransformOptions(filePath: string) {
 	return {
-		define: {
-			"import.meta.url": "__filename",
-		},
+		banner: bannerLines.length > 0 ? bannerLines.join("\n") : undefined,
+		define: syntax.hasImportMeta
+			? {
+					"import.meta.url": IMPORT_META_URL_HELPER,
+				}
+			: undefined,
 		format: "cjs" as const,
 		loader: "js" as const,
 		platform: "node" as const,
@@ -62,12 +70,13 @@ export function transformSourceForRequireSync(
 	}
 
 	initSync();
-	if (!shouldTransformForRequire(source, filePath)) {
+	const syntax = parseSourceSyntax(source, filePath);
+	if (!(syntax.hasModuleSyntax || syntax.hasDynamicImport || syntax.hasImportMeta)) {
 		return source;
 	}
 
 	try {
-		return transformSync(source, getRequireTransformOptions(filePath)).code;
+		return transformSync(source, getRequireTransformOptions(filePath, syntax)).code;
 	} catch {
 		return source;
 	}
@@ -82,13 +91,14 @@ export async function transformSourceForRequire(
 	}
 
 	await init;
-	if (!shouldTransformForRequire(source, filePath)) {
+	const syntax = parseSourceSyntax(source, filePath);
+	if (!(syntax.hasModuleSyntax || syntax.hasDynamicImport || syntax.hasImportMeta)) {
 		return source;
 	}
 
 	try {
 		return (
-			await transform(source, getRequireTransformOptions(filePath))
+			await transform(source, getRequireTransformOptions(filePath, syntax))
 		).code;
 	} catch {
 		return source;

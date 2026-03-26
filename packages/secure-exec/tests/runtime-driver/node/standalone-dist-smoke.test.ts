@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -161,5 +163,95 @@ describe("standalone dist bootstrap", () => {
 			code: 0,
 			exports: { answer: 42 },
 		});
+	}, 30_000);
+
+	it("imports require-transformed ESM modules that declare __filename from import.meta.url", async () => {
+		const fixtureDir = await mkdtemp(
+			resolve(tmpdir(), "secure-exec-import-meta-url-"),
+		);
+		const fixturePath = resolve(fixtureDir, "entry.mjs");
+		await writeFile(
+			fixturePath,
+			[
+				'import { dirname } from "node:path";',
+				'import { fileURLToPath } from "node:url";',
+				'const __filename = fileURLToPath(import.meta.url);',
+				"const __dirname = dirname(__filename);",
+				"export const filePath = __filename;",
+				"export const dirPath = __dirname;",
+			].join("\n"),
+		);
+
+		try {
+			const stdout = await runStandaloneScript(`
+			import {
+				NodeRuntime,
+				allowAll,
+				createNodeDriver,
+				createNodeRuntimeDriverFactory,
+			} from ${JSON.stringify(DIST_INDEX_URL)};
+
+			const stdio = [];
+			const runtime = new NodeRuntime({
+				onStdio: (event) => {
+					if (event.channel === "stderr") {
+						stdio.push(event.message);
+					}
+				},
+				systemDriver: createNodeDriver({
+					moduleAccess: { cwd: ${JSON.stringify(WORKSPACE_ROOT)} },
+					permissions: allowAll,
+				}),
+				runtimeDriverFactory: createNodeRuntimeDriverFactory(),
+			});
+
+			const result = await runtime.exec(
+				\`(() => {
+					try {
+						const mod = require(${JSON.stringify(fixturePath)});
+						if (mod.filePath !== ${JSON.stringify(fixturePath)}) {
+							throw new Error("unexpected filePath export: " + mod.filePath);
+						}
+						console.log(JSON.stringify({
+							ok: true,
+							filePath: mod.filePath,
+							dirPath: mod.dirPath,
+						}));
+					} catch (error) {
+						console.error(String(error));
+						console.error(error && error.stack ? error.stack : "");
+						process.exitCode = 1;
+					}
+				})();\`,
+				{ cwd: ${JSON.stringify(WORKSPACE_ROOT)} },
+			);
+
+			await runtime.terminate();
+			await new Promise((resolve, reject) => {
+				process.stdout.write(JSON.stringify({
+					code: result.code,
+					stderr: stdio.join(""),
+				}), (error) => {
+					if (error) {
+						reject(error);
+						return;
+					}
+					resolve();
+				});
+			});
+			process.exit(0);
+		`);
+
+			const result = JSON.parse(stdout) as {
+				code: number;
+				stderr: string;
+			};
+
+			expect(result.code).toBe(0);
+			expect(result.stderr).not.toContain("Identifier '__filename' has already been declared");
+			expect(result.stderr).toBe("");
+		} finally {
+			await rm(fixtureDir, { recursive: true, force: true });
+		}
 	}, 30_000);
 });

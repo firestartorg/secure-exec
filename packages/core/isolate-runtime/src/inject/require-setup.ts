@@ -1,5 +1,6 @@
 // @ts-nocheck
 // This file is executed inside the isolate runtime.
+      const REQUIRE_TRANSFORM_MARKER = '/*__secure_exec_require_esm__*/';
       const __requireExposeCustomGlobal =
         typeof globalThis.__runtimeExposeCustomGlobal === "function"
           ? globalThis.__runtimeExposeCustomGlobal
@@ -3973,17 +3974,6 @@
 	          return parsed;
 	        }
 
-	        // Some CJS artifacts include import.meta.url probes that are valid in
-	        // ESM but a syntax error in Function()-compiled CJS wrappers.
-	        const normalizedSource =
-	          typeof source === 'string'
-	            ? source
-	                .replace(/import\.meta\.url/g, '__filename')
-	                .replace(/fileURLToPath\(__filename\)/g, '__filename')
-	                .replace(/url\.fileURLToPath\(__filename\)/g, '__filename')
-	                .replace(/fileURLToPath\.call\(void 0, __filename\)/g, '__filename')
-	            : source;
-
         // Create module object
         const module = {
           exports: {},
@@ -4001,15 +3991,22 @@
         try {
           // Wrap and execute the code
           let wrapper;
+          const isRequireTransformedEsm =
+            typeof source === 'string' &&
+            source.startsWith(REQUIRE_TRANSFORM_MARKER);
+          const wrapperPrologue = isRequireTransformedEsm
+            ? ''
+            : "var __filename = __secureExecFilename;\n" +
+              "var __dirname = __secureExecDirname;\n";
           try {
 	            wrapper = new Function(
 	              'exports',
 	              'require',
 	              'module',
-	              '__filename',
-	              '__dirname',
+	              '__secureExecFilename',
+	              '__secureExecDirname',
 	              '__dynamicImport',
-	              normalizedSource + '\n//# sourceURL=' + resolved
+	              wrapperPrologue + source + '\n//# sourceURL=' + resolved
 	            );
           } catch (error) {
             const details =

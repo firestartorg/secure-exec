@@ -240,6 +240,11 @@ The runtime MUST classify JavaScript modules using Node-compatible metadata rule
 - **WHEN** a package has `package.json` with `"type": "module"` and sandboxed code loads `./index.js`
 - **THEN** the runtime MUST evaluate the file as ESM semantics (including `import.meta` availability and ESM export behavior)
 
+#### Scenario: Require-transformed ESM keeps module-local `__filename` bindings
+- **WHEN** sandboxed code loads a package that is transformed for `require()` compatibility from ESM source using `import.meta.url`, and that source also declares its own `const __filename = fileURLToPath(import.meta.url)` or `const __dirname = dirname(__filename)`
+- **THEN** the runtime MUST compile and execute that module without colliding with the CommonJS wrapper parameters
+- **AND** any compatibility transform MUST preserve the module's own local bindings instead of rewriting source tokens to the wrapper globals
+
 #### Scenario: .js under type commonjs is treated as CJS
 - **WHEN** a package has `package.json` with `"type": "commonjs"` (or no ESM override) and sandboxed code loads `./index.js` via `require`
 - **THEN** the runtime MUST evaluate the file as CommonJS and return `module.exports`

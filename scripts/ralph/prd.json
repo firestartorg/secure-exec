@@ -1125,8 +1125,24 @@
         "Typecheck passes"
       ],
       "priority": 53.1,
+      "passes": true,
+      "notes": "Fixed in the SecureExec runtime/module-loader layer. `transformSourceForRequire*()` now injects an internal file-URL helper for `import.meta.url` and marks require-transformed ESM, while the isolate CommonJS loader keeps wrapper filename/dirname on private parameter names and only synthesizes local `__filename`/`__dirname` bindings for plain CommonJS sources. Result: importing `@mariozechner/pi-coding-agent@0.60.0` through NodeRuntime no longer fails with `SyntaxError: Identifier '__filename' has already been declared`; the Pi import chain now advances to the next concrete blocker (`ENOENT` for `dist/package.json`)."
+    },
+    {
+      "id": "US-068",
+      "title": "Fix Pi package asset discovery after SDK import bootstrap",
+      "description": "As a developer, I need Pi's package metadata and bundled assets to resolve correctly inside SecureExec after the import bootstrap succeeds, so the SDK can continue booting beyond `dist/config.js`.",
+      "acceptanceCriteria": [
+        "Reproduce the new blocker after US-067 by importing `@mariozechner/pi-coding-agent@0.60.0` through NodeRuntime and observing the `ENOENT` for `dist/package.json`",
+        "SecureExec resolves Pi's package metadata/assets from the actual package root instead of trying to open `dist/package.json`",
+        "The fix applies in SecureExec's runtime/module/filesystem layer rather than by patching Pi locally",
+        "The Pi SDK real-provider harness advances beyond package-dir/bootstrap asset discovery and either completes successfully or exposes the next concrete blocker",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 53.2,
       "passes": false,
-      "notes": "Blocked by SecureExec runtime/module-wrapper behavior. Exact repro as of 2026-03-26: `@mariozechner/pi-coding-agent@0.60.0` imports successfully in host Node, but inside NodeRuntime the import chain reaches `dist/config.js` and fails with `SyntaxError: Identifier '__filename' has already been declared`. Proposed unblock path: inspect the CommonJS compilation wrapper / loader path that injects `__filename`/`__dirname` and make it tolerate upstream packages that declare those identifiers in module scope."
+      "notes": "Next blocker exposed by US-067. Exact repro as of 2026-03-26: after the `__filename` collision fix, importing `@mariozechner/pi-coding-agent@0.60.0` through NodeRuntime reaches `dist/config.js` and then fails with `ENOENT: no such file or directory, open '<repo>/node_modules/.pnpm/.../@mariozechner/pi-coding-agent/dist/package.json'`. Proposed unblock path: inspect how the sandboxed FS / path resolution is handling Pi's package-root detection and why `getPackageDir()` stops at `dist/` instead of the package root."
     },
     {
       "id": "US-062",
