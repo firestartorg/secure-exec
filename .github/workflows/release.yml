@@ -138,26 +138,25 @@ jobs:
 
       - name: Place V8 binaries
         run: |
+          # Move downloaded artifacts into their platform package dirs
           for dir in native/v8-runtime/npm/v8-*/; do
             PLATFORM_DIR=$(basename "$dir" | sed 's/^v8-//')
             TARGET_DIR="native/v8-runtime/npm/${PLATFORM_DIR}"
             if [ -d "$TARGET_DIR" ]; then
               cp "$dir"/* "$TARGET_DIR/"
-              # Make binary executable on Unix platforms
               find "$TARGET_DIR" -name "secure-exec-v8" -exec chmod +x {} \;
               echo "✓ Placed binary in ${TARGET_DIR}"
             fi
           done
-          # Verify all platform packages have their binary
+          # Verify each built artifact was placed
           echo "--- Binary verification ---"
-          for dir in native/v8-runtime/npm/*/; do
-            PLATFORM=$(basename "$dir")
-            # Skip artifact staging dirs
-            if [[ "$PLATFORM" == v8-* ]]; then continue; fi
-            if ls "$dir"secure-exec-v8* 1>/dev/null 2>&1; then
-              echo "✓ ${PLATFORM}: $(ls "$dir"secure-exec-v8*)"
+          for dir in native/v8-runtime/npm/v8-*/; do
+            PLATFORM_DIR=$(basename "$dir" | sed 's/^v8-//')
+            TARGET_DIR="native/v8-runtime/npm/${PLATFORM_DIR}"
+            if ls "$TARGET_DIR"/secure-exec-v8* 1>/dev/null 2>&1; then
+              echo "✓ ${PLATFORM_DIR}: $(ls "$TARGET_DIR"/secure-exec-v8*)"
             else
-              echo "✗ ${PLATFORM}: MISSING BINARY"
+              echo "✗ ${PLATFORM_DIR}: MISSING BINARY"
               exit 1
             fi
           done
@@ -184,14 +183,18 @@ jobs:
             fi
           done
 
-          # Publish v8 platform packages (not in pnpm workspace)
+          # Publish v8 platform packages that have binaries (built by matrix)
           for dir in native/v8-runtime/npm/*/; do
             if [ ! -f "$dir/package.json" ]; then
               continue
             fi
-            # Skip artifact staging dirs
             PLATFORM=$(basename "$dir")
+            # Skip artifact staging dirs and platforms without binaries
             if [[ "$PLATFORM" == v8-* ]]; then continue; fi
+            if ! ls "$dir"secure-exec-v8* 1>/dev/null 2>&1; then
+              echo "⏭ ${PLATFORM}: no binary, skipping publish."
+              continue
+            fi
             NAME=$(jq -r .name "$dir/package.json")
             VERSION="${{ inputs.version }}"
             if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
