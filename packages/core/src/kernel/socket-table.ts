@@ -557,6 +557,7 @@ export class SocketTable {
 	): void {
 		const socket = this.requireSocket(socketId);
 		socket.options.set(optKey(level, optname), optval);
+		this.applySocketOptionToHostSocket(socket, level, optname, optval);
 	}
 
 	/** Toggle non-blocking behavior for an existing socket. */
@@ -670,6 +671,7 @@ export class SocketTable {
 				socket.external = true;
 				socket.remoteAddr = addr;
 				socket.hostSocket = hostSocket;
+				this.applySocketOptionsToHostSocket(socket);
 				this.startReadPump(socket);
 				return;
 			}
@@ -1247,6 +1249,7 @@ export class SocketTable {
 				current.external = true;
 				current.remoteAddr = addr;
 				current.hostSocket = hostSocket;
+				this.applySocketOptionsToHostSocket(current);
 				this.startReadPump(current);
 			})
 			.catch(() => {
@@ -1291,6 +1294,7 @@ export class SocketTable {
 					connSock.external = true;
 					connSock.hostSocket = hostSocket;
 					connSock.localAddr = socket.localAddr;
+					this.applySocketOptionsToHostSocket(connSock);
 
 					// Start read pump for the accepted socket
 					this.startReadPump(connSock);
@@ -1313,6 +1317,33 @@ export class SocketTable {
 		const sock = this.sockets.get(id);
 		if (!sock || sock.state !== "listening") return null;
 		return sock;
+	}
+
+	/** Replay stored socket options onto a host-backed connection. */
+	private applySocketOptionsToHostSocket(socket: KernelSocket): void {
+		for (const [key, value] of socket.options.entries()) {
+			const [level, optname] = key.split(":").map(Number);
+			if (Number.isNaN(level) || Number.isNaN(optname)) continue;
+			this.applySocketOptionToHostSocket(socket, level, optname, value);
+		}
+	}
+
+	/** Best-effort option forwarding for host-backed sockets. */
+	private applySocketOptionToHostSocket(
+		socket: KernelSocket,
+		level: number,
+		optname: number,
+		optval: number,
+	): void {
+		if (!socket.external || !socket.hostSocket) {
+			return;
+		}
+
+		try {
+			socket.hostSocket.setOption(level, optname, optval);
+		} catch {
+			// Host adapters may not support every kernel-tracked option.
+		}
 	}
 
 	/** Peek up to maxBytes from a socket's readBuffer without consuming. */

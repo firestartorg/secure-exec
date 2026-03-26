@@ -432,6 +432,31 @@ The kernel socket table SHALL reserve listener ports deterministically for loopb
 - **WHEN** a listening socket is closed while its accept backlog still contains pending server-side sockets
 - **THEN** the kernel MUST close those queued sockets as part of listener teardown so detached connections do not remain reachable without a listener owner
 
+### Requirement: Socket Options And Per-call Flags Preserve Kernel And Host Semantics
+The kernel socket table SHALL track socket options per socket, apply kernel-enforced options during bind/send paths, and preserve per-call read flag semantics across supported socket types.
+
+#### Scenario: getsockopt returns values previously stored by setsockopt
+- **WHEN** a caller sets `SO_REUSEADDR`, `SO_KEEPALIVE`, `SO_RCVBUF`, `SO_SNDBUF`, or `TCP_NODELAY` on a kernel socket
+- **THEN** `getsockopt` MUST return the last value written for that `(level, optname)` pair on that socket
+
+#### Scenario: SO_REUSEADDR changes bind conflict behavior
+- **WHEN** a caller binds an internet-domain socket to an already-used local port after setting `SO_REUSEADDR` on the binding socket
+- **THEN** the kernel MUST allow that bind instead of rejecting it with `EADDRINUSE`
+
+#### Scenario: host-backed TCP sockets replay stored options after connect
+- **WHEN** a socket with previously stored `TCP_NODELAY` or `SO_KEEPALIVE` becomes backed by a host TCP connection
+- **THEN** the kernel MUST replay those options onto the host socket
+- **AND** later `setsockopt` updates on that connected host-backed socket MUST be forwarded immediately
+
+#### Scenario: MSG_PEEK returns data without consuming it
+- **WHEN** `recv()` or `recvFrom()` is called with `MSG_PEEK` and data is queued
+- **THEN** the kernel MUST return the readable bytes without removing them from the socket buffer or datagram queue
+
+#### Scenario: MSG_DONTWAIT returns EAGAIN only for empty non-EOF reads
+- **WHEN** `recv()` or `recvFrom()` is called with `MSG_DONTWAIT` and no readable data is available yet
+- **THEN** the kernel MUST fail immediately with `EAGAIN`
+- **AND** if EOF is already known for that read path it MUST still return `null` instead of `EAGAIN`
+
 ### Requirement: UDP Datagram Transport Preserves Message Boundaries And Source Addresses
 The kernel socket table SHALL model UDP as connectionless datagram delivery, preserving one-send-to-one-recv boundaries and reporting the sender address for each datagram.
 

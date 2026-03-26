@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - `AF_UNIX` sockets are local IPC, not host networking: kernel `SocketTable` bind/listen/connect for path sockets must stay fully in-kernel, bypass `permissions.network`, and use only the listener registry plus VFS socket-file state.
+- Socket constants like `SOL_SOCKET`, `TCP_NODELAY`, and `MSG_*` are not exported from the public `@secure-exec/core` entrypoint; tests or adapters outside `packages/core` should import them from the kernel surface (`core/src/kernel/index.ts` in-repo or `@secure-exec/core/internal/kernel` from package consumers).
 - Host-backed UDP verification should include a real `packages/secure-exec/tests/kernel/` case with `createKernel()`, `createNodeHostNetworkAdapter()`, and real `node:dgram` peers; socket-table unit tests only cover transport helpers, and host-visible UDP unit tests still need an explicit `networkCheck` fixture.
 - When kernel/device code needs a special file type in the browser-facing `InMemoryFileSystem`, `packages/browser/src/os-filesystem.ts` `chmod()` must honor caller-supplied type bits like `S_IFSOCK`; preserving the old file type silently downgrades socket files back to regular files.
 - Kernel integration tests that need deferred-unlink or inode-lifetime semantics must build the kernel with `InMemoryFileSystem` and await `posixDirsReady`; the default `createTestKernel()` `TestFileSystem` does not exercise inode-backed FD lifetime behavior.
@@ -678,4 +679,13 @@
   - Host-backed UDP unit tests must supply `networkCheck`; `bindExternalUdp()` now correctly fails closed with `EACCES` when no permission policy is configured.
   - The right proof point for kernel UDP transport is a real `createKernel()` instance with process-table-owned sockets and real `node:dgram` peers, not only standalone `SocketTable` coverage or WasmVM-only fixtures.
   - Binding kernel UDP sockets to `127.0.0.1:0` works for host-backed tests because `SocketTable.bind()` assigns a kernel ephemeral port first, and `bindExternalUdp()` reuses that concrete port for the host adapter.
+---
+## [2026-03-26 12:34 PDT] - US-050
+- Implemented host-backed socket option replay in `SocketTable`, so stored `TCP_NODELAY` and `SO_KEEPALIVE` values are forwarded when an external TCP connection is established and when `setsockopt()` updates an already-connected host socket.
+- Fixed the stale socket-flag unit fixture for deny-by-default networking, added external-connect unit coverage for immediate/replayed `setOption()` forwarding, and added `packages/secure-exec/tests/kernel/socket-option-behavior.test.ts` to prove socket options plus `MSG_PEEK`/`MSG_DONTWAIT` across real kernel TCP, AF_UNIX, UDP, and host-backed TCP paths.
+- Files changed: `AGENTS.md`, `.agent/contracts/kernel.md`, `packages/core/src/kernel/socket-table.ts`, `packages/core/test/kernel/external-connect.test.ts`, `packages/core/test/kernel/socket-flags.test.ts`, `packages/nodejs/src/host-network-adapter.ts`, `packages/secure-exec/tests/kernel/socket-option-behavior.test.ts`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`
+- **Learnings for future iterations:**
+  - Public `@secure-exec/core` exports only the top-level socket classes and domains; kernel socket constants must come from the kernel surface (`core/src/kernel/index.ts` in-repo or `@secure-exec/core/internal/kernel` for package consumers) or option/flag tests will silently use `undefined`.
+  - Host-backed socket option coverage is easiest to prove by wrapping `createNodeHostNetworkAdapter()` and recording `HostSocket.setOption()` calls while still delegating to the real Node socket underneath.
+  - Socket-flag unit helpers that create loopback listeners need the same explicit allow-all `networkCheck` fixture as other `listen()`-based `SocketTable` tests, or deny-by-default networking fails them before any flag behavior runs.
 ---

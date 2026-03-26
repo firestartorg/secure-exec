@@ -14,7 +14,9 @@ import {
  * Returns { table, clientId, serverId }.
  */
 async function createConnectedPair(port = 6060) {
-	const table = new SocketTable();
+	const table = new SocketTable({
+		networkCheck: () => ({ allow: true }),
+	});
 	const listenId = table.create(AF_INET, SOCK_STREAM, 0, 1);
 	await table.bind(listenId, { host: "0.0.0.0", port });
 	await table.listen(listenId);
@@ -153,7 +155,9 @@ describe("Socket flags", () => {
 	});
 
 	it("non-blocking accept returns EAGAIN when backlog is empty", async () => {
-		const table = new SocketTable();
+		const table = new SocketTable({
+			networkCheck: () => ({ allow: true }),
+		});
 		const listenId = table.create(AF_INET, SOCK_STREAM, 0, 1);
 		await table.bind(listenId, { host: "0.0.0.0", port: 6061 });
 		await table.listen(listenId);

@@ -25,6 +25,7 @@
 - kernel signal-handler regressions should use a real spawned PID plus `KernelInterface.processTable` / `KernelInterface.socketTable`; unit `ProcessTable` coverage alone does not prove pending delivery or `SA_RESTART` behavior through the live kernel
 - socket-table unit tests that call `listen()` or other host-visible network operations must provide an explicit `networkCheck` fixture; bare `new SocketTable()` now models deny-by-default networking and will reject listener setup with `EACCES`
 - kernel UDP transport stories should include a real `packages/secure-exec/tests/kernel/` case that builds a `createKernel()` instance with `createNodeHostNetworkAdapter()` and real `node:dgram` peers; socket-table unit tests alone do not prove host-backed datagram routing
+- socket option/flag stories should pair `packages/core/test/kernel/` coverage with a real `packages/secure-exec/tests/kernel/` case across TCP, AF_UNIX, and UDP; when proving host-backed option replay, wrap `createNodeHostNetworkAdapter()` and record `HostSocket.setOption()` calls instead of relying on public `@secure-exec/core` exports for `SOL_SOCKET`/`TCP_NODELAY`/`MSG_*` constants
 
 ### POSIX Conformance Test Integrity
 

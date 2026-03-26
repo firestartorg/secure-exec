@@ -22,6 +22,7 @@ import type {
 class MockHostSocket implements HostSocket {
 	writtenData: Uint8Array[] = [];
 	closed = false;
+	optionCalls: Array<{ level: number; optname: number; optval: number }> = [];
 	private readResolvers: ((value: Uint8Array | null) => void)[] = [];
 
 	async write(data: Uint8Array): Promise<void> {
@@ -53,7 +54,9 @@ class MockHostSocket implements HostSocket {
 		this.readResolvers = [];
 	}
 
-	setOption(_level: number, _optname: number, _optval: number): void {}
+	setOption(level: number, optname: number, optval: number): void {
+		this.optionCalls.push({ level, optname, optval });
+	}
 	shutdown(_how: "read" | "write" | "both"): void {}
 }
 
@@ -152,6 +155,43 @@ describe("External connection routing via host adapter", () => {
 
 		const socket = table.get(clientId)!;
 		expect(socket.hostSocket).toBe(adapter.lastSocket);
+	});
+
+	it("replays stored socket options when an external connect completes", async () => {
+		const adapter = new MockHostNetworkAdapter();
+		const table = new SocketTable({
+			networkCheck: allowAll,
+			hostAdapter: adapter,
+		});
+
+		const clientId = table.create(AF_INET, SOCK_STREAM, 0, 1);
+		table.setsockopt(clientId, 6, 1, 1);
+		await table.connect(clientId, { host: "10.0.0.1", port: 443 });
+
+		expect(adapter.lastSocket?.optionCalls).toContainEqual({
+			level: 6,
+			optname: 1,
+			optval: 1,
+		});
+	});
+
+	it("forwards setsockopt immediately on an already-connected external socket", async () => {
+		const adapter = new MockHostNetworkAdapter();
+		const table = new SocketTable({
+			networkCheck: allowAll,
+			hostAdapter: adapter,
+		});
+
+		const clientId = table.create(AF_INET, SOCK_STREAM, 0, 1);
+		await table.connect(clientId, { host: "10.0.0.1", port: 443 });
+
+		table.setsockopt(clientId, 1, 9, 1);
+
+		expect(adapter.lastSocket?.optionCalls).toContainEqual({
+			level: 1,
+			optname: 9,
+			optval: 1,
+		});
 	});
 
 	it("non-blocking external connect returns EINPROGRESS and completes in background", async () => {

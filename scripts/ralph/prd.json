@@ -1055,7 +1055,7 @@
         "Typecheck passes"
       ],
       "priority": 50,
-      "passes": false,
+      "passes": true,
       "notes": "This story enhances the socket types built by the TCP, AF_UNIX, and UDP stories."
     },
     {

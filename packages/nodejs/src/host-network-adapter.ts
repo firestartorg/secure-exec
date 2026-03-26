@@ -3,16 +3,22 @@
  * node:dgram, and node:dns for real external I/O.
  */
 
-import * as net from "node:net";
 import * as dgram from "node:dgram";
 import * as dns from "node:dns";
+import * as net from "node:net";
 import type {
+	DnsResult,
+	HostListener,
 	HostNetworkAdapter,
 	HostSocket,
-	HostListener,
 	HostUdpSocket,
-	DnsResult,
 } from "@secure-exec/core";
+import {
+	IPPROTO_TCP,
+	SOL_SOCKET,
+	SO_KEEPALIVE,
+	TCP_NODELAY,
+} from "@secure-exec/core/internal/kernel";
 
 /**
  * Queued-read adapter: incoming data/EOF/errors are buffered so that
@@ -23,7 +29,6 @@ class NodeHostSocket implements HostSocket {
 	private readQueue: (Uint8Array | null)[] = [];
 	private waiters: ((value: Uint8Array | null) => void)[] = [];
 	private ended = false;
-	private errored: Error | null = null;
 
 	constructor(socket: net.Socket) {
 		this.socket = socket;
@@ -49,7 +54,6 @@ class NodeHostSocket implements HostSocket {
 		});
 
 		socket.on("error", (err: Error) => {
-			this.errored = err;
 			// Wake all pending readers with EOF
 			for (const waiter of this.waiters.splice(0)) {
 				waiter(null);
@@ -91,8 +95,13 @@ class NodeHostSocket implements HostSocket {
 	}
 
 	setOption(level: number, optname: number, optval: number): void {
-		// Forward common options to the real socket
-		this.socket.setNoDelay(optval !== 0);
+		if (level === IPPROTO_TCP && optname === TCP_NODELAY) {
+			this.socket.setNoDelay(optval !== 0);
+			return;
+		}
+		if (level === SOL_SOCKET && optname === SO_KEEPALIVE) {
+			this.socket.setKeepAlive(optval !== 0);
+		}
 	}
 
 	shutdown(how: "read" | "write" | "both"): void {
@@ -159,7 +168,7 @@ class NodeHostListener implements HostListener {
 	async close(): Promise<void> {
 		this.closed = true;
 		// Reject pending accept waiters
-		for (const waiter of this.waiters.splice(0)) {
+		for (const _waiter of this.waiters.splice(0)) {
 			// Resolve with a destroyed socket to signal closure — caller handles
 			// the error via the socket's error/close events
 		}
