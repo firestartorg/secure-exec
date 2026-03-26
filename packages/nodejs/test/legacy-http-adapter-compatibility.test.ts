@@ -21,8 +21,8 @@ class TrackingSocketTable extends SocketTable {
 	}
 }
 
-describe("kernel HTTP bridge", () => {
-	it("serves host-side HTTP requests through the kernel-backed listener", async () => {
+describe("legacy default-network adapter compatibility", () => {
+	it("lets the legacy adapter reach a kernel-backed listener", async () => {
 		const adapter = createDefaultNetworkAdapter();
 		const socketTable = new SocketTable({
 			hostAdapter: createNodeHostNetworkAdapter(),
@@ -97,7 +97,7 @@ describe("kernel HTTP bridge", () => {
 		}
 	});
 
-	it("routes fetch/httpRequest loopback clients through kernel sockets instead of direct adapter calls", async () => {
+	it("keeps loopback fetch/httpRequest routing on kernel sockets even when a legacy adapter is injected", async () => {
 		const adapter = createDefaultNetworkAdapter() as ReturnType<typeof createDefaultNetworkAdapter> & {
 			fetch: typeof createDefaultNetworkAdapter extends (...args: any[]) => infer T
 				? T["fetch"]

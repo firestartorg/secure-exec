@@ -117,6 +117,17 @@ Fixture dependency installation SHALL be cached across repeated test invocations
 - **WHEN** fixture files or cache key factors change
 - **THEN** the matrix MUST prepare a new cache entry and reinstall dependencies before execution
 
+### Requirement: Kernel-Consolidation Proof Must Use Kernel-Mounted Verification
+Stories or docs that claim kernel-consolidation networking behavior is complete SHALL distinguish kernel-mounted proof from compatibility coverage for the retained legacy adapter path.
+
+#### Scenario: Verification targets a retained legacy adapter path
+- **WHEN** a test instantiates `createDefaultNetworkAdapter()` or `useDefaultNetwork`
+- **THEN** that test MUST be treated as compatibility coverage for the standalone legacy path rather than as proof that kernel-consolidation work is complete
+
+#### Scenario: Verification is used as evidence for kernel-consolidation networking
+- **WHEN** a test or document is cited as proof that kernel-backed Node networking works
+- **THEN** it MUST execute through `createNodeRuntime()` mounted into a real `Kernel` or an equivalent kernel-mediated path that exercises the shared socket table and host-adapter delegation
+
 ### Requirement: Parity Mismatches Remain Failing Until Resolved
 Compatibility project-matrix policy SHALL NOT include a "known mismatch" or equivalent pass-through state for parity failures.
 

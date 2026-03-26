@@ -912,7 +912,7 @@
         "Typecheck passes"
       ],
       "priority": 42,
-      "passes": false,
+      "passes": true,
       "notes": "Several existing Node suites still validate the standalone default-network path, which inflated confidence in the kernel migration stories."
     },
     {

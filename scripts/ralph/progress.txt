@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Tests that instantiate `createDefaultNetworkAdapter()` or `useDefaultNetwork` are legacy adapter compatibility coverage only; kernel-consolidation proof should live under `packages/secure-exec/tests/kernel/` and mount `createNodeRuntime()` into a real `Kernel`.
 - Story-critical Wasm C integration suites should keep local `skipIf` guards for missing binaries, but pair them with separate CI-only artifact-availability tests so missing `native/wasmvm/c/build/*` fixtures fail loudly instead of disappearing behind skips.
 - Reserve `category: "vacuous-skip"` for `expected: "pass"` self-skips only; if a vendored file remains `expected: "skip"` because behavior is still broken, keep a real failure category like `implementation-gap` so conformance category totals stay honest.
 - For overfitting-prone kernel/network stories, keep host-vs-sandbox cross-validation tests even when they currently expose a mismatch; assert the concrete exit code/stderr/raw-byte delta instead of downgrading back to another same-code-path loopback test.
@@ -588,4 +589,15 @@
   - Kernel-mounted Node currently reports `ENOSYS: function not implemented, connect 'http://127.0.0.1:<port>/wire'` on the real host-server control path, so external-client verification should assert that concrete mismatch until the kernel-backed connect path is implemented.
   - Kernel-backed loopback HTTP response framing is close enough for raw-byte comparison once you strip the time-varying `Date` header, which the current bridge still emits even when userland sets `res.sendDate = false`.
   - Running the real `express-pass` fixture through a network-enabled kernel currently exits with `TypeError: pathRegexp is not a function`; preserving that black-box mismatch test makes future HTTP fixes prove themselves against a real package instead of only against first-party loopback tests.
+---
+## [2026-03-26 11:29 PDT] - US-042
+- Retargeted the misleading kernel-consolidation proof path by renaming `packages/nodejs/test/kernel-http-bridge.test.ts` to `packages/nodejs/test/legacy-http-adapter-compatibility.test.ts` and updating its wording so it is clearly legacy adapter compatibility coverage rather than kernel-backed proof.
+- Added `packages/secure-exec/tests/kernel/network-kernel-backed-verification.test.ts`, which mounts `createNodeRuntime()` into a real kernel and proves both host-to-sandbox listener reachability and sandbox loopback client routing while asserting loopback does not hit the host adapter `tcpConnect` path.
+- Updated the compatibility-governance contract, root agent guidance, and kernel-consolidation audit/roadmap notes so future stories cite kernel-mounted verification for consolidation claims and keep the default-network adapter suites as compatibility-only coverage.
+- Verified with `pnpm vitest run packages/nodejs/test/legacy-http-adapter-compatibility.test.ts packages/secure-exec/tests/kernel/network-kernel-backed-verification.test.ts`, `pnpm --filter @secure-exec/nodejs check-types`, and `pnpm --filter secure-exec check-types`.
+- Files changed: `.agent/contracts/compatibility-governance.md`, `CLAUDE.md`, `docs-internal/kernel-consolidation-audit.md`, `docs-internal/nodejs-compat-roadmap.md`, `packages/nodejs/test/kernel-http-bridge.test.ts` (renamed to `packages/nodejs/test/legacy-http-adapter-compatibility.test.ts`), `packages/secure-exec/tests/kernel/network-kernel-backed-verification.test.ts`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`
+- **Learnings for future iterations:**
+  - A `packages/nodejs/test/` suite can still be valuable after kernel consolidation, but if it constructs `createDefaultNetworkAdapter()` it should be labeled as legacy compatibility and not reused as migration proof.
+  - For kernel-backed verification, a tracked `HostNetworkAdapter` wrapper is a simple way to prove loopback traffic stayed inside the kernel path: external listener exposure should increment `tcpListen`, while same-kernel loopback clients should leave `tcpConnect` at `0`.
+  - Explicit `process.exit()` inside kernel-mounted Node test snippets can surface `ProcessExitError` on stderr; for proof-style integration tests it is cleaner to close the last server/socket handle and let the process exit naturally.
 ---

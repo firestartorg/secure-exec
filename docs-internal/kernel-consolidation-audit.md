@@ -13,6 +13,11 @@ still retains its own networking state as a backward-compatible fallback.
 
 ## Verification Results
 
+### Verification Proof Separation
+
+- `packages/nodejs/test/legacy-http-adapter-compatibility.test.ts` covers the retained `createDefaultNetworkAdapter()` compatibility path only. It is useful to keep the fallback working, but it is not proof that kernel-consolidation work is complete.
+- Kernel-consolidation proof for HTTP listener/client routing now lives under `packages/secure-exec/tests/kernel/`, where tests mount `createNodeRuntime()` into a real `Kernel` and assert behavior through that execution path.
+
 ### ✅ WasmVM driver.ts — CLEAN
 
 - No `_sockets` Map

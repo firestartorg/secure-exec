@@ -42,6 +42,7 @@
   - **known-test-vector validation**: for crypto, validate against NIST/RFC test vectors — not just round-trip verification
   - **error object snapshot testing**: for ERR_* codes, snapshot-test full error objects (code, message, constructor) against Node.js — not just check `.code` exists
   - **host-side assertion verification**: periodically run assert-heavy conformance tests through host Node.js to verify the assert polyfill isn't masking failures
+- for kernel-consolidation stories, tests that instantiate `createDefaultNetworkAdapter()` or `useDefaultNetwork` are legacy compatibility coverage only; completion claims must be backed by `createNodeRuntime()` mounted into a real `Kernel`
 - never inflate conformance numbers — if a test self-skips (exits 0 without testing anything), mark it `vacuous-skip` in expectations.json, not as a real pass
 - reserve `category: "vacuous-skip"` for `expected: "pass"` self-skips only; if a vendored file stays `expected: "skip"` because behavior is still broken, keep a real failure category like `implementation-gap` so report category totals stay honest
 - every entry in `expectations.json` must have a specific, verifiable reason — no vague "fails in sandbox" reasons
