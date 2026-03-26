@@ -126,6 +126,7 @@ class KernelImpl implements Kernel {
 		this.userManager = new UserManager();
 		this.socketTable = new SocketTable({
 			vfs: this.vfs,
+			networkCheck: options.permissions?.network,
 			hostAdapter: options.hostNetworkAdapter,
 			getSignalState: (pid) => this.processTable.getSignalState(pid),
 		});

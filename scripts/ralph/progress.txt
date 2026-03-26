@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Kernel network permissions only become truly deny-by-default when `KernelImpl` threads `options.permissions?.network` into `SocketTable` and external socket paths call `checkNetworkPermission()` unconditionally; loopback exemptions belong in routing branches, not `if (networkCheck)` guards.
 - Kernel-mounted runtime drivers must make `DriverProcess.kill()` settle `wait()` / `onExit`; clearing timers, servers, or other runtime resources without resolving process completion leaves kernel `spawn()` callers hung.
 - Vendored `http2` validation/error fixtures sometimes build their expected error text with the sandbox's own `util.inspect()`, so inspect parity bugs can masquerade as bridge-validation regressions
 - Synthetic bridged `http2` server-stream errors should mark the stream as already closing before userland `'error'` listeners run; vendored handlers often call `stream.destroy()` again inside that same error event
@@ -258,7 +259,6 @@
 - Host-side pending connect promises need rejection wrapping before sandbox code awaits them, or vendored `net` runs can emit host `PromiseRejectionHandledWarning` noise even when the sandbox test logic succeeds.
 - For accepted sockets, server-level keepalive defaults must also seed the socket object's internal keepalive state; otherwise the first `socket.setKeepAlive(true, sameDelay)` call is observable and breaks Node parity.
 - `packages/nodejs/src/bridge/network.ts` has to block `net.Server.listen()` through `applySyncPromise()` so `server.address()` exposes the bound ephemeral port immediately after `listen()` returns; vendored `net` tests read it before the `'listening'` callback.
----
 ## [2026-03-25 10:07 PDT] - US-017
 - Implemented Node-compatible `net.Socket#setTimeout()` validation and idle timers in `packages/nodejs/src/bridge/network.ts`, including `ERR_INVALID_ARG_TYPE` / `ERR_OUT_OF_RANGE` error codes, inactivity timer resets on socket activity, and timer `ref()` / `unref()` parity so unrefed socket timeouts do not keep the runtime alive.
 - Switched bridged `net.Server.listen()` to resolve through `applySyncPromise()` so `server.address()` is populated as soon as `listen()` returns, added focused runtime-driver coverage for immediate address visibility and unrefed socket timeout behavior, promoted five newly passing vendored `node/net` files in `expectations.json`, updated the Node bridge contract, and regenerated the conformance report outputs.
@@ -482,4 +482,13 @@
   - The cross-runtime HTTP proof depends on kernel-visible wildcard listener state, not just successful loopback delivery; collapsing `0.0.0.0` to `127.0.0.1` in the Node HTTP bridge hides the listener from `kernel.socketTable` and breaks the proof story.
   - The Node kernel runtime already had signal-forwarding coverage, but the failing cross-runtime test exposed a separate `DriverProcess.kill()` gap: terminating runtime resources without settling the process exit promise leaves `kernel.spawn(...).wait()` hanging.
   - When a kernel proof test times out during cleanup, a quick `pnpm tsx` repro that races `proc.wait()` against a timeout is the fastest way to distinguish request-path success from a stuck kill/wait contract.
+---
+## [2026-03-26 08:55 PDT] - US-033
+- Wired kernel `permissions.network` into `KernelImpl`'s shared `SocketTable` and removed the remaining `if (networkCheck)` bypasses so external `listen`, `connect`, `send`, host-backed UDP `sendTo`, and host-backed bind/listen paths now fail closed with `EACCES` when no allow rule is configured.
+- Updated the kernel network-permission suite to stop treating “no policy” as unenforced, added coverage for external send/sendTo and host-backed external listen under no-policy conditions, added `createTestKernel()` coverage proving kernel-created socket tables inherit deny-by-default network enforcement while loopback routing still works, and documented the invariant in the kernel contract plus root agent guidance.
+- Files changed: `.agent/contracts/kernel.md`, `CLAUDE.md`, `packages/core/src/kernel/kernel.ts`, `packages/core/src/kernel/socket-table.ts`, `packages/core/test/kernel/network-permissions.test.ts`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`
+- **Learnings for future iterations:**
+  - Kernel socket permission stories need both halves of the fix: `KernelImpl` must pass `permissions.network` into `SocketTable`, and external socket methods must call `checkNetworkPermission()` unconditionally or “no policy” still leaks through.
+  - Loopback exemptions should stay localized to the listener-routing branch in `SocketTable.connect()` and UDP loopback delivery, rather than guarding whole permission checks on `networkCheck` presence.
+  - `packages/core/test/kernel/network-permissions.test.ts` is the right place to verify deny-by-default semantics at both levels: direct `SocketTable` behavior and `createTestKernel()` wiring through the real kernel constructor.
 ---

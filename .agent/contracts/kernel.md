@@ -440,6 +440,12 @@ The kernel permission system SHALL wrap VFS and environment access with deny-by-
 - **WHEN** network or child-process permission checks are configured
 - **THEN** operations without explicit allowance MUST be denied, consistent with the fs permission model
 
+#### Scenario: Kernel-created socket tables inherit deny-by-default network enforcement
+- **WHEN** `createKernel({ permissions })` constructs the shared `SocketTable`
+- **THEN** the socket table MUST enforce `permissions.network` for host-visible `listen`, external `connect`, external `send`, host-backed UDP `sendTo`, and host-backed listen/bind operations
+- **AND** when `permissions.network` is missing those external socket operations MUST fail with `EACCES`
+- **AND** loopback routing to kernel-owned listeners MUST remain allowed without a host-network allow rule
+
 #### Scenario: Preset allowAll grants all operations
 - **WHEN** `allowAll` permission preset is used
 - **THEN** all filesystem, network, child-process, and env operations MUST be allowed

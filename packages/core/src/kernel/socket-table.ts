@@ -317,10 +317,8 @@ export class SocketTable {
 		}
 		socket.backlogLimit = Math.max(0, backlogSize);
 
-		// Permission check for listen
-		if (this.networkCheck) {
-			this.checkNetworkPermission("listen", socket.localAddr);
-		}
+		// Check host-visible listeners through the deny-by-default network policy.
+		this.checkNetworkPermission("listen", socket.localAddr);
 
 		// External listen — delegate to host adapter
 		if (options?.external && this.hostAdapter && socket.localAddr && isInetAddr(socket.localAddr)) {
@@ -566,10 +564,8 @@ export class SocketTable {
 		const listener = this.findListener(addr);
 
 		if (!listener) {
-			// External connection — check permission (throws EACCES if denied)
-			if (this.networkCheck) {
-				this.checkNetworkPermission("connect", addr);
-			}
+			// Check external connections through the deny-by-default network policy.
+			this.checkNetworkPermission("connect", addr);
 
 			// Route through host adapter if available
 			if (this.hostAdapter && isInetAddr(addr)) {
@@ -647,8 +643,9 @@ export class SocketTable {
 			throw new KernelError("ENOTCONN", "socket is not connected");
 		}
 
-		// Permission check for external sockets
-		if (socket.external && this.networkCheck) {
+		// Re-check outbound external writes so pre-existing host sockets still
+		// honor deny-by-default network policy.
+		if (socket.external) {
 			this.checkNetworkPermission("connect", socket.remoteAddr);
 		}
 
@@ -783,9 +780,7 @@ export class SocketTable {
 
 		// External routing via host adapter
 		if (socket.hostUdpSocket && this.hostAdapter && isInetAddr(destAddr)) {
-			if (this.networkCheck) {
-				this.checkNetworkPermission("connect", destAddr);
-			}
+			this.checkNetworkPermission("connect", destAddr);
 			this.hostAdapter.udpSend(
 				socket.hostUdpSocket, new Uint8Array(data), destAddr.host, destAddr.port,
 			).catch(() => {});
@@ -880,9 +875,7 @@ export class SocketTable {
 			throw new KernelError("EINVAL", "host adapter and inet address required");
 		}
 
-		if (this.networkCheck) {
-			this.checkNetworkPermission("listen", socket.localAddr);
-		}
+		this.checkNetworkPermission("listen", socket.localAddr);
 
 		const hostUdpSocket = await this.hostAdapter.udpBind(
 			socket.localAddr.host, socket.localAddr.port,

@@ -766,7 +766,7 @@
         "Typecheck passes"
       ],
       "priority": 33,
-      "passes": false,
+      "passes": true,
       "notes": "Current code documents deny-by-default in SocketTable but only enforces when networkCheck exists, and KernelImpl does not provide one."
     },
     {
