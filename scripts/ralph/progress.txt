@@ -7,6 +7,7 @@
 - Real-provider NodeRuntime CLI/tool tests that need a mutable temp worktree must pair `moduleAccess` with a host-backed base filesystem such as `new NodeFileSystem()`; `moduleAccess` alone makes projected packages readable but leaves sandbox tools unable to access `/tmp` working files.
 - Kernel-mounted `createNodeRuntime()` needs a loopback-aware `networkAdapter` on the `SystemDriver` whenever the shared kernel `SocketTable` has a host adapter; otherwise bridge `fetch()` / `http(s)` fall back to the `ENOSYS` network stub even though raw kernel TCP connect works.
 - For Pi PTY helper-tool bootstrap, exposing only sandbox `tar` is safer than exposing sandbox `fd` / `rg`: Pi can download its own upstream helper binaries, while the current WasmVM `fd` / `rg` command surface fails Pi's version probes (`fd 0.1.0`, `rg --version`).
+- Raw PTY assertions should sanitize OSC/CSI escape sequences before matching visible UI copy; openShell output can split human-readable text like `drop files to attach` across terminal control codes even when the screen rendered correctly.
 - Packages that pull in `undici` at module scope need modern Web API globals and worker-thread compatibility helpers during bootstrap, before the bridge network module loads; late `fetch`/`Blob`/`FormData` exposure in `packages/nodejs/src/bridge/network.ts` is too late for PTY/CLI startup paths.
 - Fetch bridge request serialization must normalize `Headers` instances before crossing the JSON bridge; SDKs that pass `new Headers(...)` otherwise lose auth headers when the object stringifies to `{}`.
 - Sandbox stdout/stderr write bridges must honor optional callbacks even for empty writes like `process.stdout.write('', cb)`; headless CLI tools use that zero-byte callback as a flush barrier before exit.
@@ -804,4 +805,14 @@
   - The right regression point for eager third-party bootstrap gaps is a real `kernel.openShell({ command: 'node', args: ['-e', ...] })` PTY probe, not a source-only `runtime.exec()` test; that path catches missing globals before late bridge modules initialize.
   - If isolate-runtime typecheck fails after module-loader work, inspect the shared bridge-contract tuple signatures first; runtime call sites often evolve before the shared `BridgeApplySyncPromiseRef` aliases get updated.
   - For `undici`-class dependency chains, the bootstrap contract is broader than `fetch`: worker-thread compatibility helpers and Web Streams statics need to exist before any network request is made.
+---
+## [2026-03-26 20:21 PDT] - US-070
+- Split Pi PTY helper bootstrap into its own deterministic `kernel.openShell()` regression that proves the tar-only sandbox command surface plus preseeded upstream `fd` / `rg` helpers reaches the Pi TUI without mock provider redirects.
+- Extracted reusable Pi PTY setup helpers for the shared hybrid VFS, helper-binary seeding, and interactive CLI bootstrap code so the bootstrap probe and the real-provider PTY test use the same composition.
+- Verified with `pnpm vitest run packages/secure-exec/tests/cli-tools/pi-pty-helper-bootstrap.test.ts packages/secure-exec/tests/cli-tools/pi-pty-real-provider.test.ts` and `pnpm tsc -p packages/secure-exec/tsconfig.json --noEmit`.
+- Files changed: `packages/secure-exec/tests/cli-tools/pi-pty-helper-bootstrap.test.ts`, `packages/secure-exec/tests/cli-tools/pi-pty-helpers.ts`, `packages/secure-exec/tests/cli-tools/pi-pty-real-provider.test.ts`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`
+- **Learnings for future iterations:**
+  - Pi's helper-tool bootstrap can be proven without live provider traffic: a raw `kernel.openShell()` probe with a dummy API key is enough as long as the test stops at TUI render instead of prompt submission.
+  - PTY output assertions should sanitize OSC/CSI escape sequences before checking visible text; raw terminal streams can interleave `drop files` and `to attach` with control codes even when the UI is correct.
+  - The tar-only Wasm command composition is the stable bootstrap boundary for Pi today; mounting sandbox `fd` / `rg` still regresses Pi's version probes, so keep the focused regression on extractor-only sandbox support plus preseeded upstream helpers.
 ---

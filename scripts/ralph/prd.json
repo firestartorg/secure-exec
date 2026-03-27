@@ -1193,7 +1193,7 @@
         "Typecheck passes"
       ],
       "priority": 55.2,
-      "passes": false,
+      "passes": true,
       "notes": "Blocked follow-up from US-063 after the undici/runtime bootstrap fixes. Exact repro as of 2026-03-26: with `createKernel({ filesystem: overlayVfs, permissions: allowAll, hostNetworkAdapter: createNodeHostNetworkAdapter() })` and `await kernel.mount(createNodeRuntime({ permissions: allowAll }))`, Pi now gets past `AbortSignal.timeout` / `Readable.fromWeb` and fails during helper install with `ENOENT: command not found: tar`. Mounting the full WasmVM commands dir changes the failure to Pi rejecting sandbox helper binaries (`fd 0.1.0 (secure-exec)` and `rg: unrecognized option '--version'`). Mounting a tar-only WasmVM runtime lets Pi download and install upstream `fd` / `rg` into `~/.pi/agent/bin`, flips the PTY into bracketed-paste mode (`\\u001b[?2004h`), and then exits with code 1 plus final raw output `IPC connection closed`. This isolates the next unblock to helper-tool/runtime composition and the post-boot PTY exit path, not the earlier undici bootstrap gap."
     },
     {
