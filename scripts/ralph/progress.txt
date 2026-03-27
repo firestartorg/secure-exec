@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- For host-binary CLI/SDK regressions, pair a direct `kernel.spawn()` control with a sandbox `child_process.spawn()` probe for the same command; if the direct kernel command works but the sandbox probe hangs, the blocker is in the Node child_process bridge path rather than the tool binary or provider config.
 - `process.stdin.setRawMode(true)` on a kernel-mounted Node runtime must disable PTY `icrnl` and `isig` alongside `icanon`/`echo`; leaving `icrnl` on rewrites Enter from `\r` to `\n` and breaks raw-mode TUIs.
 - Native `v8-runtime` must load ICU common data before V8 platform init (`build.rs` + `v8::icu::set_common_data_74(...)`), or `Intl.Segmenter.segment()` can tear down the sandbox with `IPC connection closed`.
 - Shared bridge contract tuple types must stay aligned with isolate runtime call sites; `_resolveModule` accepts an optional third load-mode argument and `_loadFile` accepts an optional second load-mode argument, or isolate-runtime `check-types:isolate-runtime` will fail.
@@ -815,4 +816,14 @@
   - Pi's helper-tool bootstrap can be proven without live provider traffic: a raw `kernel.openShell()` probe with a dummy API key is enough as long as the test stops at TUI render instead of prompt submission.
   - PTY output assertions should sanitize OSC/CSI escape sequences before checking visible text; raw terminal streams can interleave `drop files` and `to attach` with control codes even when the UI is correct.
   - The tar-only Wasm command composition is the stable bootstrap boundary for Pi today; mounting sandbox `fd` / `rg` still regresses Pi's version probes, so keep the focused regression on extractor-only sandbox support plus preseeded upstream helpers.
+---
+## [2026-03-26 20:42 PDT] - US-064
+- Added `packages/secure-exec/tests/cli-tools/opencode-sdk-real-provider.test.ts`, an opt-in real-provider OpenCode SDK/server harness that mounts a host-binary driver, proves direct `kernel.spawn('opencode', ['--version'])` works, and then uses the same kernel to probe the sandbox `child_process.spawn()` path before attempting the full `opencode serve` + `@opencode-ai/sdk` flow.
+- Added the real upstream `opencode-ai@1.3.3` test dependency so the harness can resolve a deterministic local binary, updated repo guidance for host-binary CLI/SDK regressions, marked `US-064` complete, and recorded blocked follow-up story `US-071` for the Node child_process bridge hang.
+- Verified with `source ~/misc/env.txt && SECURE_EXEC_OPENCODE_REAL_PROVIDER_E2E=1 pnpm vitest run packages/secure-exec/tests/cli-tools/opencode-sdk-real-provider.test.ts` and `pnpm tsc -p packages/secure-exec/tsconfig.json --noEmit`.
+- Files changed: `CLAUDE.md`, `packages/secure-exec/package.json`, `pnpm-lock.yaml`, `packages/secure-exec/tests/cli-tools/opencode-sdk-real-provider.test.ts`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`
+- **Learnings for future iterations:**
+  - OpenCode's real-provider SDK/server path is blocked earlier than provider traffic: direct host `opencode serve` and direct `kernel.spawn('opencode', ['--version'])` both work, but sandboxed Node `child_process.spawn('opencode', ['--version'])` hangs with no stdout/stderr and times out.
+  - For host-binary automation stories, keep the investigation test useful before and after the bridge fix by asserting the pinned blocker first and only continuing to the full SDK/server flow once that minimal probe succeeds.
+  - Kernel stdout callbacks for spawned host binaries can arrive twice in this path, so version-string assertions should tolerate duplicate lines rather than assuming a single chunk.
 ---

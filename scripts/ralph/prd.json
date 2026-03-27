@@ -1230,8 +1230,24 @@
         "Typecheck passes"
       ],
       "priority": 56,
+      "passes": true,
+      "notes": "Added an opt-in real-provider SDK/server harness at `packages/secure-exec/tests/cli-tools/opencode-sdk-real-provider.test.ts`. The investigation result is split cleanly: direct host `opencode serve` with real Anthropic credentials works, and direct `kernel.spawn('opencode', ['--version'])` through the mounted host-binary driver works, but the supported sandbox path still blocks earlier. A sandboxed Node process that calls `require('child_process').spawn('opencode', ['--version'])` through the kernel-mounted child_process bridge hangs with no stdout/stderr and times out, so the test now pins that exact blocker and only proceeds to the full SDK/server flow once the bridge path is fixed. Follow-up story `US-071` tracks the bridge/runtime fix."
+    },
+    {
+      "id": "US-071",
+      "title": "Fix sandbox child_process bridge for mounted host-binary commands",
+      "description": "As a developer, I need sandboxed Node `child_process.spawn()` calls to mounted host-binary commands like OpenCode to deliver stdout/stderr and exit normally, so the OpenCode SDK/server automation path can progress beyond the current bridge hang.",
+      "acceptanceCriteria": [
+        "Reproduce the current blocker with `SECURE_EXEC_OPENCODE_REAL_PROVIDER_E2E=1 pnpm vitest run packages/secure-exec/tests/cli-tools/opencode-sdk-real-provider.test.ts` and confirm the sandbox `spawn('opencode', ['--version'])` bridge probe times out with empty stdout/stderr while direct `kernel.spawn('opencode', ['--version'])` succeeds",
+        "A kernel-mounted sandboxed Node process can call `require('child_process').spawn('opencode', ['--version'])` and receive the version on stdout plus `EXIT:0` within the test timeout",
+        "The fix lands in SecureExec's Node child_process bridge / kernel command-routing path rather than by bypassing the sandbox or spawning OpenCode directly from the host test",
+        "After the bridge fix, the OpenCode real-provider SDK/server harness advances beyond the minimal `--version` probe and either completes the full `opencode serve` + `@opencode-ai/sdk` flow or exposes the next concrete blocker",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 56.1,
       "passes": false,
-      "notes": "packages/secure-exec already depends on @opencode-ai/sdk, and archived notes mention prior opencode serve experiments. This story is about proving the real-token SDK/server path, not the existing mock-server validation."
+      "notes": "Exact repro as of 2026-03-26: direct host `opencode serve --hostname=127.0.0.1 --port=0` with the same real Anthropic credentials, XDG dir, and `OPENCODE_CONFIG_CONTENT` prints `opencode server listening on http://127.0.0.1:<port>` quickly, and direct `kernel.spawn('opencode', ['--version'])` returns `1.3.3`. But a kernel-mounted sandboxed Node process running `const { spawn } = require('child_process'); spawn('opencode', ['--version'], { env: process.env })` via the bridge produces no stdout/stderr and times out after 10s. That pins the blocker to the Node child_process bridge path for mounted host-binary commands, not to OpenCode config/provider setup."
     },
     {
       "id": "US-065",
