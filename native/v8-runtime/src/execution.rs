@@ -957,8 +957,11 @@ pub fn execute_module(
             };
         }
 
-        // Give microtask-driven top-level await a chance to settle immediately,
-        // then defer finalization to the session event loop if it is still pending.
+        // Always flush microtasks after module evaluation so that async
+        // operations started during evaluation (e.g. process.stdin listeners,
+        // timers) can create their pending bridge promises.  Without this,
+        // modules without top-level await exit immediately because the session
+        // event loop sees no pending work.
         if eval_result.unwrap().is_promise() {
             let promise = v8::Local::<v8::Promise>::try_from(eval_result.unwrap()).unwrap();
             tc.perform_microtask_checkpoint();
@@ -986,6 +989,22 @@ pub fn execute_module(
                     return (exit_code, None, Some(err));
                 }
                 v8::PromiseState::Fulfilled => {}
+            }
+        } else {
+            // Non-TLA module: still flush microtasks so bridge-initiated
+            // async work (stdin reads, handle registration) becomes visible
+            // to the session event loop.
+            tc.perform_microtask_checkpoint();
+
+            if let Some(exception) = tc.exception() {
+                clear_module_state();
+                let (c, err) = exception_to_result(tc, exception);
+                return (c, None, Some(err));
+            }
+
+            if let Some(err) = take_unhandled_promise_rejection(tc) {
+                clear_module_state();
+                return (1, None, Some(err));
             }
         }
 

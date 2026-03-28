@@ -401,6 +401,12 @@ class NodeRuntimeDriver implements RuntimeDriver {
     this._kernel = kernel;
   }
 
+  tryResolve(command: string): boolean {
+    // Handle .js/.mjs/.cjs file paths as node scripts
+    if (/\.[cm]?js$/.test(command)) return true;
+    return false;
+  }
+
   spawn(command: string, args: string[], ctx: ProcessContext): DriverProcess {
     const kernel = this._kernel;
     if (!kernel) throw new Error('Node driver not initialized');
@@ -750,6 +756,11 @@ class NodeRuntimeDriver implements RuntimeDriver {
     if (command === 'npx') {
       const entry = resolveNpxEntry();
       return { code: readFileSync(entry, 'utf-8'), filePath: entry };
+    }
+
+    // .js/.mjs/.cjs file path used as command — treat as `node <path> <args>`
+    if (/\.[cm]?js$/.test(command)) {
+      return this._resolveNodeArgs([command, ...args], kernel);
     }
 
     // 'node' command — parse args to find code/script

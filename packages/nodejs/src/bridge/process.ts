@@ -455,9 +455,16 @@ function createStdioWriteStream(options: {
     }
   };
 
+  const decoder = new TextDecoder();
+
   const stream: StdioWriteStream = {
     write(data: unknown, encodingOrCallback?: unknown, callback?: unknown): boolean {
-      options.write(String(data));
+      // Handle Uint8Array/Buffer data by decoding to UTF-8 (matches Node.js behavior)
+      if (data instanceof Uint8Array || (typeof BufferPolyfill !== "undefined" && BufferPolyfill.isBuffer(data))) {
+        options.write(decoder.decode(data as Uint8Array));
+      } else {
+        options.write(String(data));
+      }
       const done = getWriteCallback(encodingOrCallback, callback);
       if (done) {
         _queueMicrotask(() => done(null));
@@ -619,7 +626,11 @@ function flushLiveStdinBuffer(): void {
   if (!getStdinFlowMode() || _stdinLiveBuffer.length === 0) return;
   const chunk = _stdinLiveBuffer;
   _stdinLiveBuffer = "";
-  emitStdinListeners("data", chunk);
+  // Emit as Buffer when no encoding is set (matches real Node.js process.stdin)
+  const data = (_stdin as StdinStream).encoding
+    ? chunk
+    : BufferPolyfill.from(chunk);
+  emitStdinListeners("data", data);
 }
 
 function finishLiveStdin(): void {
