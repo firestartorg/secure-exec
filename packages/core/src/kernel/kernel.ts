@@ -25,8 +25,9 @@ import type {
 	ConnectTerminalOptions,
 } from "./types.js";
 import type { VirtualFileSystem, VirtualStat } from "./vfs.js";
-import { createDeviceLayer } from "./device-layer.js";
-import { createProcLayer } from "./proc-layer.js";
+import { createDeviceBackend } from "./device-backend.js";
+import { createProcBackend } from "./proc-backend.js";
+import { MountTable } from "./mount-table.js";
 import { FDTableManager, ProcessFDTable } from "./fd-table.js";
 import { ProcessTable } from "./process-table.js";
 import { PipeManager } from "./pipe-manager.js";
@@ -70,6 +71,7 @@ export function createKernel(options: KernelOptions): Kernel {
 
 class KernelImpl implements Kernel {
 	private vfs: VirtualFileSystem;
+	private mountTable: MountTable;
 	private rawInMemoryFs?: InMemoryFileSystem;
 	private fdTableManager = new FDTableManager();
 	private processTable!: ProcessTable;
@@ -113,16 +115,27 @@ class KernelImpl implements Kernel {
 			this.rawInMemoryFs = options.filesystem;
 		}
 
-		// Apply pseudo-filesystems before permissions so dynamic entries are
-		// subject to the same policy as regular files.
-		let fs = createDeviceLayer(options.filesystem);
-		fs = createProcLayer(fs, {
+		// Build mount table: root FS → /dev → /proc → user mounts.
+		const mt = new MountTable(options.filesystem);
+		mt.mount("/dev", createDeviceBackend());
+		mt.mount("/proc", createProcBackend({
 			processTable: this.processTable,
 			fdTableManager: this.fdTableManager,
 			hostname: options.env?.HOSTNAME,
-		});
+			mountTable: mt,
+		}));
 
-		// Apply permission wrapping
+		// Mount user-supplied filesystems
+		if (options.mounts) {
+			for (const m of options.mounts) {
+				mt.mount(m.path, m.fs, { readOnly: m.readOnly });
+			}
+		}
+
+		this.mountTable = mt;
+
+		// Apply permission wrapping on top of the mount table
+		let fs: VirtualFileSystem = mt;
 		if (options.permissions) {
 			fs = wrapFileSystem(fs, options.permissions);
 		}
@@ -170,6 +183,7 @@ class KernelImpl implements Kernel {
 	}
 
 	private async initPosixDirs(): Promise<void> {
+		// /dev and /proc are auto-created by MountTable mounts — don't create them here.
 		const dirs = [
 			"/tmp",
 			"/bin",
@@ -181,7 +195,6 @@ class KernelImpl implements Kernel {
 			"/run",
 			"/srv",
 			"/sys",
-			"/proc",
 			"/opt",
 			"/mnt",
 			"/media",
@@ -245,6 +258,16 @@ class KernelImpl implements Kernel {
 		// Populate /bin stubs for shell PATH lookup
 		await this.commandRegistry.populateBin(this.vfs);
 		this.log.info({ driver: driver.name, commands: driver.commands }, "runtime driver mounted");
+	}
+
+	mountFs(path: string, fs: VirtualFileSystem, options?: { readOnly?: boolean }): void {
+		this.assertNotDisposed();
+		this.mountTable.mount(path, fs, options);
+	}
+
+	unmountFs(path: string): void {
+		this.assertNotDisposed();
+		this.mountTable.unmount(path);
 	}
 
 	async dispose(): Promise<void> {

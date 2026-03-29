@@ -42,6 +42,14 @@ export const noopKernelLogger: KernelLogger = {
 	child() { return noopKernelLogger; },
 };
 
+/** A filesystem to mount at a specific path inside the kernel VFS. */
+export interface FsMount {
+	path: string;
+	fs: import("./vfs.js").VirtualFileSystem;
+	readOnly?: boolean;
+}
+
+
 export interface KernelOptions {
 	filesystem: import("./vfs.js").VirtualFileSystem;
 	permissions?: Permissions;
@@ -53,6 +61,8 @@ export interface KernelOptions {
 	hostNetworkAdapter?: import("./host-adapter.js").HostNetworkAdapter;
 	/** Structured debug logger for kernel diagnostics. Defaults to silent no-op. */
 	logger?: KernelLogger;
+	/** Additional filesystems to mount at boot (after /dev and /proc). */
+	mounts?: FsMount[];
 }
 
 export interface Kernel {
@@ -94,6 +104,12 @@ export interface Kernel {
 	 * Returns the shell exit code.
 	 */
 	connectTerminal(options?: ConnectTerminalOptions): Promise<number>;
+
+	/** Mount a filesystem at the given path. */
+	mountFs(path: string, fs: import("./vfs.js").VirtualFileSystem, options?: { readOnly?: boolean }): void;
+
+	/** Unmount the filesystem at the given path. */
+	unmountFs(path: string): void;
 
 	// Filesystem convenience wrappers
 	readFile(path: string): Promise<Uint8Array>;

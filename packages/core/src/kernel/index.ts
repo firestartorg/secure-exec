@@ -11,6 +11,7 @@ export { createKernel } from "./kernel.js";
 
 // Types
 export type {
+	FsMount,
 	Kernel,
 	KernelOptions,
 	KernelInterface,

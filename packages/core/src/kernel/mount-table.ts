@@ -386,4 +386,22 @@ export class MountTable implements VirtualFileSystem {
 		}
 		return names;
 	}
+
+	/**
+	 * Synchronous open preparation (O_CREAT, O_EXCL, O_TRUNC).
+	 * Delegates to the underlying backend's prepareOpenSync if it exists.
+	 */
+	prepareOpenSync(path: string, flags: number): boolean {
+		const { mount, relativePath } = this.resolve(path);
+		if (flags & ~0 && mount.readOnly) {
+			// Check for write flags (O_CREAT=0o100, O_TRUNC=0o1000)
+			const O_CREAT = 0o100;
+			const O_TRUNC = 0o1000;
+			if ((flags & O_CREAT) || (flags & O_TRUNC)) {
+				this.assertWritable(mount, path);
+			}
+		}
+		const backend = mount.fs as { prepareOpenSync?: (path: string, flags: number) => boolean };
+		return backend.prepareOpenSync?.(relativePath, flags) ?? false;
+	}
 }

@@ -1,6 +1,7 @@
 // Kernel — VFS, process table, FD table, device layer, pipes, PTY, command registry, permissions.
 export { createKernel } from "./kernel/kernel.js";
 export type {
+	FsMount,
 	Kernel,
 	KernelOptions,
 	KernelInterface,
