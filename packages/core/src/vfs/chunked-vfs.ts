@@ -5,8 +5,10 @@
  * larger files are split into fixed-size chunks in the block store.
  * Per-inode async mutex prevents interleaved read-modify-write corruption.
  *
- * This module does NOT implement write buffering, versioning, copy, readDirStat,
- * or fsync. Those are separate stories.
+ * Optional write buffering: when enabled, pwrite buffers dirty chunks in
+ * memory and flushes to the block store on fsync or auto-flush. Reads
+ * always see buffered data. When disabled (default), writes go directly
+ * to the block store.
  */
 
 import { KernelError } from "../kernel/types.js";
@@ -24,6 +26,19 @@ export interface ChunkedVfsOptions {
 	chunkSize?: number;
 	/** Max file size for inline storage. Default: 64 KB. */
 	inlineThreshold?: number;
+	/**
+	 * Enable write buffering. When true, pwrite buffers dirty chunks in
+	 * memory and flushes to the block store on fsync or auto-flush.
+	 * When false, every pwrite immediately writes to the block store.
+	 * Default: false.
+	 */
+	writeBuffering?: boolean;
+	/**
+	 * Auto-flush interval in ms. Only applies when writeBuffering is true.
+	 * Dirty chunks are flushed to the block store on this interval.
+	 * Default: 1000 (1 second).
+	 */
+	autoFlushIntervalMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,12 +119,72 @@ function blockKey(ino: number, chunkIndex: number): string {
 // createChunkedVfs
 // ---------------------------------------------------------------------------
 
+/**
+ * Per-inode write buffer for dirty chunks.
+ */
+interface InodeWriteBuffer {
+	dirtyChunks: Map<number, Uint8Array>;
+	/** Buffered file size (may differ from metadata size). */
+	bufferedSize: number;
+}
+
 export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem {
 	const metadata = options.metadata;
 	const blocks = options.blocks;
 	const chunkSize = options.chunkSize ?? DEFAULT_CHUNK_SIZE;
 	const inlineThreshold = options.inlineThreshold ?? DEFAULT_INLINE_THRESHOLD;
+	const writeBuffering = options.writeBuffering ?? false;
+	const autoFlushIntervalMs = options.autoFlushIntervalMs ?? 1000;
 	const mutex = new InodeMutex();
+
+	// Write buffer: maps inode number to its dirty chunk buffer.
+	const writeBuffers = new Map<number, InodeWriteBuffer>();
+
+	function getOrCreateBuffer(ino: number, currentSize: number): InodeWriteBuffer {
+		let buf = writeBuffers.get(ino);
+		if (!buf) {
+			buf = { dirtyChunks: new Map(), bufferedSize: currentSize };
+			writeBuffers.set(ino, buf);
+		}
+		return buf;
+	}
+
+	/** Flush all dirty chunks for a single inode to the block store. */
+	async function flushInode(ino: number): Promise<void> {
+		const buf = writeBuffers.get(ino);
+		if (!buf || buf.dirtyChunks.size === 0) return;
+
+		for (const [ci, chunk] of buf.dirtyChunks) {
+			const key = blockKey(ino, ci);
+			await blocks.write(key, chunk);
+			await metadata.setChunkKey(ino, ci, key);
+		}
+		buf.dirtyChunks.clear();
+	}
+
+	/** Flush all dirty inodes. */
+	async function flushAll(): Promise<void> {
+		for (const ino of [...writeBuffers.keys()]) {
+			const release = await mutex.acquire(ino);
+			try {
+				await flushInode(ino);
+			} finally {
+				release();
+			}
+		}
+	}
+
+	// Auto-flush timer.
+	let autoFlushTimer: ReturnType<typeof setInterval> | undefined;
+	if (writeBuffering) {
+		autoFlushTimer = setInterval(() => {
+			void flushAll();
+		}, autoFlushIntervalMs);
+		// Allow the process to exit even if the timer is still running.
+		if (typeof autoFlushTimer === "object" && "unref" in autoFlushTimer) {
+			autoFlushTimer.unref();
+		}
+	}
 
 	// -------------------------------------------------------------------
 	// Internal: resolve inode, throwing typed errors
@@ -179,22 +254,44 @@ export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem 
 	// -------------------------------------------------------------------
 
 	async function readInodeContent(ino: number, meta: InodeMeta): Promise<Uint8Array> {
-		if (meta.size === 0) return new Uint8Array(0);
+		const buf = writeBuffers.get(ino);
+		const effectiveSize = buf ? buf.bufferedSize : meta.size;
+		if (effectiveSize === 0) return new Uint8Array(0);
 
-		if (meta.storageMode === "inline") {
+		if (meta.storageMode === "inline" && !buf) {
 			return meta.inlineContent
 				? new Uint8Array(meta.inlineContent)
 				: new Uint8Array(0);
 		}
 
-		// Chunked: read all chunks and concatenate.
+		if (meta.storageMode === "inline" && buf) {
+			// Inline file with dirty buffered chunks. Reconstruct from inline + buffer overlay.
+			const result = new Uint8Array(effectiveSize);
+			if (meta.inlineContent) result.set(meta.inlineContent);
+			for (const [ci, chunk] of buf.dirtyChunks) {
+				const offset = ci * chunkSize;
+				result.set(chunk, offset);
+			}
+			return result;
+		}
+
+		// Chunked: read all chunks and overlay dirty data.
 		const chunkEntries = await metadata.getAllChunkKeys(ino);
-		const result = new Uint8Array(meta.size);
+		const result = new Uint8Array(effectiveSize);
 
 		for (const entry of chunkEntries) {
+			if (buf?.dirtyChunks.has(entry.chunkIndex)) continue;
 			const data = await blocks.read(entry.key);
 			const offset = entry.chunkIndex * chunkSize;
 			result.set(data, offset);
+		}
+
+		// Overlay dirty chunks.
+		if (buf) {
+			for (const [ci, chunk] of buf.dirtyChunks) {
+				const offset = ci * chunkSize;
+				result.set(chunk, offset);
+			}
 		}
 
 		return result;
@@ -386,6 +483,7 @@ export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem 
 				const release = await mutex.acquire(existingIno);
 				try {
 					const meta = await requireInode(existingIno);
+					writeBuffers.delete(existingIno);
 					await writeInodeContent(existingIno, data, meta);
 					await metadata.updateInode(existingIno, { nlink: Math.max(meta.nlink, 1) });
 				} finally {
@@ -422,24 +520,42 @@ export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem 
 		async stat(path: string): Promise<VirtualStat> {
 			const ino = await resolveIno(path);
 			const meta = await requireInode(ino);
-			return inodeMetaToStat(meta);
+			const st = inodeMetaToStat(meta);
+			// Reflect buffered size if write buffering is active.
+			const buf = writeBuffers.get(ino);
+			if (buf && meta.type !== "directory") {
+				st.size = buf.bufferedSize;
+			}
+			return st;
 		},
 
 		// -- Positional I/O --
 
 		async pread(path: string, offset: number, length: number): Promise<Uint8Array> {
 			const { ino, meta } = await requireFileIno(path);
+			const buf = writeBuffers.get(ino);
+			const effectiveSize = buf ? buf.bufferedSize : meta.size;
 
 			// Clamp.
-			if (offset >= meta.size || length === 0) return new Uint8Array(0);
-			const clampedLen = Math.min(length, meta.size - offset);
+			if (offset >= effectiveSize || length === 0) return new Uint8Array(0);
+			const clampedLen = Math.min(length, effectiveSize - offset);
 
-			if (meta.storageMode === "inline") {
+			if (meta.storageMode === "inline" && !buf) {
 				const content = meta.inlineContent ?? new Uint8Array(0);
 				return content.slice(offset, offset + clampedLen);
 			}
 
-			// Chunked read.
+			if (meta.storageMode === "inline" && buf) {
+				// Inline file with dirty buffered chunks.
+				const full = new Uint8Array(effectiveSize);
+				if (meta.inlineContent) full.set(meta.inlineContent);
+				for (const [ci, chunk] of buf.dirtyChunks) {
+					full.set(chunk, ci * chunkSize);
+				}
+				return full.slice(offset, offset + clampedLen);
+			}
+
+			// Chunked read with dirty overlay.
 			const startChunk = Math.floor(offset / chunkSize);
 			const endChunk = Math.floor((offset + clampedLen - 1) / chunkSize);
 			const result = new Uint8Array(clampedLen);
@@ -450,6 +566,14 @@ export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem 
 				const readStart = Math.max(offset, chunkStart) - chunkStart;
 				const readEnd = Math.min(offset + clampedLen, chunkStart + chunkSize) - chunkStart;
 				const readLen = readEnd - readStart;
+
+				// Check dirty buffer first.
+				if (buf?.dirtyChunks.has(ci)) {
+					const dirtyChunk = buf.dirtyChunks.get(ci)!;
+					result.set(dirtyChunk.subarray(readStart, readStart + readLen), written);
+					written += readLen;
+					continue;
+				}
 
 				const key = await metadata.getChunkKey(ino, ci);
 				if (key === null) {
@@ -477,12 +601,28 @@ export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem 
 					throw new KernelError("EISDIR", `illegal operation on a directory: '${path}'`);
 				}
 
-				const newSize = Math.max(meta.size, offset + data.length);
+				const buf = writeBuffers.get(ino);
+				const currentSize = buf ? buf.bufferedSize : meta.size;
+				const newSize = Math.max(currentSize, offset + data.length);
 				const now = Date.now();
 
 				if (meta.storageMode === "inline") {
-					if (newSize <= inlineThreshold) {
-						// Stay inline.
+					if (newSize <= inlineThreshold && !writeBuffering) {
+						// Stay inline, no buffering.
+						const existing = meta.inlineContent ?? new Uint8Array(0);
+						const content = new Uint8Array(newSize);
+						content.set(existing);
+						content.set(data, offset);
+						await metadata.updateInode(ino, {
+							inlineContent: content,
+							size: newSize,
+							mtimeMs: now,
+							ctimeMs: now,
+						});
+						return;
+					}
+					if (newSize <= inlineThreshold && writeBuffering) {
+						// Stay inline, buffered. Update inline content in metadata.
 						const existing = meta.inlineContent ?? new Uint8Array(0);
 						const content = new Uint8Array(newSize);
 						content.set(existing);
@@ -496,46 +636,110 @@ export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem 
 						return;
 					}
 					// Promote to chunked.
-					await promoteToChunked(ino, meta);
+					if (!writeBuffering) {
+						await promoteToChunked(ino, meta);
+					} else {
+						// Buffered promotion: move inline content into dirty buffer.
+						const inlineData = meta.inlineContent ?? new Uint8Array(0);
+						const wb = getOrCreateBuffer(ino, currentSize);
+						if (inlineData.length > 0) {
+							const numChunks = Math.ceil(inlineData.length / chunkSize);
+							for (let i = 0; i < numChunks; i++) {
+								const start = i * chunkSize;
+								const end = Math.min(start + chunkSize, inlineData.length);
+								wb.dirtyChunks.set(i, inlineData.slice(start, end));
+							}
+						}
+						await metadata.updateInode(ino, {
+							storageMode: "chunked",
+							inlineContent: null,
+						});
+					}
 					// Fall through to chunked pwrite.
 				}
 
-				// Chunked pwrite.
-				const startChunk = Math.floor(offset / chunkSize);
-				const endChunk = Math.floor((offset + data.length - 1) / chunkSize);
+				if (writeBuffering) {
+					// Buffered chunked pwrite: modify chunks in memory only.
+					const wb = getOrCreateBuffer(ino, currentSize);
+					const startChunk = Math.floor(offset / chunkSize);
+					const endChunk = Math.floor((offset + data.length - 1) / chunkSize);
 
-				for (let ci = startChunk; ci <= endChunk; ci++) {
-					const chunkStart = ci * chunkSize;
-					const writeStart = Math.max(offset, chunkStart) - chunkStart;
-					const dataStart = Math.max(chunkStart - offset, 0);
-					const writeEnd = Math.min(offset + data.length, chunkStart + chunkSize) - chunkStart;
+					for (let ci = startChunk; ci <= endChunk; ci++) {
+						const chunkStart = ci * chunkSize;
+						const writeStart = Math.max(offset, chunkStart) - chunkStart;
+						const dataStart = Math.max(chunkStart - offset, 0);
+						const writeEnd = Math.min(offset + data.length, chunkStart + chunkSize) - chunkStart;
 
-					const key = blockKey(ino, ci);
-					let chunk: Uint8Array;
+						let chunk: Uint8Array;
 
-					const existingKey = await metadata.getChunkKey(ino, ci);
-					if (existingKey !== null) {
-						chunk = await blocks.read(existingKey);
-						// Ensure chunk is large enough.
-						if (chunk.length < writeEnd) {
-							const expanded = new Uint8Array(writeEnd);
-							expanded.set(chunk);
-							chunk = expanded;
+						if (wb.dirtyChunks.has(ci)) {
+							chunk = wb.dirtyChunks.get(ci)!;
+							if (chunk.length < writeEnd) {
+								const expanded = new Uint8Array(writeEnd);
+								expanded.set(chunk);
+								chunk = expanded;
+							}
+						} else {
+							const existingKey = await metadata.getChunkKey(ino, ci);
+							if (existingKey !== null) {
+								chunk = await blocks.read(existingKey);
+								if (chunk.length < writeEnd) {
+									const expanded = new Uint8Array(writeEnd);
+									expanded.set(chunk);
+									chunk = expanded;
+								}
+							} else {
+								chunk = new Uint8Array(writeEnd);
+							}
 						}
-					} else {
-						chunk = new Uint8Array(writeEnd);
+
+						chunk.set(data.subarray(dataStart, dataStart + (writeEnd - writeStart)), writeStart);
+						wb.dirtyChunks.set(ci, chunk);
 					}
 
-					chunk.set(data.subarray(dataStart, dataStart + (writeEnd - writeStart)), writeStart);
-					await blocks.write(key, chunk);
-					await metadata.setChunkKey(ino, ci, key);
-				}
+					wb.bufferedSize = newSize;
+					await metadata.updateInode(ino, {
+						size: newSize,
+						mtimeMs: now,
+						ctimeMs: now,
+					});
+				} else {
+					// Unbuffered chunked pwrite: write directly to block store.
+					const startChunk = Math.floor(offset / chunkSize);
+					const endChunk = Math.floor((offset + data.length - 1) / chunkSize);
 
-				await metadata.updateInode(ino, {
-					size: newSize,
-					mtimeMs: now,
-					ctimeMs: now,
-				});
+					for (let ci = startChunk; ci <= endChunk; ci++) {
+						const chunkStart = ci * chunkSize;
+						const writeStart = Math.max(offset, chunkStart) - chunkStart;
+						const dataStart = Math.max(chunkStart - offset, 0);
+						const writeEnd = Math.min(offset + data.length, chunkStart + chunkSize) - chunkStart;
+
+						const key = blockKey(ino, ci);
+						let chunk: Uint8Array;
+
+						const existingKey = await metadata.getChunkKey(ino, ci);
+						if (existingKey !== null) {
+							chunk = await blocks.read(existingKey);
+							if (chunk.length < writeEnd) {
+								const expanded = new Uint8Array(writeEnd);
+								expanded.set(chunk);
+								chunk = expanded;
+							}
+						} else {
+							chunk = new Uint8Array(writeEnd);
+						}
+
+						chunk.set(data.subarray(dataStart, dataStart + (writeEnd - writeStart)), writeStart);
+						await blocks.write(key, chunk);
+						await metadata.setChunkKey(ino, ci, key);
+					}
+
+					await metadata.updateInode(ino, {
+						size: newSize,
+						mtimeMs: now,
+						ctimeMs: now,
+					});
+				}
 			} finally {
 				release();
 			}
@@ -549,11 +753,20 @@ export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem 
 				if (meta.type === "directory") {
 					throw new KernelError("EISDIR", `illegal operation on a directory: '${path}'`);
 				}
-				if (length === meta.size) return;
+
+				const buf = writeBuffers.get(ino);
+				const currentSize = buf ? buf.bufferedSize : meta.size;
+				if (length === currentSize) return;
 
 				const now = Date.now();
 
-				if (length < meta.size) {
+				// Flush any buffered writes before truncating so we work on real data.
+				if (buf && buf.dirtyChunks.size > 0) {
+					await flushInode(ino);
+				}
+				writeBuffers.delete(ino);
+
+				if (length < currentSize) {
 					// Shrinking.
 					if (meta.storageMode === "inline") {
 						const content = meta.inlineContent ?? new Uint8Array(0);
@@ -855,6 +1068,7 @@ export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem 
 							const keys = await metadata.deleteAllChunks(childIno);
 							if (keys.length > 0) await blocks.deleteMany(keys);
 						}
+						writeBuffers.delete(childIno);
 						await metadata.deleteInode(childIno);
 					} else {
 						await metadata.updateInode(childIno, {
@@ -968,6 +1182,25 @@ export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem 
 			});
 		},
 	};
+
+	// Add fsync method.
+	if (writeBuffering) {
+		vfs.fsync = async (path: string): Promise<void> => {
+			let ino: number;
+			try {
+				ino = await resolveIno(path);
+			} catch {
+				// File may have been unlinked or renamed. Silent no-op.
+				return;
+			}
+			const release = await mutex.acquire(ino);
+			try {
+				await flushInode(ino);
+			} finally {
+				release();
+			}
+		};
+	}
 
 	return vfs;
 }

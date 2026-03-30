@@ -33,3 +33,32 @@ defineVfsConformanceTests({
 	inlineThreshold: INLINE_THRESHOLD,
 	chunkSize: CHUNK_SIZE,
 });
+
+defineVfsConformanceTests({
+	name: "ChunkedVFS (InMemory + InMemory, buffered)",
+	createFs: () =>
+		createChunkedVfs({
+			metadata: new InMemoryMetadataStore(),
+			blocks: new InMemoryBlockStore(),
+			inlineThreshold: INLINE_THRESHOLD,
+			chunkSize: CHUNK_SIZE,
+			writeBuffering: true,
+			autoFlushIntervalMs: 60_000, // Long interval so auto-flush doesn't interfere with tests.
+		}),
+	capabilities: {
+		symlinks: true,
+		hardLinks: true,
+		permissions: true,
+		utimes: true,
+		truncate: true,
+		pread: true,
+		pwrite: true,
+		mkdir: true,
+		removeDir: true,
+		fsync: true,
+		copy: false,
+		readDirStat: false,
+	},
+	inlineThreshold: INLINE_THRESHOLD,
+	chunkSize: CHUNK_SIZE,
+});

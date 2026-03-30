@@ -1527,6 +1527,9 @@ class KernelImpl implements Kernel {
 	private releaseDescriptionInode(
 		description: import("./types.js").FileDescription,
 	): void {
+		// Flush buffered writes to durable storage when the last FD is closed.
+		void this.vfs.fsync?.(description.path);
+
 		if (description.inode === undefined) return;
 		this.inodeTable.decrementOpenRefs(description.inode);
 		if (this.inodeTable.shouldDelete(description.inode)) {

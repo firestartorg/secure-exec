@@ -69,4 +69,7 @@ export interface VirtualFileSystem {
 
 	/** Write data at a specific offset without replacing the entire file. */
 	pwrite(path: string, offset: number, data: Uint8Array): Promise<void>;
+
+	/** Flush buffered writes for the given path to durable storage. */
+	fsync?(path: string): Promise<void>;
 }

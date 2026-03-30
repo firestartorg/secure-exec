@@ -6305,11 +6305,12 @@ export function buildKernelFdBridgeHandlers(deps: KernelFdBridgeDeps): KernelFdB
 		}
 	};
 
-	// fdFsync(fd) — no-op for in-memory VFS, validates FD exists
-	handlers[K.fdFsync] = (fd: unknown) => {
+	// fdFsync(fd) — delegates to vfs.fsync if available, validates FD exists
+	handlers[K.fdFsync] = async (fd: unknown) => {
 		const fdNum = Number(fd);
 		const entry = fdTable.get(fdNum);
 		if (!entry) throw new Error("EBADF: bad file descriptor, fsync");
+		await vfs.fsync?.(entry.description.path);
 	};
 
 	// fdGetPath(fd) → path string or null

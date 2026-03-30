@@ -377,6 +377,11 @@ export class MountTable implements VirtualFileSystem {
 		return mount.fs.truncate(relativePath, length);
 	}
 
+	async fsync(path: string): Promise<void> {
+		const { mount, relativePath } = this.resolve(path);
+		await mount.fs.fsync?.(relativePath);
+	}
+
 	// -----------------------------------------------------------------------
 	// Helpers
 	// -----------------------------------------------------------------------
