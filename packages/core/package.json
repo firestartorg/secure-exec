@@ -84,6 +84,16 @@
       "types": "./dist/test/vfs-conformance.d.ts",
       "import": "./dist/test/vfs-conformance.js",
       "default": "./dist/test/vfs-conformance.js"
+    },
+    "./test/block-store-conformance": {
+      "types": "./dist/test/block-store-conformance.d.ts",
+      "import": "./dist/test/block-store-conformance.js",
+      "default": "./dist/test/block-store-conformance.js"
+    },
+    "./test/metadata-store-conformance": {
+      "types": "./dist/test/metadata-store-conformance.d.ts",
+      "import": "./dist/test/metadata-store-conformance.js",
+      "default": "./dist/test/metadata-store-conformance.js"
     }
   },
   "scripts": {

@@ -309,6 +309,20 @@ export type {
 	VfsConformanceCapabilities,
 } from "./test/vfs-conformance.js";
 
+// Block store conformance test suite.
+export { defineBlockStoreTests } from "./test/block-store-conformance.js";
+export type {
+	BlockStoreConformanceConfig,
+	BlockStoreConformanceCapabilities,
+} from "./test/block-store-conformance.js";
+
+// Metadata store conformance test suite.
+export { defineMetadataStoreTests } from "./test/metadata-store-conformance.js";
+export type {
+	MetadataStoreConformanceConfig,
+	MetadataStoreConformanceCapabilities,
+} from "./test/metadata-store-conformance.js";
+
 // Filesystem helpers.
 export type { DirEntry, StatInfo } from "./fs-helpers.js";
 export { exists, stat, rename, readDirWithTypes, mkdir } from "./fs-helpers.js";
