@@ -676,6 +676,11 @@ function spawn(
       return true;
     };
 
+    // Emit "spawn" event asynchronously to match Node.js behavior.
+    // In real Node.js, "spawn" fires on next tick after successful fork.
+    child.pid = Number(sessionId) || -1;
+    setTimeout(() => child.emit("spawn"), 0);
+
     return child;
   }
 

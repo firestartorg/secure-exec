@@ -3992,9 +3992,99 @@
           MessageChannel: globalThis.MessageChannel,
           MessageEvent: globalThis.MessageEvent,
         };
-        const moduleCompat = {
+          // Minimal readline implementation for sandbox compatibility.
+        // Supports createInterface with input/output streams, question(), and close().
+        const readlineCompat = {
+          createInterface: function createInterface(opts) {
+            const input = opts && opts.input ? opts.input : (typeof process !== 'undefined' ? process.stdin : null);
+            const output = opts && opts.output ? opts.output : (typeof process !== 'undefined' ? process.stdout : null);
+            const listeners = {};
+            const rl = {
+              input: input,
+              output: output,
+              terminal: false,
+              closed: false,
+              on: function(event, handler) { (listeners[event] = listeners[event] || []).push(handler); return rl; },
+              once: function(event, handler) {
+                const wrapper = function() { rl.off(event, wrapper); handler.apply(this, arguments); };
+                return rl.on(event, wrapper);
+              },
+              off: function(event, handler) {
+                if (listeners[event]) listeners[event] = listeners[event].filter(function(h) { return h !== handler; });
+                return rl;
+              },
+              removeListener: function(event, handler) { return rl.off(event, handler); },
+              emit: function(event) {
+                const args = Array.prototype.slice.call(arguments, 1);
+                (listeners[event] || []).forEach(function(h) { h.apply(null, args); });
+                return rl;
+              },
+              close: function() {
+                if (!rl.closed) { rl.closed = true; rl.emit('close'); }
+              },
+              question: function(query, cb) {
+                if (output && output.write) output.write(query);
+                // Collect one line from input
+                if (input && input.once) {
+                  var buf = '';
+                  var onData = function(chunk) {
+                    buf += (typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
+                    var idx = buf.indexOf('\n');
+                    if (idx !== -1) {
+                      input.removeListener('data', onData);
+                      cb(buf.slice(0, idx));
+                    }
+                  };
+                  input.on('data', onData);
+                } else {
+                  cb('');
+                }
+              },
+              prompt: function() { if (output && output.write) output.write('> '); },
+              setPrompt: function() {},
+              pause: function() { return rl; },
+              resume: function() { return rl; },
+              write: function() {},
+              [Symbol.asyncIterator]: function() {
+                var lines = [];
+                var resolve = null;
+                var done = false;
+                if (input) {
+                  input.on('data', function(chunk) {
+                    var text = typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk);
+                    var parts = text.split('\n');
+                    for (var i = 0; i < parts.length - 1; i++) {
+                      lines.push(parts[i]);
+                      if (resolve) { resolve(); resolve = null; }
+                    }
+                  });
+                  input.on('end', function() { done = true; if (resolve) { resolve(); resolve = null; } });
+                }
+                return {
+                  next: function() {
+                    if (lines.length > 0) return Promise.resolve({ value: lines.shift(), done: false });
+                    if (done) return Promise.resolve({ value: undefined, done: true });
+                    return new Promise(function(r) { resolve = r; }).then(function() {
+                      if (lines.length > 0) return { value: lines.shift(), done: false };
+                      return { value: undefined, done: true };
+                    });
+                  }
+                };
+              }
+            };
+            return rl;
+          },
+          promises: {
+            createInterface: function createInterface(opts) {
+              return readlineCompat.createInterface(opts);
+            },
+          },
+        };
+      const moduleCompat = {
           worker_threads: workerThreadsCompat,
           'node:worker_threads': workerThreadsCompat,
+          readline: readlineCompat,
+          'node:readline': readlineCompat,
         };
         let stub = null;
         stub = new Proxy({}, {

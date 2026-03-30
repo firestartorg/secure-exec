@@ -3032,7 +3032,18 @@ export function buildModuleResolutionBridgeHandlers(
 
 		// Handle #-prefixed subpath imports (package.json "imports" field)
 		if (req.startsWith("#")) {
-			const resolved = resolvePackageImportSync(req, hostDir, resolveMode);
+			let resolved = resolvePackageImportSync(req, hostDir, resolveMode);
+			if (!resolved) {
+				// Fallback: try resolving from the realpath of hostDir.
+				// pnpm symlinks can prevent walk-up from finding the owning
+				// package.json when the hostDir is a symlink.
+				try {
+					const realHostDir = realpathSync(hostDir);
+					if (realHostDir !== hostDir) {
+						resolved = resolvePackageImportSync(req, realHostDir, resolveMode);
+					}
+				} catch { /* realpath failed, skip */ }
+			}
 			return resolved ? deps.hostToSandboxPath(resolved) : null;
 		}
 
