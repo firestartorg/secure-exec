@@ -12,7 +12,7 @@
  */
 
 import { KernelError } from "../kernel/types.js";
-import type { VirtualDirEntry, VirtualFileSystem, VirtualStat } from "../kernel/vfs.js";
+import type { VirtualDirEntry, VirtualDirStatEntry, VirtualFileSystem, VirtualStat } from "../kernel/vfs.js";
 import type { FsBlockStore, FsMetadataStore, InodeMeta } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -1201,6 +1201,79 @@ export function createChunkedVfs(options: ChunkedVfsOptions): VirtualFileSystem 
 			}
 		};
 	}
+
+	// Add copy method.
+	vfs.copy = async (srcPath: string, dstPath: string): Promise<void> => {
+		const srcIno = await resolveIno(srcPath);
+		const srcMeta = await requireInode(srcIno);
+		if (srcMeta.type === "directory") {
+			throw new KernelError("EISDIR", `illegal operation on a directory: '${srcPath}'`);
+		}
+
+		const { parentIno, name } = await ensureParents(dstPath);
+		const existingDstIno = await metadata.lookup(parentIno, name);
+		if (existingDstIno !== null) {
+			throw new KernelError("EEXIST", `file already exists: '${dstPath}'`);
+		}
+
+		await metadata.transaction(async () => {
+			const dstIno = await metadata.createInode({
+				type: "file",
+				mode: srcMeta.mode,
+				uid: srcMeta.uid,
+				gid: srcMeta.gid,
+			});
+			await metadata.createDentry(parentIno, name, dstIno, "file");
+
+			if (srcMeta.storageMode === "inline") {
+				const content = srcMeta.inlineContent
+					? new Uint8Array(srcMeta.inlineContent)
+					: new Uint8Array(0);
+				await metadata.updateInode(dstIno, {
+					nlink: 1,
+					size: srcMeta.size,
+					storageMode: "inline",
+					inlineContent: content,
+				});
+			} else {
+				// Chunked: copy each block.
+				const chunkEntries = await metadata.getAllChunkKeys(srcIno);
+				for (const entry of chunkEntries) {
+					const newKey = blockKey(dstIno, entry.chunkIndex);
+					if (blocks.copy) {
+						await blocks.copy(entry.key, newKey);
+					} else {
+						const data = await blocks.read(entry.key);
+						await blocks.write(newKey, data);
+					}
+					await metadata.setChunkKey(dstIno, entry.chunkIndex, newKey);
+				}
+				await metadata.updateInode(dstIno, {
+					nlink: 1,
+					size: srcMeta.size,
+					storageMode: "chunked",
+					inlineContent: null,
+				});
+			}
+		});
+	};
+
+	// Add readDirStat method.
+	vfs.readDirStat = async (path: string): Promise<VirtualDirStatEntry[]> => {
+		const ino = await resolveIno(path);
+		const meta = await requireInode(ino);
+		if (meta.type !== "directory") {
+			throw new KernelError("ENOTDIR", `not a directory: '${path}'`);
+		}
+		const entries = await metadata.listDirWithStats(ino);
+		return entries.map((e) => ({
+			name: e.name,
+			isDirectory: e.type === "directory",
+			isSymbolicLink: e.type === "symlink",
+			ino: e.ino,
+			stat: inodeMetaToStat(e.stat),
+		}));
+	};
 
 	return vfs;
 }

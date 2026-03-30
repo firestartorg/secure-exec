@@ -13,6 +13,10 @@ export interface VirtualDirEntry {
 	ino?: number;
 }
 
+export interface VirtualDirStatEntry extends VirtualDirEntry {
+	stat: VirtualStat;
+}
+
 export interface VirtualStat {
 	mode: number;
 	size: number;
@@ -72,4 +76,10 @@ export interface VirtualFileSystem {
 
 	/** Flush buffered writes for the given path to durable storage. */
 	fsync?(path: string): Promise<void>;
+
+	/** Copy a file within the same filesystem. */
+	copy?(srcPath: string, dstPath: string): Promise<void>;
+
+	/** Combined readdir + stat. Avoids N+1 queries for directory listings. */
+	readDirStat?(path: string): Promise<VirtualDirStatEntry[]>;
 }

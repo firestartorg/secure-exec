@@ -7,7 +7,7 @@
  */
 
 import { KernelError } from "./types.js";
-import type { VirtualDirEntry, VirtualFileSystem, VirtualStat } from "./vfs.js";
+import type { VirtualDirEntry, VirtualDirStatEntry, VirtualFileSystem, VirtualStat } from "./vfs.js";
 
 export interface MountOptions {
 	readOnly?: boolean;
@@ -380,6 +380,50 @@ export class MountTable implements VirtualFileSystem {
 	async fsync(path: string): Promise<void> {
 		const { mount, relativePath } = this.resolve(path);
 		await mount.fs.fsync?.(relativePath);
+	}
+
+	async copy(srcPath: string, dstPath: string): Promise<void> {
+		const srcResolved = this.resolve(srcPath);
+		const dstResolved = this.resolve(dstPath);
+
+		if (srcResolved.mount !== dstResolved.mount) {
+			throw new KernelError(
+				"EXDEV",
+				`copy across mounts: ${srcPath} -> ${dstPath}`,
+			);
+		}
+
+		this.assertWritable(srcResolved.mount, dstPath);
+
+		if (srcResolved.mount.fs.copy) {
+			return srcResolved.mount.fs.copy(
+				srcResolved.relativePath,
+				dstResolved.relativePath,
+			);
+		}
+
+		// Fallback: readFile + writeFile.
+		const content = await srcResolved.mount.fs.readFile(srcResolved.relativePath);
+		await srcResolved.mount.fs.writeFile(dstResolved.relativePath, content);
+	}
+
+	async readDirStat(path: string): Promise<VirtualDirStatEntry[]> {
+		const { mount, relativePath } = this.resolve(path);
+
+		if (mount.fs.readDirStat) {
+			return mount.fs.readDirStat(relativePath);
+		}
+
+		// Fallback: readDirWithTypes + stat for each entry.
+		const entries = await mount.fs.readDirWithTypes(relativePath);
+		const normalized = normalizePath(path);
+		const results: VirtualDirStatEntry[] = [];
+		for (const entry of entries) {
+			const entryPath = normalized === "/" ? `/${entry.name}` : `${normalized}/${entry.name}`;
+			const stat = await mount.fs.stat(entryPath);
+			results.push({ ...entry, stat });
+		}
+		return results;
 	}
 
 	// -----------------------------------------------------------------------

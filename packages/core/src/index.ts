@@ -37,6 +37,7 @@ export { KernelError, defaultTermios, noopKernelLogger } from "./kernel/types.js
 export type {
 	VirtualFileSystem,
 	VirtualDirEntry,
+	VirtualDirStatEntry,
 	VirtualStat,
 } from "./kernel/vfs.js";
 
