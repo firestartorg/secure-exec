@@ -905,11 +905,14 @@ class NodeRuntimeDriver implements RuntimeDriver {
               // where the CJS transform succeeds, return transformed CJS code instead.
               if (this._isOverlayEsmEntry(hostPath)) {
                 const transformed = transformSourceForRequireSync(content, scriptPath);
-                if (transformed !== content) {
-                  // Transform succeeded: use CJS version (fast in-process require)
+                // Check if the transform actually converted ESM to CJS (not just stripped shebang).
+                // The require-setup marker indicates a successful ESM→CJS conversion.
+                const REQUIRE_ESM_MARKER = "/*__secure_exec_require_esm__*/";
+                if (transformed.startsWith(REQUIRE_ESM_MARKER)) {
+                  console.error(`[_resolveEntry] ESM→CJS transform OK: ${scriptPath} (${content.length}→${transformed.length})`);
                   return { code: transformed, filePath: scriptPath };
                 }
-                // Transform failed: fall through to raw ESM (slow but correct)
+                console.error(`[_resolveEntry] ESM→CJS transform skipped: ${scriptPath} (${content.length} bytes, no marker), using V8 ESM`);
               }
               return { code: content, filePath: scriptPath };
             } catch {
