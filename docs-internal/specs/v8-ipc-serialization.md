@@ -33,7 +33,7 @@ The envelope must be parseable **without a V8 isolate** because the Rust connect
 | **V8 ValueSerializer** | `v8::ValueSerializer` | `node:v8.deserialize()` | Native | All V8 types (Date, Map, Set, RegExp, Error, circular refs, typed arrays) | None (built into V8 and Node.js) | Zero manual type conversion |
 | MessagePack via rmpv (current) | `v8_to_rmpv()` → `rmpv::encode` | `@msgpack/msgpack decode()` | Native bin format | Primitives, arrays, objects, Uint8Array only | `rmpv`, `@msgpack/msgpack` | 130 lines of manual V8 type walking |
 | JSON | `serde_json` | `JSON.parse()` | No (needs base64) | Primitives, arrays, objects | None | +33% overhead on binary, loses undefined/NaN/Infinity |
-| CBOR (RFC 8949) | `ciborium` | `cbor-x` | Native | Similar to MessagePack | `ciborium`, `cbor-x` | No advantage over msgpack, less ecosystem |
+| CBOR (RFC 8949) | `ciborium` | `cbor-x` | Native | Similar to MessagePack | `ciborium`, `cbor-x` | Used as Bun fallback codec (2× faster encode than JSON, binary-native) |
 | Protocol Buffers | `prost` | `protobufjs` | Native | Schema-defined only | `prost`, `protobufjs`, codegen | Overkill — bridge args have no fixed schema |
 | FlatBuffers | `flatbuffers` | `flatbuffers` | Zero-copy reads | Schema-defined only | `flatbuffers`, codegen | Zero-copy reads are compelling but schema requirement kills it for arbitrary JS values |
 | bincode / postcard | `bincode` / `postcard` | Custom JS decoder | Native | Rust serde types | `bincode` / `postcard` | No JS library — would need a hand-written decoder |
@@ -247,16 +247,67 @@ The connection handler only needs to read **byte 5 through 5+N** (the session_id
 | Deserialize IPC envelope | `rmp_serde::from_slice` (parses msgpack map, matches field names) | Read fixed offsets from buffer | No deserialization library |
 | Binary data (1MB file) | V8 → rmpv::Binary → msgpack bin → msgpack envelope bin | V8 → ValueSerializer (includes backing store) | One fewer copy |
 
-## Bun compatibility
+## Bun compatibility (implemented)
 
-Bun supports `v8.serialize()` / `v8.deserialize()` as a compatibility shim over JSC's serialization. The V8 wire format is a de facto standard. If a future host runtime doesn't support it, the binary header format allows swapping the payload serializer per-connection (add a version/capability byte to the Authenticate handshake).
+Bun's `node:v8` module does **not** produce real V8 serialization format — it
+emits a completely different binary encoding (appears MessagePack-like, not V8
+`ValueSerializer` wire format). The Rust V8 sidecar's `ValueDeserializer`
+rejects these payloads with "invalid header".
+
+### Solution: CBOR codec for Bun
+
+When the host runtime is Bun, the IPC payload codec switches from V8
+ValueSerializer to **CBOR (RFC 8949)**:
+
+- **JS side**: `cbor-x` for encode/decode (lazy-loaded only under Bun)
+- **Rust side**: `ciborium` crate with manual `cbor_to_v8()` / `v8_to_cbor()`
+  converters in `bridge.rs`
+- **Activation**: Host detects Bun via `typeof globalThis.Bun`, sets
+  `SECURE_EXEC_V8_CODEC=cbor` in the child process environment. Rust reads
+  this at startup in `bridge::init_codec()`.
+
+### Why CBOR over JSON or V8 polyfill
+
+| Option | JS encode (ops/sec) | JS decode (ops/sec) | Binary support | Notes |
+|--------|---:|---:|---|---|
+| **cbor-x** | **~32,000** | **~19,000** | Native | IETF RFC 8949, binary-native |
+| JSON.stringify/parse | ~16,000 | ~17,700 | No (base64) | Drops `undefined`, no `Date`/`Map`/`Set` |
+| v8-value-serializer (pure JS polyfill) | ~1,900 | ~300,000 | Native | Matches V8 wire format but encode is ~420× slower than JSON |
+| v8.serialize (Node.js) | ~1,900 | ~300,000 | Native | Not available in Bun |
+
+CBOR provides the best encode throughput (the hot path for bridge responses)
+while supporting binary payloads natively. A pure-JS V8 serializer polyfill
+would match the slow `v8.serialize` encode speed (~1.9 K ops/sec), making it
+the worst option despite format compatibility.
+
+### Data flow with CBOR codec (Bun)
+
+```
+SANDBOX V8 (Rust)                              HOST (Bun)
+─────────────────                              ──────────
+ V8 value (bridge args)                        cbor-x.decode(payload)
+       │                                              ▲
+       │ v8_to_cbor() → ciborium::into_writer()       │
+       ▼                                              │
+ CBOR bytes ─────── UDS socket ──────────────→ CBOR bytes
+
+ CBOR bytes ←────── UDS socket ←────────────── CBOR bytes
+       │                                              ▲
+       │ ciborium::from_reader() → cbor_to_v8()       │
+       ▼                                              │
+ V8 value (bridge result)                      cbor-x.encode(result)
+```
 
 ## Migration plan
 
-1. Add `v8::ValueSerializer` / `v8::ValueDeserializer` wrappers in `bridge.rs`
-2. Replace `encode_v8_args` and `msgpack_to_v8_value` with the V8 serializer
-3. Replace `ipc.rs` MessagePack framing with binary header read/write
-4. Replace JS-side `@msgpack/msgpack` with `node:v8` serialize/deserialize
-5. Remove `rmp-serde`, `serde_bytes`, `rmpv` from Cargo.toml
-6. Remove `@msgpack/msgpack` from package.json
-7. Update all tests
+Steps 1-6 are complete. The V8 ValueSerializer is the default codec (Node.js).
+CBOR is the Bun-specific codec.
+
+1. ~~Add `v8::ValueSerializer` / `v8::ValueDeserializer` wrappers in `bridge.rs`~~ ✅
+2. ~~Replace `encode_v8_args` and `msgpack_to_v8_value` with the V8 serializer~~ ✅
+3. ~~Replace `ipc.rs` MessagePack framing with binary header read/write~~ ✅
+4. ~~Replace JS-side `@msgpack/msgpack` with `node:v8` serialize/deserialize~~ ✅
+5. ~~Remove `rmp-serde`, `serde_bytes`, `rmpv` from Cargo.toml~~ ✅
+6. ~~Remove `@msgpack/msgpack` from package.json~~ ✅
+7. ~~Update all tests~~ ✅
+8. ~~Add CBOR codec for Bun compatibility~~ ✅ (`cbor-x` JS, `ciborium` Rust)

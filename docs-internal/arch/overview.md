@@ -151,7 +151,8 @@ Package index:
 
   @secure-exec/v8          packages/v8/
     V8 runtime process manager (spawns Rust binary, IPC client,
-    session abstraction). MessagePack framing over UDS.
+    session abstraction). Binary framing over UDS with
+    pluggable payload codec (V8 ValueSerializer or CBOR).
 
   @secure-exec/nodejs      packages/nodejs/
     Node execution driver, bridge polyfills, bridge-handlers,
@@ -310,22 +311,63 @@ Manages the Rust V8 child process and provides the session API.
 - `createV8Runtime()` spawns the Rust binary, connects over UDS, authenticates
 - One Rust process is shared across all drivers (singleton)
 - `V8Session.execute()` sends InjectGlobals + Execute, routes BridgeCall/BridgeResponse
-- IPC uses length-prefixed MessagePack (64 MB max); binary data uses msgpack `bin` format (no base64)
-- Bridge args/results are double-encoded: inner msgpack blobs inside outer msgpack IPC messages
+- IPC uses length-prefixed binary framing (64 MB max)
+- Payload codec is runtime-dependent (see "IPC Payload Codec" section below)
+
+### IPC Payload Codec
+
+Bridge function arguments and return values are serialized as opaque byte payloads
+inside the binary IPC envelope. The codec used depends on the host runtime:
+
+| Host runtime | Payload codec | JS library | Rust library | Env flag |
+|---|---|---|---|---|
+| **Node.js** | V8 ValueSerializer | `node:v8` (built-in) | V8 C++ API (built-in) | (none) |
+| **Bun** | CBOR (RFC 8949) | `cbor-x` | `ciborium` | `SECURE_EXEC_V8_CODEC=cbor` |
+
+**Why two codecs?** Bun's `node:v8` module does not produce real V8 serialization
+format — it emits a different binary encoding that the Rust V8 sidecar cannot
+deserialize. CBOR was chosen as the Bun fallback because:
+
+1. **Faster JS-side encode than JSON** — `cbor-x` encode runs ~32 K ops/sec vs
+   ~16 K ops/sec for `JSON.stringify` (2× faster on the encode path that the
+   host hits on every bridge response).
+2. **Binary-native** — CBOR handles `Uint8Array`/`Buffer` payloads natively
+   without base64 encoding, unlike JSON.
+3. **Standardized** — IETF RFC 8949; used by WebAuthn/FIDO2.
+
+The Rust sidecar reads `SECURE_EXEC_V8_CODEC` at startup. When set to `cbor`,
+`bridge.rs` routes through `ciborium` for decode and `cbor_to_v8()` /
+`v8_to_cbor()` converters for V8 ↔ CBOR translation. When unset (Node.js),
+the native V8 `ValueSerializer` / `ValueDeserializer` C++ API is used directly
+with zero intermediate representation.
+
+**Performance comparison (JS host-side encode, clinical research data benchmark):**
+
+| Codec | Encode (ops/sec) | Decode (ops/sec) | Notes |
+|---|---:|---:|---|
+| `cbor-x` | ~32,000 | ~19,000 | Binary, IETF standard |
+| `JSON.stringify/parse` | ~16,000 | ~17,700 | String-based, no binary |
+| `v8.serialize` (Node.js) | ~1,900 | ~300,000 | Slow encode, fast decode |
+
+V8 ValueSerializer has very slow JS→C++ encode (~420× slower than JSON) but
+fast native decode. For the Node.js path this is acceptable because the Rust
+sidecar deserializes on the C++ side (bypassing the slow JS wrapper). For Bun,
+CBOR provides the best overall throughput since both encode and decode happen
+in JS-land.
 
 ### Rust binary (`native/v8-runtime/`)
 
 The Rust V8 runtime process. One OS thread per session, each owning a `v8::Isolate`.
 
-- `ipc.rs` — message types (`HostMessage`/`RustMessage`), length-prefixed framing
+- `ipc_binary.rs` — binary frame types, length-prefixed framing
 - `isolate.rs` — V8 platform init, isolate create/destroy, heap limits
 - `execution.rs` — CJS (`v8::Script`) and ESM (`v8::Module`) compilation/execution, globals injection, context hardening
-- `bridge.rs` — `v8::FunctionTemplate` registration, V8↔MessagePack conversion (`v8_to_rmpv`/`rmpv_to_v8` via `rmpv::Value`)
+- `bridge.rs` — `v8::FunctionTemplate` registration, V8 ValueSerializer/Deserializer, CBOR codec (`v8_to_cbor`/`cbor_to_v8` via `ciborium::Value`)
 - `host_call.rs` — sync-blocking bridge calls (serialize → write → block on read → deserialize)
 - `stream.rs` — StreamEvent dispatch into V8 (child process, HTTP server)
 - `timeout.rs` — per-session timer thread, `terminate_execution()` + abort channel
 - `session.rs` — session management, event loop, concurrency limiting
-- `main.rs` — UDS listener, connection auth, signal handling, FD hygiene
+- `main.rs` — UDS listener, connection auth, signal handling, FD hygiene, codec init
 
 ## NodeExecutionDriver
 
