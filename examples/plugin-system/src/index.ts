@@ -4,7 +4,7 @@ import {
   createInMemoryFileSystem,
   createNodeDriver,
   createNodeRuntimeDriverFactory,
-} from "@firestart/secure-exec";
+} from "@firestartorg/secure-exec";
 
 const filesystem = createInMemoryFileSystem();
 await filesystem.mkdir("/plugins");

@@ -80,7 +80,7 @@ import {
 	O_TRUNC,
 	O_APPEND,
 	FILETYPE_REGULAR_FILE,
-} from "@firestart/secure-exec-core";
+} from "@firestartorg/secure-exec-core";
 import { normalizeBuiltinSpecifier } from "./builtin-modules.js";
 import { resolveModule, loadFile } from "./package-bundler.js";
 import { bundlePolyfill, hasPolyfill } from "./polyfills.js";
@@ -110,14 +110,14 @@ import type {
 	CommandExecutor,
 	NetworkAdapter,
 	SpawnedProcess,
-} from "@firestart/secure-exec-core";
-import type { VirtualFileSystem } from "@firestart/secure-exec-core";
+} from "@firestartorg/secure-exec-core";
+import type { VirtualFileSystem } from "@firestartorg/secure-exec-core";
 import type { ResolutionCache } from "./package-bundler.js";
 import type {
 	StdioEvent,
 	StdioHook,
 	ProcessConfig,
-} from "@firestart/secure-exec-core/internal/shared/api-types";
+} from "@firestartorg/secure-exec-core/internal/shared/api-types";
 import type { BudgetState } from "./isolate-bootstrap.js";
 
 const SOL_SOCKET = 1;
@@ -1880,7 +1880,7 @@ export interface NetSocketBridgeDeps {
 	/** Dispatch a socket event back to the guest (socketId, event, data?). */
 	dispatch: (socketId: number, event: string, data?: string) => void;
 	/** Kernel socket table — when provided, routes through kernel instead of host TCP. */
-	socketTable?: import("@firestart/secure-exec-core").SocketTable;
+	socketTable?: import("@firestartorg/secure-exec-core").SocketTable;
 	/** Process ID for kernel socket ownership. Required when socketTable is set. */
 	pid?: number;
 }
@@ -1915,7 +1915,7 @@ export function buildNetworkSocketBridgeHandlers(
  */
 function buildKernelSocketBridgeHandlers(
 	dispatch: NetSocketBridgeDeps["dispatch"],
-	socketTable: import("@firestart/secure-exec-core").SocketTable,
+	socketTable: import("@firestartorg/secure-exec-core").SocketTable,
 	pid: number,
 ): NetSocketBridgeResult {
 	const handlers: BridgeHandlers = {};
@@ -3511,7 +3511,7 @@ export function buildMimeBridgeHandlers(): BridgeHandlers {
 }
 
 export interface KernelTimerDispatchDeps {
-	timerTable: import("@firestart/secure-exec-core").TimerTable;
+	timerTable: import("@firestartorg/secure-exec-core").TimerTable;
 	pid: number;
 	budgetState: BudgetState;
 	maxBridgeCalls?: number;
@@ -3623,7 +3623,7 @@ export function buildKernelStdinDispatchHandlers(
 }
 
 export interface KernelHandleDispatchDeps {
-	processTable?: import("@firestart/secure-exec-core").ProcessTable;
+	processTable?: import("@firestartorg/secure-exec-core").ProcessTable;
 	pid: number;
 	budgetState: BudgetState;
 	maxBridgeCalls?: number;
@@ -3827,7 +3827,7 @@ export interface ChildProcessBridgeDeps {
 	/** Push child process events into the V8 isolate. */
 	sendStreamEvent: (eventType: string, payload: Uint8Array) => void;
 	/** Kernel process table — when provided, child processes are registered for cross-runtime visibility. */
-	processTable?: import("@firestart/secure-exec-core").ProcessTable;
+	processTable?: import("@firestartorg/secure-exec-core").ProcessTable;
 	/** Parent process PID for kernel process table registration. */
 	parentPid?: number;
 }
@@ -4040,7 +4040,7 @@ export interface NetworkBridgeDeps {
 	/** Push HTTP server/upgrade events into the V8 isolate. */
 	sendStreamEvent: (eventType: string, payload: Uint8Array) => void;
 	/** Kernel socket table for all bridge-managed HTTP server routing. */
-	socketTable?: import("@firestart/secure-exec-core").SocketTable;
+	socketTable?: import("@firestartorg/secure-exec-core").SocketTable;
 	/** Process ID for kernel socket ownership. */
 	pid?: number;
 }
@@ -4163,7 +4163,7 @@ function shouldEncodeHttpBodyAsBinary(
  */
 function createKernelSocketDuplex(
 	socketId: number,
-	socketTable: import("@firestart/secure-exec-core").SocketTable,
+	socketTable: import("@firestartorg/secure-exec-core").SocketTable,
 	pid: number,
 ): Duplex {
 	let readPumpStarted = false;
@@ -6096,7 +6096,7 @@ export function buildNetworkBridgeHandlers(deps: NetworkBridgeDeps): NetworkBrid
 /** Accept loop: dequeue connections from kernel listener and feed to http.Server. */
 async function startKernelHttpAcceptLoop(
 	state: KernelHttpServerState,
-	socketTable: import("@firestart/secure-exec-core").SocketTable,
+	socketTable: import("@firestartorg/secure-exec-core").SocketTable,
 	pid: number,
 ): Promise<void> {
 	try {
@@ -6341,7 +6341,7 @@ function getStandaloneProcFileContent(path: string): Uint8Array | null {
 
 function getStandaloneProcFileStat(
 	path: string,
-): import("@firestart/secure-exec-core").VirtualStat | null {
+): import("@firestartorg/secure-exec-core").VirtualStat | null {
 	const content = getStandaloneProcFileContent(path);
 	if (!content) return null;
 	const now = Date.now();
@@ -6388,7 +6388,7 @@ async function standaloneProcAwareExists(
 async function standaloneProcAwareStat(
 	vfs: VirtualFileSystem,
 	path: string,
-): Promise<import("@firestart/secure-exec-core").VirtualStat> {
+): Promise<import("@firestartorg/secure-exec-core").VirtualStat> {
 	return getStandaloneProcFileStat(path) ?? vfs.stat(path);
 }
 

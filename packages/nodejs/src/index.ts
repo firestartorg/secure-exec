@@ -71,4 +71,4 @@ export { createNodeHostNetworkAdapter } from "./host-network-adapter.js";
 export {
 	TIMEOUT_EXIT_CODE,
 	TIMEOUT_ERROR_MESSAGE,
-} from "@firestart/secure-exec-core";
+} from "@firestartorg/secure-exec-core";

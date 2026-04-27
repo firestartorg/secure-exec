@@ -1,6 +1,6 @@
-// Re-exported from @firestart/secure-exec-nodejs
+// Re-exported from @firestartorg/secure-exec-nodejs
 export {
 	emitConsoleEvent,
 	stripDangerousEnv,
 	createProcessConfigForExecution,
-} from "@firestart/secure-exec-nodejs";
+} from "@firestartorg/secure-exec-nodejs";

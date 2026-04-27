@@ -1,9 +1,9 @@
-// Re-exported from @firestart/secure-exec-nodejs — canonical source is packages/nodejs/src/isolate-bootstrap.ts
+// Re-exported from @firestartorg/secure-exec-nodejs — canonical source is packages/nodejs/src/isolate-bootstrap.ts
 export type {
 	NodeExecutionDriverOptions,
 	BudgetState,
 	DriverDeps,
-} from "@firestart/secure-exec-nodejs/internal/isolate-bootstrap";
+} from "@firestartorg/secure-exec-nodejs/internal/isolate-bootstrap";
 export {
 	DEFAULT_BRIDGE_BASE64_TRANSFER_BYTES,
 	DEFAULT_ISOLATE_JSON_PAYLOAD_BYTES,
@@ -31,4 +31,4 @@ export {
 	hostRequire,
 	isValidExportName,
 	getHostBuiltinNamedExports,
-} from "@firestart/secure-exec-nodejs/internal/isolate-bootstrap";
+} from "@firestartorg/secure-exec-nodejs/internal/isolate-bootstrap";

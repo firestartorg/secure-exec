@@ -1,4 +1,4 @@
-// Re-exported from @firestart/secure-exec-core — canonical source is packages/core/src/runtime-driver.ts
+// Re-exported from @firestartorg/secure-exec-core — canonical source is packages/core/src/runtime-driver.ts
 export type {
 	DriverRuntimeConfig,
 	NodeRuntimeDriver,
@@ -11,4 +11,4 @@ export type {
 	RuntimeDriverOptions,
 	SharedRuntimeDriver,
 	SystemDriver,
-} from "@firestart/secure-exec-core";
+} from "@firestartorg/secure-exec-core";

@@ -7,7 +7,7 @@ import {
 	createInMemoryFileSystem,
 	createNodeDriver,
 	createNodeRuntimeDriverFactory,
-} from "@firestart/secure-exec";
+} from "@firestartorg/secure-exec";
 import { createTypeScriptTools } from "../src/index.js";
 
 const workspaceRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
@@ -28,7 +28,7 @@ function createTools(memoryLimit?: number) {
 	};
 }
 
-describe("@firestart/secure-exec-typescript", () => {
+describe("@firestartorg/secure-exec-typescript", () => {
 	it("typechecks a project with node types from node_modules", { timeout: 15_000 }, async () => {
 		const { filesystem, tools } = createTools();
 		await filesystem.mkdir("/root/src");

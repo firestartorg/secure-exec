@@ -5,7 +5,7 @@
 // processes are running. See: docs-internal/node/ACTIVE_HANDLES.md
 
 import type * as nodeChildProcess from "child_process";
-import { exposeCustomGlobal } from "@firestart/secure-exec-core/internal/shared/global-exposure";
+import { exposeCustomGlobal } from "@firestartorg/secure-exec-core/internal/shared/global-exposure";
 import type {
 	ChildProcessKillBridgeRef,
 	ChildProcessSpawnStartBridgeRef,

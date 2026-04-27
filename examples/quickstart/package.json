@@ -10,7 +10,7 @@
     "@secure-exec/typescript": "workspace:*",
     "@hono/node-server": "^1.13.8",
     "hono": "^4.7.2",
-    "@firestart/secure-exec": "workspace:*"
+    "@firestartorg/secure-exec": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

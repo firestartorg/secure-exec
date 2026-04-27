@@ -1,4 +1,4 @@
-import { exposeCustomGlobal } from "@firestart/secure-exec-core/internal/shared/global-exposure";
+import { exposeCustomGlobal } from "@firestartorg/secure-exec-core/internal/shared/global-exposure";
 import { bridgeDispatchSync } from "./dispatch.js";
 
 /**

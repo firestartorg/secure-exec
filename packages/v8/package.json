@@ -1,5 +1,5 @@
 {
-  "name": "@firestart/secure-exec-v8",
+  "name": "@firestartorg/secure-exec-v8",
   "version": "0.2.1",
   "type": "module",
   "license": "Apache-2.0",
@@ -33,10 +33,10 @@
     "typescript": "^5.7.2"
   },
   "optionalDependencies": {
-    "@firestart/secure-exec-v8-darwin-arm64": "0.2.1",
-    "@firestart/secure-exec-v8-darwin-x64": "0.2.1",
-    "@firestart/secure-exec-v8-linux-arm64-gnu": "0.2.1",
-    "@firestart/secure-exec-v8-linux-x64-gnu": "0.2.1"
+    "@firestartorg/secure-exec-v8-darwin-arm64": "0.2.1",
+    "@firestartorg/secure-exec-v8-darwin-x64": "0.2.1",
+    "@firestartorg/secure-exec-v8-linux-arm64-gnu": "0.2.1",
+    "@firestartorg/secure-exec-v8-linux-x64-gnu": "0.2.1"
   },
   "dependencies": {
     "cbor-x": "^1.6.4"

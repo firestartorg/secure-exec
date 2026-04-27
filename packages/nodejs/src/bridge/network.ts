@@ -7,7 +7,7 @@ const MAX_HTTP_BODY_BYTES = 50 * 1024 * 1024; // 50 MB
 import type * as nodeHttp from "http";
 import type * as nodeDns from "dns";
 import type * as nodeDgram from "node:dgram";
-import { exposeCustomGlobal } from "@firestart/secure-exec-core/internal/shared/global-exposure";
+import { exposeCustomGlobal } from "@firestartorg/secure-exec-core/internal/shared/global-exposure";
 import type {
 	FsFacadeBridge,
 	NetworkDnsLookupRawBridgeRef,

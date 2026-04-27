@@ -9,8 +9,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createNodeRuntime } from '../src/kernel-runtime.ts';
 import { createNodeHostNetworkAdapter } from '../src/host-network-adapter.ts';
-import { createKernel, createInMemoryFileSystem, allowAll } from '@firestart/secure-exec-core';
-import type { Kernel } from '@firestart/secure-exec-core';
+import { createKernel, createInMemoryFileSystem, allowAll } from '@firestartorg/secure-exec-core';
+import type { Kernel } from '@firestartorg/secure-exec-core';
 
 describe('http.createServer inside VM', () => {
 	let kernel: Kernel;

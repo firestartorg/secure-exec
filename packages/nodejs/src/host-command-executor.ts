@@ -6,7 +6,7 @@
  */
 
 import { spawn as hostSpawn } from "node:child_process";
-import type { CommandExecutor, SpawnedProcess } from "@firestart/secure-exec-core";
+import type { CommandExecutor, SpawnedProcess } from "@firestartorg/secure-exec-core";
 
 /**
  * Create a CommandExecutor that spawns real host processes via Node.js.

@@ -7,7 +7,7 @@
  * Usage:
  *
  * ```typescript
- * import { defineBlockStoreTests } from "@firestart/secure-exec-core/test/block-store-conformance";
+ * import { defineBlockStoreTests } from "@firestartorg/secure-exec-core/test/block-store-conformance";
  *
  * defineBlockStoreTests({
  *   name: "InMemoryBlockStore",

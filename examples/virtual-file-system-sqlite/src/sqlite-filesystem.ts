@@ -1,4 +1,4 @@
-import type { VirtualFileSystem } from "@firestart/secure-exec";
+import type { VirtualFileSystem } from "@firestartorg/secure-exec";
 import initSqlJs, { type Database as SqlJsDatabase } from "sql.js";
 
 type VirtualStat = Awaited<ReturnType<VirtualFileSystem["stat"]>>;

@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "sql.js": "^1.11.0",
-    "@firestart/secure-exec": "workspace:*"
+    "@firestartorg/secure-exec": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

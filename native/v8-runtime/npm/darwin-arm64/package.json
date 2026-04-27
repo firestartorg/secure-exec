@@ -1,5 +1,5 @@
 {
-  "name": "@firestart/secure-exec-v8-darwin-arm64",
+  "name": "@firestartorg/secure-exec-v8-darwin-arm64",
   "version": "0.2.1",
   "license": "Apache-2.0",
   "publishConfig": {

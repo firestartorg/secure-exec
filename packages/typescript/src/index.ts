@@ -1,6 +1,6 @@
-import { NodeRuntime } from "@firestart/secure-exec";
-import type { NodeRuntimeDriverFactory } from "@firestart/secure-exec";
-import type { SystemDriver } from "@firestart/secure-exec-core";
+import { NodeRuntime } from "@firestartorg/secure-exec";
+import type { NodeRuntimeDriverFactory } from "@firestartorg/secure-exec";
+import type { SystemDriver } from "@firestartorg/secure-exec-core";
 
 export interface TypeScriptDiagnostic {
 	code: number;

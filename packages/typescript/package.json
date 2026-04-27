@@ -27,8 +27,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@firestart/secure-exec-core": "workspace:*",
-    "@firestart/secure-exec": "workspace:*",
+    "@firestartorg/secure-exec-core": "workspace:*",
+    "@firestartorg/secure-exec": "workspace:*",
     "typescript": "^5.9.3"
   },
   "devDependencies": {

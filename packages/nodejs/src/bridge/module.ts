@@ -1,7 +1,7 @@
 import {
 	exposeCustomGlobal,
 	exposeMutableRuntimeStateGlobal,
-} from "@firestart/secure-exec-core/internal/shared/global-exposure";
+} from "@firestartorg/secure-exec-core/internal/shared/global-exposure";
 import type {
 	ModuleCacheBridgeRecord,
 	RequireFromBridgeFn,

@@ -41,7 +41,7 @@ importers:
       '@ai-sdk/openai':
         specifier: ^3.0.41
         version: 3.0.47(zod@3.25.76)
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
       ai:
@@ -66,7 +66,7 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^3.0.58
         version: 3.0.63(zod@3.25.76)
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
       ai:
@@ -88,7 +88,7 @@ importers:
 
   examples/codemod:
     dependencies:
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
     devDependencies:
@@ -98,7 +98,7 @@ importers:
 
   examples/features:
     dependencies:
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
       '@secure-exec/typescript':
@@ -114,7 +114,7 @@ importers:
 
   examples/hono-dev-server:
     dependencies:
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
       '@hono/node-server':
@@ -136,7 +136,7 @@ importers:
 
   examples/hono/loader:
     dependencies:
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../../packages/secure-exec
     devDependencies:
@@ -155,7 +155,7 @@ importers:
 
   examples/just-bash:
     dependencies:
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
       just-bash:
@@ -168,7 +168,7 @@ importers:
 
   examples/plugin-system:
     dependencies:
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
     devDependencies:
@@ -184,7 +184,7 @@ importers:
 
   examples/quickstart:
     dependencies:
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
       '@hono/node-server':
@@ -209,7 +209,7 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.700.0
         version: 3.1014.0
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
     devDependencies:
@@ -222,7 +222,7 @@ importers:
 
   examples/virtual-file-system-sqlite:
     dependencies:
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
       sql.js:
@@ -260,10 +260,10 @@ importers:
 
   packages/nodejs:
     dependencies:
-      '@firestart/secure-exec-core':
+      '@firestartorg/secure-exec-core':
         specifier: workspace:*
         version: link:../core
-      '@firestart/secure-exec-v8':
+      '@firestartorg/secure-exec-v8':
         specifier: workspace:*
         version: link:../v8
       cbor-x:
@@ -309,14 +309,14 @@ importers:
 
   packages/secure-exec:
     dependencies:
-      '@firestart/secure-exec-core':
+      '@firestartorg/secure-exec-core':
         specifier: workspace:*
         version: link:../core
-      '@firestart/secure-exec-nodejs':
+      '@firestartorg/secure-exec-nodejs':
         specifier: workspace:*
         version: link:../nodejs
     devDependencies:
-      '@firestart/secure-exec-v8':
+      '@firestartorg/secure-exec-v8':
         specifier: workspace:*
         version: link:../v8
       '@mariozechner/pi-coding-agent':
@@ -358,10 +358,10 @@ importers:
 
   packages/typescript:
     dependencies:
-      '@firestart/secure-exec':
+      '@firestartorg/secure-exec':
         specifier: workspace:*
         version: link:../secure-exec
-      '@firestart/secure-exec-core':
+      '@firestartorg/secure-exec-core':
         specifier: workspace:*
         version: link:../core
       typescript:

@@ -1,7 +1,7 @@
 import { createResolutionCache } from "./package-bundler.js";
-import { getConsoleSetupCode } from "@firestart/secure-exec-core/internal/shared/console-formatter";
-import { getRequireSetupCode } from "@firestart/secure-exec-core/internal/shared/require-setup";
-import { getIsolateRuntimeSource, getInitialBridgeGlobalsSetupCode } from "@firestart/secure-exec-core";
+import { getConsoleSetupCode } from "@firestartorg/secure-exec-core/internal/shared/console-formatter";
+import { getRequireSetupCode } from "@firestartorg/secure-exec-core/internal/shared/require-setup";
+import { getIsolateRuntimeSource, getInitialBridgeGlobalsSetupCode } from "@firestartorg/secure-exec-core";
 import {
 	createCommandExecutorStub,
 	createFsStub,
@@ -10,17 +10,17 @@ import {
 	wrapCommandExecutor,
 	wrapFileSystem,
 	wrapNetworkAdapter,
-} from "@firestart/secure-exec-core/internal/shared/permissions";
-import type { NetworkAdapter, RuntimeDriver } from "@firestart/secure-exec-core";
+} from "@firestartorg/secure-exec-core/internal/shared/permissions";
+import type { NetworkAdapter, RuntimeDriver } from "@firestartorg/secure-exec-core";
 import type {
 	StdioHook,
 	ExecOptions,
 	ExecResult,
 	RunResult,
 	TimingMitigation,
-} from "@firestart/secure-exec-core/internal/shared/api-types";
-import type { V8ExecutionOptions, V8Runtime, V8Session, V8SessionOptions } from "@firestart/secure-exec-v8";
-import { createV8Runtime } from "@firestart/secure-exec-v8";
+} from "@firestartorg/secure-exec-core/internal/shared/api-types";
+import type { V8ExecutionOptions, V8Runtime, V8Session, V8SessionOptions } from "@firestartorg/secure-exec-v8";
+import { createV8Runtime } from "@firestartorg/secure-exec-v8";
 import { getRawBridgeCode, getBridgeAttachCode } from "./bridge-loader.js";
 import {
 	type NodeExecutionDriverOptions,
@@ -47,7 +47,7 @@ import {
 	ProcessTable,
 	SocketTable,
 	TimerTable,
-} from "@firestart/secure-exec-core";
+} from "@firestartorg/secure-exec-core";
 import {
 	type BridgeHandlers,
 	buildCryptoBridgeHandlers,
@@ -71,16 +71,16 @@ import {
 import type {
 	Permissions,
 	VirtualFileSystem,
-} from "@firestart/secure-exec-core";
+} from "@firestartorg/secure-exec-core";
 import type {
 	CommandExecutor,
 	SpawnedProcess,
-} from "@firestart/secure-exec-core";
+} from "@firestartorg/secure-exec-core";
 import type { ResolutionCache } from "./package-bundler.js";
 import type {
 	OSConfig,
 	ProcessConfig,
-} from "@firestart/secure-exec-core/internal/shared/api-types";
+} from "@firestartorg/secure-exec-core/internal/shared/api-types";
 import type { BudgetState } from "./isolate-bootstrap.js";
 import { type FlattenedBinding, flattenBindingTree, BINDING_PREFIX } from "./bindings.js";
 import { createNodeHostNetworkAdapter } from "./host-network-adapter.js";
@@ -98,7 +98,7 @@ function boundErrorMessage(message: string): string {
 	return `${message.slice(0, MAX_ERROR_MESSAGE_CHARS)}...[Truncated]`;
 }
 
-function createBridgeDriverProcess(): import("@firestart/secure-exec-core").DriverProcess {
+function createBridgeDriverProcess(): import("@firestartorg/secure-exec-core").DriverProcess {
 	return {
 		writeStdin() {},
 		closeStdin() {},
@@ -744,7 +744,7 @@ if (typeof MessageChannel === 'undefined') {
 
 // Shim for ivm.Reference methods used by bridge code.
 // Bridge globals in the V8 runtime are plain functions, but the bridge code
-// (compiled from @firestart/secure-exec-core) calls them via .applySync(), .apply(), and
+// (compiled from @firestartorg/secure-exec-core) calls them via .applySync(), .apply(), and
 // .applySyncPromise() which are ivm Reference calling patterns.
 // Shim for native bridge functions (runs early in postRestoreScript)
 const BRIDGE_NATIVE_SHIM = `
@@ -848,10 +848,10 @@ export class NodeExecutionDriver implements RuntimeDriver {
 	// Unwrapped filesystem for path translation (toHostPath/toSandboxPath)
 	private rawFilesystem: VirtualFileSystem | undefined;
 	// Kernel socket table for routing net.connect through kernel
-	private socketTable?: import("@firestart/secure-exec-core").SocketTable;
+	private socketTable?: import("@firestartorg/secure-exec-core").SocketTable;
 	// Kernel process table for child process registration
-	private processTable?: import("@firestart/secure-exec-core").ProcessTable;
-	private timerTable: import("@firestart/secure-exec-core").TimerTable;
+	private processTable?: import("@firestartorg/secure-exec-core").ProcessTable;
+	private timerTable: import("@firestartorg/secure-exec-core").TimerTable;
 	private ownsProcessTable: boolean;
 	private ownsTimerTable: boolean;
 	private configuredMaxTimers?: number;
@@ -1710,7 +1710,7 @@ function buildPostRestoreScript(
 import {
 	HARDENED_NODE_CUSTOM_GLOBALS,
 	MUTABLE_NODE_CUSTOM_GLOBALS,
-} from "@firestart/secure-exec-core/internal/shared/global-exposure";
+} from "@firestartorg/secure-exec-core/internal/shared/global-exposure";
 import {
 	HOST_BRIDGE_GLOBAL_KEYS,
 } from "./bridge-contract.js";

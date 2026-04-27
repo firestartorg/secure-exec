@@ -11,7 +11,7 @@ import {
 	NodeExecutionDriver,
 } from "../../../src/index.js";
 import type { BindingTree } from "../../../src/index.js";
-import { flattenBindingTree, BINDING_PREFIX } from "@firestart/secure-exec-nodejs";
+import { flattenBindingTree, BINDING_PREFIX } from "@firestartorg/secure-exec-nodejs";
 
 // ---------------------------------------------------------------------------
 // Helpers

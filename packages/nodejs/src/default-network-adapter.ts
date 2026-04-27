@@ -5,7 +5,7 @@ import * as https from "node:https";
 import * as zlib from "node:zlib";
 import type {
 	NetworkAdapter,
-} from "@firestart/secure-exec-core";
+} from "@firestartorg/secure-exec-core";
 
 export interface DefaultNetworkAdapterOptions {
 	/** Pre-seed loopback ports that should bypass SSRF checks (e.g. host-managed servers). */

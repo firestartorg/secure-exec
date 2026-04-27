@@ -1,4 +1,4 @@
-import type { VirtualFileSystem } from "@firestart/secure-exec-core";
+import type { VirtualFileSystem } from "@firestartorg/secure-exec-core";
 
 // Path utilities (since we can't use node:path in a way that works in isolate)
 function dirname(p: string): string {
