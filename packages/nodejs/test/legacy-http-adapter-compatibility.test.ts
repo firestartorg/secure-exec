@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deserialize } from "node:v8";
-import { SocketTable, type PermissionDecision } from "@secure-exec/core";
+import { SocketTable, type PermissionDecision } from "@firestartorg/secure-exec-core";
 import { HOST_BRIDGE_GLOBAL_KEYS } from "../src/bridge-contract.ts";
 import {
 	buildNetworkBridgeHandlers,

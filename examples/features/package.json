@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@secure-exec/typescript": "workspace:*",
-    "secure-exec": "workspace:*"
+    "@firestartorg/secure-exec": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

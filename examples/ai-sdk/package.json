@@ -7,7 +7,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "secure-exec": "workspace:*",
+    "@firestartorg/secure-exec": "workspace:*",
     "ai": "^6.0.116",
     "@ai-sdk/anthropic": "^3.0.58",
     "@ai-sdk/openai": "^3.0.41",

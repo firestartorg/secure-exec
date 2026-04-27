@@ -11,7 +11,7 @@ import {
   NodeRuntime,
   createNodeDriver,
   createNodeRuntimeDriverFactory,
-} from "secure-exec";
+} from "@firestartorg/secure-exec";
 import { createServer, type Server } from "node:http";
 
 export interface ExecuteResult {

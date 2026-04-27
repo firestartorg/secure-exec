@@ -1,9 +1,9 @@
 import * as fs from "node:fs/promises";
 import * as fsSync from "node:fs";
 import path from "node:path";
-import { createEaccesError } from "@secure-exec/core/internal/shared/errors";
-import { O_CREAT, O_EXCL, O_TRUNC } from "@secure-exec/core";
-import type { VirtualDirEntry, VirtualFileSystem, VirtualStat } from "@secure-exec/core";
+import { createEaccesError } from "@firestartorg/secure-exec-core/internal/shared/errors";
+import { O_CREAT, O_EXCL, O_TRUNC } from "@firestartorg/secure-exec-core";
+import type { VirtualDirEntry, VirtualFileSystem, VirtualStat } from "@firestartorg/secure-exec-core";
 
 /** Host-to-VM path mapping for package-provided module roots. */
 export interface PackageRootMapping {

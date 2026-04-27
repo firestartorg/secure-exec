@@ -4,7 +4,7 @@ import {
   allowAll,
   createNodeDriver,
   createNodeRuntimeDriverFactory,
-} from "secure-exec";
+} from "@firestartorg/secure-exec";
 
 const port = 3000;
 const runtime = new NodeRuntime({

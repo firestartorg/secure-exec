@@ -12,13 +12,13 @@ import type {
 	HostNetworkAdapter,
 	HostSocket,
 	HostUdpSocket,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 import {
 	IPPROTO_TCP,
 	SOL_SOCKET,
 	SO_KEEPALIVE,
 	TCP_NODELAY,
-} from "@secure-exec/core/internal/kernel";
+} from "@firestartorg/secure-exec-core/internal/kernel";
 
 /**
  * Queued-read adapter: incoming data/EOF/errors are buffered so that

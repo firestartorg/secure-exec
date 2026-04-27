@@ -1,4 +1,4 @@
-// Re-exported from @secure-exec/core
+// Re-exported from @firestartorg/secure-exec-core
 export type {
 	ExecOptions,
 	ExecResult,
@@ -12,4 +12,4 @@ export type {
 	StdioEvent,
 	StdioHook,
 	TimingMitigation,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";

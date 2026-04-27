@@ -32,20 +32,20 @@ export {
 	createNodeRuntimeDriverFactory,
 	NodeExecutionDriver,
 	NodeFileSystem,
-} from "@secure-exec/nodejs";
+} from "@firestartorg/secure-exec-nodejs";
 export type {
 	DefaultNetworkAdapterOptions,
 	ModuleAccessOptions,
 	NodeRuntimeDriverFactoryOptions,
-} from "@secure-exec/nodejs";
+} from "@firestartorg/secure-exec-nodejs";
 
 // Re-export kernel API.
-export { createKernel } from "@secure-exec/core";
-export type { Kernel, KernelInterface } from "@secure-exec/core";
+export { createKernel } from "@firestartorg/secure-exec-core";
+export type { Kernel, KernelInterface } from "@firestartorg/secure-exec-core";
 
 // Re-export kernel Node runtime factory.
-export { createNodeRuntime } from "@secure-exec/nodejs";
-export type { BindingTree, BindingFunction } from "@secure-exec/nodejs";
+export { createNodeRuntime } from "@firestartorg/secure-exec-nodejs";
+export type { BindingTree, BindingFunction } from "@firestartorg/secure-exec-nodejs";
 
 export { createInMemoryFileSystem } from "./shared/in-memory-fs.js";
 export {

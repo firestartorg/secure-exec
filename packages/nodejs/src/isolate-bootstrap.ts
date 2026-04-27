@@ -2,19 +2,19 @@ import { createRequire } from "node:module";
 import type {
 	Permissions,
 	VirtualFileSystem,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 import type {
 	CommandExecutor,
 	NetworkAdapter,
 	RuntimeDriverOptions,
 	SpawnedProcess,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 import type {
 	StdioHook,
 	OSConfig,
 	ProcessConfig,
 	TimingMitigation,
-} from "@secure-exec/core/internal/shared/api-types";
+} from "@firestartorg/secure-exec-core/internal/shared/api-types";
 import type { ResolutionCache } from "./package-bundler.js";
 import type { BindingTree } from "./bindings.js";
 
@@ -26,11 +26,11 @@ export interface NodeExecutionDriverOptions extends RuntimeDriverOptions {
 	/** Optional live stdin source for PTY-backed interactive processes. */
 	liveStdinSource?: LiveStdinSource;
 	/** Kernel socket table — routes net.connect through kernel instead of host TCP. */
-	socketTable?: import("@secure-exec/core").SocketTable;
+	socketTable?: import("@firestartorg/secure-exec-core").SocketTable;
 	/** Kernel process table — registers child processes for cross-runtime visibility. */
-	processTable?: import("@secure-exec/core").ProcessTable;
+	processTable?: import("@firestartorg/secure-exec-core").ProcessTable;
 	/** Kernel timer table — tracks sandbox timers for budget enforcement and cleanup. */
-	timerTable?: import("@secure-exec/core").TimerTable;
+	timerTable?: import("@firestartorg/secure-exec-core").TimerTable;
 	/** Process ID for kernel socket/process ownership. Required when socketTable/processTable is set. */
 	pid?: number;
 }

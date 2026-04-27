@@ -7,7 +7,7 @@
  * Usage:
  *
  * ```typescript
- * import { defineMetadataStoreTests } from "@secure-exec/core/test/metadata-store-conformance";
+ * import { defineMetadataStoreTests } from "@firestartorg/secure-exec-core/test/metadata-store-conformance";
  *
  * defineMetadataStoreTests({
  *   name: "InMemoryMetadataStore",

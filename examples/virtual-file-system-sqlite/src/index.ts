@@ -3,7 +3,7 @@ import {
 	allowAllFs,
 	createNodeDriver,
 	createNodeRuntimeDriverFactory,
-} from "secure-exec";
+} from "@firestartorg/secure-exec";
 import { SQLiteFileSystem } from "./sqlite-filesystem.js";
 
 const filesystem = await SQLiteFileSystem.create();

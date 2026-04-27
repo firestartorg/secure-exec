@@ -1,4 +1,4 @@
-// Re-exported from @secure-exec/core
+// Re-exported from @firestartorg/secure-exec-core
 export {
 	allowAll,
 	allowAllChildProcess,
@@ -13,4 +13,4 @@ export {
 	wrapCommandExecutor,
 	wrapFileSystem,
 	wrapNetworkAdapter,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";

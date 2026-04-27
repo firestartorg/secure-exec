@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
-import { getIsolateRuntimeSource } from "@secure-exec/core";
+import { getIsolateRuntimeSource } from "@firestartorg/secure-exec-core";
 
 // Resolve this package's root for bridge source and compiled bundle.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

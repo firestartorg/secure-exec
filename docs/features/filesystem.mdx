@@ -32,10 +32,10 @@ const runtime = new NodeRuntime({
 
 try {
   const result = await runtime.exec(`
-    import fs from "node:fs";
+    const fs = require("node:fs");
     fs.mkdirSync("/workspace", { recursive: true });
     fs.writeFileSync("/workspace/hello.txt", "hello from the sandbox");
-  `, { filePath: "/entry.mjs" });
+  `);
 
   if (result.code !== 0) {
     throw new Error(`Unexpected execution result: ${JSON.stringify(result)}`);

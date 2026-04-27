@@ -1,6 +1,6 @@
 import { generateText, stepCountIs, tool } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
-import { NodeRuntime, createNodeDriver, createNodeRuntimeDriverFactory } from "secure-exec";
+import { NodeRuntime, createNodeDriver, createNodeRuntimeDriverFactory } from "@firestartorg/secure-exec";
 import { z } from "zod";
 
 const runtime = new NodeRuntime({

@@ -80,7 +80,7 @@ import {
 	O_TRUNC,
 	O_APPEND,
 	FILETYPE_REGULAR_FILE,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 import { normalizeBuiltinSpecifier } from "./builtin-modules.js";
 import { resolveModule, loadFile } from "./package-bundler.js";
 import { bundlePolyfill, hasPolyfill } from "./polyfills.js";
@@ -110,14 +110,14 @@ import type {
 	CommandExecutor,
 	NetworkAdapter,
 	SpawnedProcess,
-} from "@secure-exec/core";
-import type { VirtualFileSystem } from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
+import type { VirtualFileSystem } from "@firestartorg/secure-exec-core";
 import type { ResolutionCache } from "./package-bundler.js";
 import type {
 	StdioEvent,
 	StdioHook,
 	ProcessConfig,
-} from "@secure-exec/core/internal/shared/api-types";
+} from "@firestartorg/secure-exec-core/internal/shared/api-types";
 import type { BudgetState } from "./isolate-bootstrap.js";
 
 const SOL_SOCKET = 1;
@@ -1880,7 +1880,7 @@ export interface NetSocketBridgeDeps {
 	/** Dispatch a socket event back to the guest (socketId, event, data?). */
 	dispatch: (socketId: number, event: string, data?: string) => void;
 	/** Kernel socket table — when provided, routes through kernel instead of host TCP. */
-	socketTable?: import("@secure-exec/core").SocketTable;
+	socketTable?: import("@firestartorg/secure-exec-core").SocketTable;
 	/** Process ID for kernel socket ownership. Required when socketTable is set. */
 	pid?: number;
 }
@@ -1915,7 +1915,7 @@ export function buildNetworkSocketBridgeHandlers(
  */
 function buildKernelSocketBridgeHandlers(
 	dispatch: NetSocketBridgeDeps["dispatch"],
-	socketTable: import("@secure-exec/core").SocketTable,
+	socketTable: import("@firestartorg/secure-exec-core").SocketTable,
 	pid: number,
 ): NetSocketBridgeResult {
 	const handlers: BridgeHandlers = {};
@@ -3511,7 +3511,7 @@ export function buildMimeBridgeHandlers(): BridgeHandlers {
 }
 
 export interface KernelTimerDispatchDeps {
-	timerTable: import("@secure-exec/core").TimerTable;
+	timerTable: import("@firestartorg/secure-exec-core").TimerTable;
 	pid: number;
 	budgetState: BudgetState;
 	maxBridgeCalls?: number;
@@ -3623,7 +3623,7 @@ export function buildKernelStdinDispatchHandlers(
 }
 
 export interface KernelHandleDispatchDeps {
-	processTable?: import("@secure-exec/core").ProcessTable;
+	processTable?: import("@firestartorg/secure-exec-core").ProcessTable;
 	pid: number;
 	budgetState: BudgetState;
 	maxBridgeCalls?: number;
@@ -3827,7 +3827,7 @@ export interface ChildProcessBridgeDeps {
 	/** Push child process events into the V8 isolate. */
 	sendStreamEvent: (eventType: string, payload: Uint8Array) => void;
 	/** Kernel process table — when provided, child processes are registered for cross-runtime visibility. */
-	processTable?: import("@secure-exec/core").ProcessTable;
+	processTable?: import("@firestartorg/secure-exec-core").ProcessTable;
 	/** Parent process PID for kernel process table registration. */
 	parentPid?: number;
 }
@@ -4040,7 +4040,7 @@ export interface NetworkBridgeDeps {
 	/** Push HTTP server/upgrade events into the V8 isolate. */
 	sendStreamEvent: (eventType: string, payload: Uint8Array) => void;
 	/** Kernel socket table for all bridge-managed HTTP server routing. */
-	socketTable?: import("@secure-exec/core").SocketTable;
+	socketTable?: import("@firestartorg/secure-exec-core").SocketTable;
 	/** Process ID for kernel socket ownership. */
 	pid?: number;
 }
@@ -4093,7 +4093,7 @@ const MAX_REDIRECTS = 20;
 type KernelHttpClientRequestOptions = {
 	method?: string;
 	headers?: Record<string, string>;
-	body?: string | null;
+	body?: string | Buffer | null;
 	rejectUnauthorized?: boolean;
 };
 
@@ -4163,7 +4163,7 @@ function shouldEncodeHttpBodyAsBinary(
  */
 function createKernelSocketDuplex(
 	socketId: number,
-	socketTable: import("@secure-exec/core").SocketTable,
+	socketTable: import("@firestartorg/secure-exec-core").SocketTable,
 	pid: number,
 ): Duplex {
 	let readPumpStarted = false;
@@ -4767,19 +4767,224 @@ export function buildNetworkBridgeHandlers(deps: NetworkBridgeDeps): NetworkBrid
 
 	handlers[K.networkFetchRaw] = async (url: unknown, optionsJson: unknown): Promise<string> => {
 		checkBridgeBudget(deps);
-		const options = parseJsonWithLimit<{ method?: string; headers?: Record<string, string>; body?: string | null }>(
+		const options = parseJsonWithLimit<{ method?: string; headers?: Record<string, string>; body?: string | null; bodyEncoding?: string | null }>(
 			"network.fetch options", String(optionsJson), jsonLimit);
+		// Decode base64-encoded binary request bodies from the sandbox.
+		const decodedBody: string | Buffer | null = (options.bodyEncoding === "base64" && options.body)
+			? Buffer.from(options.body, "base64")
+			: (options.body ?? null);
+		const fetchOptions = { ...options, body: decodedBody };
 		deps.activeHttpClientRequests.count += 1;
 		try {
 			const urlString = String(url);
 			const result = shouldUseKernelHttpClientPath(adapter, urlString)
-				? await performKernelFetch(urlString, options)
+				? await performKernelFetch(urlString, fetchOptions)
 				// Legacy fallback for custom adapters and explicit no-network stubs.
-				: await adapter.fetch(urlString, options);
+				: await adapter.fetch(urlString, { ...options, body: options.body ?? null });
 			const json = JSON.stringify(result);
 			assertTextPayloadSize("network.fetch response", json, jsonLimit);
 			return json;
 		} finally {
+			deps.activeHttpClientRequests.count = Math.max(0, deps.activeHttpClientRequests.count - 1);
+		}
+	};
+
+	// ── Chunked fetch: stream binary request bodies across the bridge ──
+	// State for in-flight chunked fetch requests
+	let nextChunkedFetchId = 1;
+	type ChunkedFetchState = {
+		req: http.ClientRequest;
+		transport: import("stream").Duplex;
+		responsePromise: Promise<KernelHttpClientResponse>;
+		redirectCount: number;
+		url: string;
+		options: { method?: string; headers?: Record<string, string> };
+	};
+	const chunkedFetchRequests = new Map<number, ChunkedFetchState>();
+
+	/**
+	 * Start a chunked HTTP request. Opens the connection and sends headers.
+	 * The body will be streamed via writeChunk calls.
+	 * Returns a fetchId string.
+	 */
+	handlers[K.networkFetchStartRaw] = async (url: unknown, optionsJson: unknown): Promise<string> => {
+		checkBridgeBudget(deps);
+		const options = parseJsonWithLimit<{
+			method?: string;
+			headers?: Record<string, string>;
+			bodyLength?: number;
+		}>("network.fetchStart options", String(optionsJson), jsonLimit);
+
+		deps.activeHttpClientRequests.count += 1;
+
+		const urlString = String(url);
+		const parsedUrl = new URL(urlString);
+		const isHttps = parsedUrl.protocol === "https:";
+		const host = parsedUrl.hostname;
+		const port = Number(parsedUrl.port || (isHttps ? 443 : 80));
+
+		const socketId = socketTable.create(
+			host.includes(":") ? AF_INET6 : AF_INET,
+			SOCK_STREAM,
+			0,
+			pid,
+		);
+		await socketTable.connect(socketId, { host, port });
+
+		const baseTransport = createKernelSocketDuplex(socketId, socketTable, pid);
+		const requestTransport = isHttps
+			? tls.connect({
+				socket: baseTransport,
+				servername: host,
+			})
+			: baseTransport;
+
+		const transport = isHttps ? https : http;
+		const fetchId = nextChunkedFetchId++;
+
+		// Set Content-Length if bodyLength is provided, to avoid chunked transfer encoding
+		const headers = { ...(options.headers || {}) };
+		if (options.bodyLength != null && options.bodyLength > 0) {
+			headers["content-length"] = String(options.bodyLength);
+		}
+
+		const responsePromise = new Promise<KernelHttpClientResponse>((resolve, reject) => {
+			const req = transport.request({
+				hostname: host,
+				port,
+				path: `${parsedUrl.pathname}${parsedUrl.search}`,
+				method: options.method || "GET",
+				headers,
+				agent: false,
+				createConnection: () => requestTransport,
+			}, (res: http.IncomingMessage) => {
+				const chunks: Buffer[] = [];
+				res.on("data", (chunk: Buffer) => {
+					chunks.push(chunk);
+				});
+				res.on("error", (error: Error) => {
+					requestTransport.destroy();
+					reject(error);
+				});
+				res.on("end", async () => {
+					const decodedBuffer = await maybeDecompressHttpBody(
+						Buffer.concat(chunks),
+						res.headers["content-encoding"],
+					);
+					const buffer = Buffer.from(decodedBuffer);
+					const respHeaders: Record<string, string> = {};
+					Object.entries(res.headers).forEach(([key, value]) => {
+						if (typeof value === "string") respHeaders[key] = value;
+						else if (Array.isArray(value)) respHeaders[key] = value.join(", ");
+					});
+					delete respHeaders["content-encoding"];
+
+					resolve({
+						status: res.statusCode || 200,
+						statusText: res.statusMessage || "OK",
+						headers: respHeaders,
+						rawHeaders: [...res.rawHeaders],
+						url: urlString,
+						body: shouldEncodeHttpBodyAsBinary(urlString, res.headers)
+							? (() => {
+								respHeaders["x-body-encoding"] = "base64";
+								return buffer.toString("base64");
+							})()
+							: buffer.toString("utf8"),
+					});
+					requestTransport.destroy();
+				});
+			});
+
+			req.on("error", (error: Error) => {
+				requestTransport.destroy();
+				reject(error);
+			});
+
+			chunkedFetchRequests.set(fetchId, {
+				req,
+				transport: requestTransport,
+				responsePromise: undefined as unknown as Promise<KernelHttpClientResponse>,
+				redirectCount: 0,
+				url: urlString,
+				options,
+			});
+		});
+
+		const state = chunkedFetchRequests.get(fetchId)!;
+		state.responsePromise = responsePromise;
+
+		return String(fetchId);
+	};
+
+	/**
+	 * Write a base64-encoded chunk to an in-flight chunked fetch request.
+	 */
+	handlers[K.networkFetchWriteChunkRaw] = async (fetchIdStr: unknown, base64Chunk: unknown): Promise<void> => {
+		const fetchId = Number(fetchIdStr);
+		const state = chunkedFetchRequests.get(fetchId);
+		if (!state) {
+			throw new Error(`network.fetchWriteChunk: unknown fetchId ${fetchId}`);
+		}
+		const chunk = Buffer.from(String(base64Chunk), "base64");
+		await new Promise<void>((resolve, reject) => {
+			const ok = state.req.write(chunk, (err) => {
+				if (err) reject(err);
+			});
+			if (ok) {
+				resolve();
+			} else {
+				state.req.once("drain", resolve);
+			}
+		});
+	};
+
+	/**
+	 * End the request body and wait for the response. Returns the response JSON.
+	 */
+	handlers[K.networkFetchFinishRaw] = async (fetchIdStr: unknown): Promise<string> => {
+		const fetchId = Number(fetchIdStr);
+		const state = chunkedFetchRequests.get(fetchId);
+		if (!state) {
+			throw new Error(`network.fetchFinish: unknown fetchId ${fetchId}`);
+		}
+
+		try {
+			state.req.end();
+			const response = await state.responsePromise;
+
+			// Handle redirects (same logic as performKernelFetch)
+			if ([301, 302, 303, 307, 308].includes(response.status)) {
+				const location = response.headers.location;
+				if (location) {
+					// For redirects, fall back to the non-chunked path since the body is already sent
+					const redirectUrl = new URL(location, state.url).href;
+					const redirectMethod = [301, 302, 303].includes(response.status) ? "GET" : state.options.method;
+					const redirectResult = await performKernelFetch(redirectUrl, {
+						...state.options,
+						method: redirectMethod,
+						body: null,
+					});
+					const json = JSON.stringify(redirectResult);
+					assertTextPayloadSize("network.fetchFinish response", json, jsonLimit);
+					return json;
+				}
+			}
+
+			const result = {
+				ok: response.status >= 200 && response.status < 300,
+				status: response.status,
+				statusText: response.statusText,
+				headers: { ...response.headers },
+				body: response.body,
+				url: state.url,
+				redirected: false,
+			};
+			const json = JSON.stringify(result);
+			assertTextPayloadSize("network.fetchFinish response", json, jsonLimit);
+			return json;
+		} finally {
+			chunkedFetchRequests.delete(fetchId);
 			deps.activeHttpClientRequests.count = Math.max(0, deps.activeHttpClientRequests.count - 1);
 		}
 	};
@@ -4792,15 +4997,20 @@ export function buildNetworkBridgeHandlers(deps: NetworkBridgeDeps): NetworkBrid
 
 	handlers[K.networkHttpRequestRaw] = async (url: unknown, optionsJson: unknown): Promise<string> => {
 		checkBridgeBudget(deps);
-		const options = parseJsonWithLimit<{ method?: string; headers?: Record<string, string>; body?: string | null; rejectUnauthorized?: boolean }>(
+		const options = parseJsonWithLimit<{ method?: string; headers?: Record<string, string>; body?: string | null; bodyEncoding?: string | null; rejectUnauthorized?: boolean }>(
 			"network.httpRequest options", String(optionsJson), jsonLimit);
+		// Decode base64-encoded binary request bodies from the sandbox.
+		const decodedHttpBody: string | Buffer | null = (options.bodyEncoding === "base64" && options.body)
+			? Buffer.from(options.body, "base64")
+			: (options.body ?? null);
+		const httpOptions = { ...options, body: decodedHttpBody };
 		deps.activeHttpClientRequests.count += 1;
 		try {
 			const urlString = String(url);
 			const result = shouldUseKernelHttpClientPath(adapter, urlString)
-				? await performKernelHttpRequest(urlString, options)
+				? await performKernelHttpRequest(urlString, httpOptions)
 				// Legacy fallback for custom adapters and explicit no-network stubs.
-				: await adapter.httpRequest(urlString, options);
+				: await adapter.httpRequest(urlString, { ...options, body: options.body ?? null });
 			const json = JSON.stringify(result);
 			assertTextPayloadSize("network.httpRequest response", json, jsonLimit);
 			return json;
@@ -5886,7 +6096,7 @@ export function buildNetworkBridgeHandlers(deps: NetworkBridgeDeps): NetworkBrid
 /** Accept loop: dequeue connections from kernel listener and feed to http.Server. */
 async function startKernelHttpAcceptLoop(
 	state: KernelHttpServerState,
-	socketTable: import("@secure-exec/core").SocketTable,
+	socketTable: import("@firestartorg/secure-exec-core").SocketTable,
 	pid: number,
 ): Promise<void> {
 	try {
@@ -6131,7 +6341,7 @@ function getStandaloneProcFileContent(path: string): Uint8Array | null {
 
 function getStandaloneProcFileStat(
 	path: string,
-): import("@secure-exec/core").VirtualStat | null {
+): import("@firestartorg/secure-exec-core").VirtualStat | null {
 	const content = getStandaloneProcFileContent(path);
 	if (!content) return null;
 	const now = Date.now();
@@ -6178,7 +6388,7 @@ async function standaloneProcAwareExists(
 async function standaloneProcAwareStat(
 	vfs: VirtualFileSystem,
 	path: string,
-): Promise<import("@secure-exec/core").VirtualStat> {
+): Promise<import("@firestartorg/secure-exec-core").VirtualStat> {
 	return getStandaloneProcFileStat(path) ?? vfs.stat(path);
 }
 

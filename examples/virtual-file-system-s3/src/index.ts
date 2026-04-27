@@ -3,7 +3,7 @@ import {
 	allowAllFs,
 	createNodeDriver,
 	createNodeRuntimeDriverFactory,
-} from "secure-exec";
+} from "@firestartorg/secure-exec";
 import {
 	S3Client,
 	CreateBucketCommand,

@@ -1,7 +1,7 @@
-// Re-exported from @secure-exec/core
-export type { SystemError } from "@secure-exec/core";
+// Re-exported from @firestartorg/secure-exec-core
+export type { SystemError } from "@firestartorg/secure-exec-core";
 export {
 	createEaccesError,
 	createEnosysError,
 	createSystemError,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";

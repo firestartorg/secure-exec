@@ -46,7 +46,7 @@ describe("bridge registry policy", () => {
 
 	it("uses shared host bridge key constants for jail wiring", () => {
 		// Jail wiring spans execution-driver.ts facade and extracted modules.
-		// Canonical source is in @secure-exec/nodejs.
+		// Canonical source is in @firestartorg/secure-exec-nodejs.
 		const nodeModulePaths = [
 			"src/execution-driver.ts",
 			"src/bridge-setup.ts",

@@ -1,19 +1,19 @@
-import { createNetworkStub, filterEnv } from "@secure-exec/core";
+import { createNetworkStub, filterEnv } from "@firestartorg/secure-exec-core";
 import type {
 	NetworkAdapter,
 	NodeRuntimeDriver,
 	NodeRuntimeDriverFactory,
 	SystemDriver,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 import type {
 	StdioHook,
 	ExecOptions,
 	ExecResult,
 	RunResult,
 	TimingMitigation,
-} from "@secure-exec/core";
-import type { ResourceBudgets } from "@secure-exec/core";
-import { createSandboxCommandExecutor } from "@secure-exec/nodejs";
+} from "@firestartorg/secure-exec-core";
+import type { ResourceBudgets } from "@firestartorg/secure-exec-core";
+import { createSandboxCommandExecutor } from "@firestartorg/secure-exec-nodejs";
 
 const DEFAULT_SANDBOX_CWD = "/root";
 const DEFAULT_SANDBOX_HOME = "/root";

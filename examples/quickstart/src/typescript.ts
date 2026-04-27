@@ -3,7 +3,7 @@ import {
   createNodeDriver,
   createNodeRuntimeDriverFactory,
   allowAllFs,
-} from "secure-exec";
+} from "@firestartorg/secure-exec";
 import { createTypeScriptTools } from "@secure-exec/typescript";
 
 const systemDriver = createNodeDriver({

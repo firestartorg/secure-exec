@@ -3,7 +3,7 @@ import * as fsSync from "node:fs";
 import path from "node:path";
 import {
 	filterEnv,
-} from "@secure-exec/core/internal/shared/permissions";
+} from "@firestartorg/secure-exec-core/internal/shared/permissions";
 import { ModuleAccessFileSystem } from "./module-access.js";
 import { NodeExecutionDriver } from "./execution-driver.js";
 import {
@@ -14,18 +14,18 @@ export type { DefaultNetworkAdapterOptions } from "./default-network-adapter.js"
 import type {
 	OSConfig,
 	ProcessConfig,
-} from "@secure-exec/core/internal/shared/api-types";
+} from "@firestartorg/secure-exec-core/internal/shared/api-types";
 import type {
 	Permissions,
 	VirtualFileSystem,
-} from "@secure-exec/core";
-import { KernelError, O_CREAT, O_EXCL, O_TRUNC } from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
+import { KernelError, O_CREAT, O_EXCL, O_TRUNC } from "@firestartorg/secure-exec-core";
 import type {
 	CommandExecutor,
 	NetworkAdapter,
 	NodeRuntimeDriverFactory,
 	SystemDriver,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 import type { ModuleAccessOptions } from "./module-access.js";
 
 /** Options for assembling a Node.js-backed SystemDriver. */

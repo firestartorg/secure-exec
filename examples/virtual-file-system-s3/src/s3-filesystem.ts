@@ -1,4 +1,4 @@
-import type { VirtualFileSystem } from "secure-exec";
+import type { VirtualFileSystem } from "@firestartorg/secure-exec";
 import {
 	S3Client,
 	GetObjectCommand,

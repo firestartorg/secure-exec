@@ -1,4 +1,4 @@
-// Re-exported from @secure-exec/nodejs — canonical source is packages/nodejs/src/driver.ts
+// Re-exported from @firestartorg/secure-exec-nodejs — canonical source is packages/nodejs/src/driver.ts
 export {
 	createDefaultNetworkAdapter,
 	createNodeDriver,
@@ -7,9 +7,9 @@ export {
 	NodeExecutionDriver,
 	filterEnv,
 	isPrivateIp,
-} from "@secure-exec/nodejs";
+} from "@firestartorg/secure-exec-nodejs";
 export type {
 	NodeDriverOptions,
 	NodeRuntimeDriverFactoryOptions,
 	ModuleAccessOptions,
-} from "@secure-exec/nodejs";
+} from "@firestartorg/secure-exec-nodejs";

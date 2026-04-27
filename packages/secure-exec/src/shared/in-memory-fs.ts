@@ -1,2 +1,2 @@
-// Re-exported from @secure-exec/core
-export { createInMemoryFileSystem } from "@secure-exec/core";
+// Re-exported from @firestartorg/secure-exec-core
+export { createInMemoryFileSystem } from "@firestartorg/secure-exec-core";

@@ -2,7 +2,7 @@
 // Provides Node.js os module emulation for sandbox compatibility
 
 import type * as nodeOs from "os";
-import { exposeCustomGlobal } from "@secure-exec/core/internal/shared/global-exposure";
+import { exposeCustomGlobal } from "@firestartorg/secure-exec-core/internal/shared/global-exposure";
 
 // Configuration interface - values are set via globals before bridge loads
 export interface OSConfig {

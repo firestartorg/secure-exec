@@ -68,7 +68,7 @@ const runtime = new NodeRuntime({
 
 try {
   const result = await runtime.exec(`
-    import { spawnSync } from "node:child_process";
+    const { spawnSync } = require("node:child_process");
 
     const child = spawnSync("node", ["--version"], {
       encoding: "utf8",
@@ -81,7 +81,7 @@ try {
     if (child.status !== 0 || !output.startsWith("v")) {
       throw new Error("Unexpected child process exit code: " + child.status);
     }
-  `, { filePath: "/entry.mjs" });
+  `);
 
   if (result.code !== 0) {
     throw new Error(`Unexpected execution result: ${JSON.stringify(result)}`);

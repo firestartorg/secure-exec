@@ -1,7 +1,7 @@
 import { createResolutionCache } from "./package-bundler.js";
-import { getConsoleSetupCode } from "@secure-exec/core/internal/shared/console-formatter";
-import { getRequireSetupCode } from "@secure-exec/core/internal/shared/require-setup";
-import { getIsolateRuntimeSource, getInitialBridgeGlobalsSetupCode } from "@secure-exec/core";
+import { getConsoleSetupCode } from "@firestartorg/secure-exec-core/internal/shared/console-formatter";
+import { getRequireSetupCode } from "@firestartorg/secure-exec-core/internal/shared/require-setup";
+import { getIsolateRuntimeSource, getInitialBridgeGlobalsSetupCode } from "@firestartorg/secure-exec-core";
 import {
 	createCommandExecutorStub,
 	createFsStub,
@@ -10,17 +10,17 @@ import {
 	wrapCommandExecutor,
 	wrapFileSystem,
 	wrapNetworkAdapter,
-} from "@secure-exec/core/internal/shared/permissions";
-import type { NetworkAdapter, RuntimeDriver } from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core/internal/shared/permissions";
+import type { NetworkAdapter, RuntimeDriver } from "@firestartorg/secure-exec-core";
 import type {
 	StdioHook,
 	ExecOptions,
 	ExecResult,
 	RunResult,
 	TimingMitigation,
-} from "@secure-exec/core/internal/shared/api-types";
-import type { V8ExecutionOptions, V8Runtime, V8Session, V8SessionOptions } from "@secure-exec/v8";
-import { createV8Runtime } from "@secure-exec/v8";
+} from "@firestartorg/secure-exec-core/internal/shared/api-types";
+import type { V8ExecutionOptions, V8Runtime, V8Session, V8SessionOptions } from "@firestartorg/secure-exec-v8";
+import { createV8Runtime } from "@firestartorg/secure-exec-v8";
 import { getRawBridgeCode, getBridgeAttachCode } from "./bridge-loader.js";
 import {
 	type NodeExecutionDriverOptions,
@@ -47,7 +47,7 @@ import {
 	ProcessTable,
 	SocketTable,
 	TimerTable,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 import {
 	type BridgeHandlers,
 	buildCryptoBridgeHandlers,
@@ -71,16 +71,16 @@ import {
 import type {
 	Permissions,
 	VirtualFileSystem,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 import type {
 	CommandExecutor,
 	SpawnedProcess,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 import type { ResolutionCache } from "./package-bundler.js";
 import type {
 	OSConfig,
 	ProcessConfig,
-} from "@secure-exec/core/internal/shared/api-types";
+} from "@firestartorg/secure-exec-core/internal/shared/api-types";
 import type { BudgetState } from "./isolate-bootstrap.js";
 import { type FlattenedBinding, flattenBindingTree, BINDING_PREFIX } from "./bindings.js";
 import { createNodeHostNetworkAdapter } from "./host-network-adapter.js";
@@ -98,7 +98,7 @@ function boundErrorMessage(message: string): string {
 	return `${message.slice(0, MAX_ERROR_MESSAGE_CHARS)}...[Truncated]`;
 }
 
-function createBridgeDriverProcess(): import("@secure-exec/core").DriverProcess {
+function createBridgeDriverProcess(): import("@firestartorg/secure-exec-core").DriverProcess {
 	return {
 		writeStdin() {},
 		closeStdin() {},
@@ -562,20 +562,74 @@ if (typeof DOMException === 'undefined') {
   });
 }
 if (typeof Blob === 'undefined') {
+  function _execBlobPartToBytes(part) {
+    if (typeof part === 'string') {
+      return new TextEncoder().encode(part);
+    }
+    if (part instanceof ArrayBuffer) {
+      return new Uint8Array(part);
+    }
+    if (ArrayBuffer.isView(part)) {
+      return new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
+    }
+    if (part && typeof part === 'object' && Array.isArray(part._parts)) {
+      return _execBlobMaterialize(part);
+    }
+    return new TextEncoder().encode(String(part));
+  }
+
+  function _execBlobMaterialize(blob) {
+    const parts = blob._parts || [];
+    if (parts.length === 0) return new Uint8Array(0);
+    if (parts.length === 1) return _execBlobPartToBytes(parts[0]);
+    const buffers = [];
+    let totalLength = 0;
+    for (let i = 0; i < parts.length; i++) {
+      const bytes = _execBlobPartToBytes(parts[i]);
+      buffers.push(bytes);
+      totalLength += bytes.byteLength;
+    }
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (let j = 0; j < buffers.length; j++) {
+      result.set(buffers[j], offset);
+      offset += buffers[j].byteLength;
+    }
+    return result;
+  }
+
   globalThis.Blob = class Blob {
     constructor(parts = [], options = {}) {
       this._parts = Array.isArray(parts) ? parts.slice() : [];
       this.type = options && options.type ? String(options.type).toLowerCase() : '';
-      this.size = this._parts.reduce((total, part) => {
-        if (typeof part === 'string') return total + part.length;
-        if (part && typeof part.byteLength === 'number') return total + part.byteLength;
-        return total;
-      }, 0);
+      this.size = _execBlobMaterialize(this).byteLength;
     }
-    arrayBuffer() { return Promise.resolve(new ArrayBuffer(0)); }
-    text() { return Promise.resolve(''); }
-    slice() { return new globalThis.Blob(); }
-    stream() { throw new Error('Blob.stream is not supported in sandbox'); }
+    arrayBuffer() {
+      const bytes = _execBlobMaterialize(this);
+      return Promise.resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    }
+    text() {
+      const bytes = _execBlobMaterialize(this);
+      return Promise.resolve(new TextDecoder().decode(bytes));
+    }
+    slice(start, end, contentType) {
+      const bytes = _execBlobMaterialize(this);
+      const s = start === undefined ? 0 : start < 0 ? Math.max(bytes.byteLength + start, 0) : Math.min(start, bytes.byteLength);
+      const e = end === undefined ? bytes.byteLength : end < 0 ? Math.max(bytes.byteLength + end, 0) : Math.min(end, bytes.byteLength);
+      return new globalThis.Blob([bytes.slice(s, e)], { type: contentType !== undefined ? String(contentType) : this.type });
+    }
+    stream() {
+      if (typeof globalThis.ReadableStream === 'undefined') {
+        throw new Error('ReadableStream is not available');
+      }
+      const bytes = _execBlobMaterialize(this);
+      return new globalThis.ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        }
+      });
+    }
     get [Symbol.toStringTag]() { return 'Blob'; }
   };
   Object.defineProperty(globalThis, 'Blob', {
@@ -690,7 +744,7 @@ if (typeof MessageChannel === 'undefined') {
 
 // Shim for ivm.Reference methods used by bridge code.
 // Bridge globals in the V8 runtime are plain functions, but the bridge code
-// (compiled from @secure-exec/core) calls them via .applySync(), .apply(), and
+// (compiled from @firestartorg/secure-exec-core) calls them via .applySync(), .apply(), and
 // .applySyncPromise() which are ivm Reference calling patterns.
 // Shim for native bridge functions (runs early in postRestoreScript)
 const BRIDGE_NATIVE_SHIM = `
@@ -794,10 +848,10 @@ export class NodeExecutionDriver implements RuntimeDriver {
 	// Unwrapped filesystem for path translation (toHostPath/toSandboxPath)
 	private rawFilesystem: VirtualFileSystem | undefined;
 	// Kernel socket table for routing net.connect through kernel
-	private socketTable?: import("@secure-exec/core").SocketTable;
+	private socketTable?: import("@firestartorg/secure-exec-core").SocketTable;
 	// Kernel process table for child process registration
-	private processTable?: import("@secure-exec/core").ProcessTable;
-	private timerTable: import("@secure-exec/core").TimerTable;
+	private processTable?: import("@firestartorg/secure-exec-core").ProcessTable;
+	private timerTable: import("@firestartorg/secure-exec-core").TimerTable;
 	private ownsProcessTable: boolean;
 	private ownsTimerTable: boolean;
 	private configuredMaxTimers?: number;
@@ -1656,7 +1710,7 @@ function buildPostRestoreScript(
 import {
 	HARDENED_NODE_CUSTOM_GLOBALS,
 	MUTABLE_NODE_CUSTOM_GLOBALS,
-} from "@secure-exec/core/internal/shared/global-exposure";
+} from "@firestartorg/secure-exec-core/internal/shared/global-exposure";
 import {
 	HOST_BRIDGE_GLOBAL_KEYS,
 } from "./bridge-contract.js";

@@ -1,4 +1,4 @@
-// VFS and permission types — canonical source is @secure-exec/core
+// VFS and permission types — canonical source is @firestartorg/secure-exec-core
 export type {
 	ChildProcessAccessRequest,
 	EnvAccessRequest,
@@ -10,7 +10,7 @@ export type {
 	VirtualDirEntry,
 	VirtualFileSystem,
 	VirtualStat,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 
 // Core-only types
 export type {
@@ -21,7 +21,7 @@ export type {
 	NetworkServerRequest,
 	NetworkServerResponse,
 	SpawnedProcess,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";
 
 export type {
 	DriverRuntimeConfig,
@@ -34,4 +34,4 @@ export type {
 	RuntimeDriverOptions,
 	SharedRuntimeDriver,
 	SystemDriver,
-} from "@secure-exec/core";
+} from "@firestartorg/secure-exec-core";

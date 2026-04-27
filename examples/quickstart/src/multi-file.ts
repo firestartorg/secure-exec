@@ -4,7 +4,7 @@ import {
   createNodeRuntimeDriverFactory,
   createInMemoryFileSystem,
   allowAllFs,
-} from "secure-exec";
+} from "@firestartorg/secure-exec";
 
 const filesystem = createInMemoryFileSystem();
 

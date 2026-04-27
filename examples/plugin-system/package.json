@@ -8,7 +8,7 @@
     "verify-docs": "node scripts/verify-docs.mjs"
   },
   "dependencies": {
-    "secure-exec": "workspace:*"
+    "@firestartorg/secure-exec": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

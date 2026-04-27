@@ -96,13 +96,14 @@ jobs:
           name: v8-${{ matrix.npm-dir }}
           path: native/v8-runtime/target/${{ matrix.target }}/release/${{ matrix.binary }}
 
-  # Publish all packages to npm after V8 binaries are built
+  # Publish all packages to GitHub Packages after V8 binaries are built
   publish:
     name: "Publish"
     needs: [build-v8]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
     steps:
       - name: Checkout tag
         uses: actions/checkout@v4
@@ -120,7 +121,8 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-          registry-url: https://registry.npmjs.org
+          registry-url: https://npm.pkg.github.com
+          scope: '@firestartorg'
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
@@ -147,7 +149,7 @@ jobs:
             if [ -d "$TARGET_DIR" ]; then
               cp "$dir"/* "$TARGET_DIR/"
               find "$TARGET_DIR" -name "secure-exec-v8" -exec chmod +x {} \;
-              echo "✓ Placed binary in ${TARGET_DIR}"
+              echo "Placed binary in ${TARGET_DIR}"
             fi
           done
           # Verify each built artifact was placed
@@ -156,55 +158,46 @@ jobs:
             PLATFORM_DIR=$(basename "$dir" | sed 's/^v8-//')
             TARGET_DIR="native/v8-runtime/npm/${PLATFORM_DIR}"
             if ls "$TARGET_DIR"/secure-exec-v8* 1>/dev/null 2>&1; then
-              echo "✓ ${PLATFORM_DIR}: $(ls "$TARGET_DIR"/secure-exec-v8*)"
+              echo "OK ${PLATFORM_DIR}: $(ls "$TARGET_DIR"/secure-exec-v8*)"
             else
-              echo "✗ ${PLATFORM_DIR}: MISSING BINARY"
+              echo "MISSING ${PLATFORM_DIR}: MISSING BINARY"
               exit 1
             fi
           done
 
-      - name: Publish to npm
+      - name: Publish to GitHub Packages
         run: |
           FAILURES=""
+          VERSION="${{ inputs.version }}"
 
-          # Publish workspace packages
-          for dir in $(pnpm -r ls --json --depth -1 | jq -r '.[] | select(.private != true) | .path'); do
-            # Skip the root package
-            if [ "$dir" = "$(pwd)" ]; then
-              continue
-            fi
-            NAME=$(jq -r .name "$dir/package.json")
-            VERSION="${{ inputs.version }}"
-            if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
-              echo "⏭ ${NAME}@${VERSION} already published, skipping."
-              continue
-            fi
-            echo "Publishing ${NAME}@${VERSION}..."
-            if ! (cd "$dir" && pnpm publish --access public --tag ${{ inputs.npm-tag }} --no-git-checks); then
-              FAILURES="${FAILURES} ${NAME}"
-            fi
-          done
-
-          # Publish v8 platform packages that have binaries (built by matrix)
+          # Publish V8 platform packages first (they are optionalDependencies)
           for dir in native/v8-runtime/npm/*/; do
             if [ ! -f "$dir/package.json" ]; then
               continue
             fi
             PLATFORM=$(basename "$dir")
-            # Skip artifact staging dirs and platforms without binaries
+            # Skip artifact staging dirs
             if [[ "$PLATFORM" == v8-* ]]; then continue; fi
+            # Skip platforms without binaries
             if ! ls "$dir"secure-exec-v8* 1>/dev/null 2>&1; then
-              echo "⏭ ${PLATFORM}: no binary, skipping publish."
+              echo "SKIP ${PLATFORM}: no binary, skipping publish."
               continue
             fi
             NAME=$(jq -r .name "$dir/package.json")
-            VERSION="${{ inputs.version }}"
-            if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
-              echo "⏭ ${NAME}@${VERSION} already published, skipping."
-              continue
-            fi
             echo "Publishing ${NAME}@${VERSION}..."
             if ! (cd "$dir" && npm publish --access public --tag ${{ inputs.npm-tag }}); then
+              FAILURES="${FAILURES} ${NAME}"
+            fi
+          done
+
+          # Publish workspace packages (core, nodejs, v8, secure-exec)
+          for dir in $(pnpm -r ls --json --depth -1 | jq -r '.[] | select(.private != true) | .path'); do
+            if [ "$dir" = "$(pwd)" ]; then
+              continue
+            fi
+            NAME=$(jq -r .name "$dir/package.json")
+            echo "Publishing ${NAME}@${VERSION}..."
+            if ! (cd "$dir" && pnpm publish --access public --tag ${{ inputs.npm-tag }} --no-git-checks); then
               FAILURES="${FAILURES} ${NAME}"
             fi
           done
@@ -214,7 +207,7 @@ jobs:
             exit 1
           fi
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub release
         run: |

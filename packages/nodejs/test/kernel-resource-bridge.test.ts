@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { StdioEvent } from "@secure-exec/core";
+import type { StdioEvent } from "@firestartorg/secure-exec-core";
 import { HOST_BRIDGE_GLOBAL_KEYS } from "../src/bridge-contract.ts";
 import { buildFsBridgeHandlers } from "../src/bridge-handlers.ts";
 import { createBudgetState } from "../src/isolate-bootstrap.ts";
-import { ProcessTable, TimerTable, type VirtualFileSystem } from "@secure-exec/core";
+import { ProcessTable, TimerTable, type VirtualFileSystem } from "@firestartorg/secure-exec-core";
 import { createNodeDriver, NodeExecutionDriver } from "../src/driver.ts";
 
 function createNoopDriverProcess() {

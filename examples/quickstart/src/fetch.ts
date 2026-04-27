@@ -3,7 +3,7 @@ import {
   createNodeDriver,
   createNodeRuntimeDriverFactory,
   allowAllNetwork,
-} from "secure-exec";
+} from "@firestartorg/secure-exec";
 
 const runtime = new NodeRuntime({
   systemDriver: createNodeDriver({

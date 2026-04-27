@@ -12,14 +12,14 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createNodeRuntime } from '../src/kernel-runtime.ts';
 import type { NodeRuntimeOptions } from '../src/kernel-runtime.ts';
-import { createKernel } from '@secure-exec/core';
+import { createKernel } from '@firestartorg/secure-exec-core';
 import type {
   KernelRuntimeDriver as RuntimeDriver,
   KernelInterface,
   ProcessContext,
   DriverProcess,
   Kernel,
-} from '@secure-exec/core';
+} from '@firestartorg/secure-exec-core';
 
 /**
  * Minimal mock RuntimeDriver for testing cross-runtime dispatch.

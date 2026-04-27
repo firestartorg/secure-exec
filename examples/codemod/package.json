@@ -7,7 +7,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "secure-exec": "workspace:*"
+    "@firestartorg/secure-exec": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.2"

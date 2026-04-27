@@ -1,5 +1,5 @@
 {
-  "name": "secure-exec",
+  "name": "@firestartorg/secure-exec",
   "version": "0.2.1",
   "type": "module",
   "license": "Apache-2.0",
@@ -9,9 +9,12 @@
     "dist",
     "README.md"
   ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/rivet-dev/secure-exec.git",
+    "url": "https://github.com/firestart/secure-exec.git",
     "directory": "packages/secure-exec"
   },
   "exports": {
@@ -34,13 +37,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@secure-exec/core": "workspace:*",
-    "@secure-exec/nodejs": "workspace:*"
+    "@firestartorg/secure-exec-core": "workspace:*",
+    "@firestartorg/secure-exec-nodejs": "workspace:*"
   },
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "^0.60.0",
     "@opencode-ai/sdk": "^1.2.27",
-    "@secure-exec/v8": "workspace:*",
+    "@firestartorg/secure-exec-v8": "workspace:*",
     "@types/node": "^22.10.2",
     "@vitest/browser": "^2.1.8",
     "@xterm/headless": "^6.0.0",

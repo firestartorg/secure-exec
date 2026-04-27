@@ -1,5 +1,5 @@
 {
-  "name": "@secure-exec/nodejs",
+  "name": "@firestartorg/secure-exec-nodejs",
   "version": "0.2.1",
   "type": "module",
   "license": "Apache-2.0",
@@ -10,6 +10,9 @@
     "src/polyfills",
     "README.md"
   ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -107,8 +110,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@secure-exec/core": "workspace:*",
-    "@secure-exec/v8": "workspace:*",
+    "@firestartorg/secure-exec-core": "workspace:*",
+    "@firestartorg/secure-exec-v8": "workspace:*",
     "cbor-x": "^1.6.4",
     "cjs-module-lexer": "^2.1.0",
     "es-module-lexer": "^1.7.0",
