@@ -12,6 +12,9 @@ import type {
 	FsFacadeBridge,
 	NetworkDnsLookupRawBridgeRef,
 	NetworkFetchRawBridgeRef,
+	NetworkFetchStartRawBridgeRef,
+	NetworkFetchWriteChunkRawBridgeRef,
+	NetworkFetchFinishRawBridgeRef,
 	NetworkHttpRequestRawBridgeRef,
 	NetworkHttpServerCloseRawBridgeRef,
 	NetworkHttpServerListenRawBridgeRef,
@@ -74,6 +77,9 @@ declare const _fs: FsFacadeBridge;
 
 // Declare host bridge References
 declare const _networkFetchRaw: NetworkFetchRawBridgeRef;
+declare const _networkFetchStartRaw: NetworkFetchStartRawBridgeRef;
+declare const _networkFetchWriteChunkRaw: NetworkFetchWriteChunkRawBridgeRef;
+declare const _networkFetchFinishRaw: NetworkFetchFinishRawBridgeRef;
 
 declare const _networkDnsLookupRaw: NetworkDnsLookupRawBridgeRef;
 
@@ -291,7 +297,7 @@ declare const _unregisterHandle:
 interface FetchOptions {
   method?: string;
   headers?: Headers | Record<string, string> | Array<[string, string]> | readonly string[];
-  body?: string | null;
+  body?: string | ArrayBuffer | Uint8Array | null;
   mode?: string;
   credentials?: string;
   cache?: string;
@@ -406,6 +412,26 @@ function createFetchHeaders(
   return new Headers(serializeFetchHeaders(headers));
 }
 
+// Base64 encoding helper for the isolate (Buffer not available)
+const _B64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+function _bytesToBase64(bytes: Uint8Array): string {
+  let result = "";
+  const len = bytes.length;
+  for (let i = 0; i < len; i += 3) {
+    const b0 = bytes[i]!;
+    const b1 = i + 1 < len ? bytes[i + 1]! : 0;
+    const b2 = i + 2 < len ? bytes[i + 2]! : 0;
+    result += _B64_CHARS[b0 >> 2];
+    result += _B64_CHARS[((b0 & 3) << 4) | (b1 >> 4)];
+    result += i + 1 < len ? _B64_CHARS[((b1 & 15) << 2) | (b2 >> 6)] : "=";
+    result += i + 2 < len ? _B64_CHARS[b2 & 63] : "=";
+  }
+  return result;
+}
+
+// Chunk size for streaming binary bodies across the bridge (48KB raw → 64KB base64)
+const _FETCH_CHUNK_BYTES = 48 * 1024;
+
 // Fetch polyfill
 export async function fetch(input: string | URL | Request, options: FetchOptions = {}): Promise<FetchResponse> {
   if (typeof _networkFetchRaw === 'undefined') {
@@ -427,11 +453,9 @@ export async function fetch(input: string | URL | Request, options: FetchOptions
     resolvedUrl = String(input);
   }
 
-  const optionsJson = JSON.stringify({
-    method: options.method || "GET",
-    headers: serializeFetchHeaders(options.headers),
-    body: options.body || null,
-  });
+  const rawBody = options.body;
+  const isBinaryBody = rawBody != null && (rawBody instanceof ArrayBuffer || rawBody instanceof Uint8Array);
+  const useChunkedPath = isBinaryBody && typeof _networkFetchStartRaw !== "undefined";
 
   const handleId = typeof _registerHandle === "function"
     ? `fetch:${++_fetchHandleCounter}`
@@ -441,9 +465,63 @@ export async function fetch(input: string | URL | Request, options: FetchOptions
   }
 
   try {
-    const responseJson = await _networkFetchRaw.apply(undefined, [resolvedUrl, optionsJson], {
-      result: { promise: true },
-    });
+    let responseJson: string;
+
+    if (useChunkedPath) {
+      // Chunked binary upload path — streams body in chunks to reduce peak memory
+      const bytes = rawBody instanceof ArrayBuffer ? new Uint8Array(rawBody) : rawBody as Uint8Array;
+      const optionsJson = JSON.stringify({
+        method: options.method || "GET",
+        headers: serializeFetchHeaders(options.headers),
+        bodyLength: bytes.length,
+      });
+
+      // Start the request (opens connection, sends headers)
+      const fetchId = await _networkFetchStartRaw.apply(undefined, [resolvedUrl, optionsJson], {
+        result: { promise: true },
+      });
+
+      // Stream body in chunks
+      for (let offset = 0; offset < bytes.length; offset += _FETCH_CHUNK_BYTES) {
+        const end = Math.min(offset + _FETCH_CHUNK_BYTES, bytes.length);
+        const chunk = bytes.subarray(offset, end);
+        const base64Chunk = _bytesToBase64(chunk);
+        await _networkFetchWriteChunkRaw.apply(undefined, [fetchId, base64Chunk], {
+          result: { promise: true },
+        });
+        // chunk and base64Chunk are now eligible for GC
+      }
+
+      // Finish the request and get the response
+      responseJson = await _networkFetchFinishRaw.apply(undefined, [fetchId], {
+        result: { promise: true },
+      });
+    } else {
+      // Standard path for string bodies and small payloads
+      let serializedBody: string | null = null;
+      let bodyEncoding: string | null = null;
+      if (rawBody != null) {
+        if (rawBody instanceof ArrayBuffer || rawBody instanceof Uint8Array) {
+          // Fallback: chunked bridge not available, encode entire body
+          const bytes = rawBody instanceof ArrayBuffer ? new Uint8Array(rawBody) : rawBody;
+          serializedBody = _bytesToBase64(bytes);
+          bodyEncoding = "base64";
+        } else {
+          serializedBody = String(rawBody);
+        }
+      }
+
+      const optionsJson = JSON.stringify({
+        method: options.method || "GET",
+        headers: serializeFetchHeaders(options.headers),
+        body: serializedBody,
+        bodyEncoding,
+      });
+
+      responseJson = await _networkFetchRaw.apply(undefined, [resolvedUrl, optionsJson], {
+        result: { promise: true },
+      });
+    }
     const response = JSON.parse(responseJson) as {
       ok: boolean;
       status: number;
@@ -576,7 +654,7 @@ export class Request {
   url: string;
   method: string;
   headers: Headers;
-  body: string | null;
+  body: string | ArrayBuffer | Uint8Array | null;
   mode: string;
   credentials: string;
   cache: string;

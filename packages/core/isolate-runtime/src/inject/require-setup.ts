@@ -967,35 +967,93 @@
         }
 
         if (typeof globalThis.Blob === 'undefined') {
+          /**
+           * Convert a single Blob constructor part to a Uint8Array.
+           */
+          function _blobPartToBytes(part) {
+            if (typeof part === 'string') {
+              return _encodeUtf8(part);
+            }
+            if (part instanceof ArrayBuffer) {
+              return new Uint8Array(part);
+            }
+            if (ArrayBuffer.isView(part)) {
+              return new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
+            }
+            if (part && typeof part === 'object' && Array.isArray(part._parts)) {
+              // Nested Blob/File — recursively materialize.
+              return _blobMaterialize(part);
+            }
+            return _encodeUtf8(String(part));
+          }
+
+          /**
+           * Materialize all parts of a Blob into a single Uint8Array.
+           */
+          function _blobMaterialize(blob) {
+            var parts = blob._parts || [];
+            if (parts.length === 0) {
+              return new Uint8Array(0);
+            }
+            if (parts.length === 1) {
+              return _blobPartToBytes(parts[0]);
+            }
+            var buffers = [];
+            var totalLength = 0;
+            for (var i = 0; i < parts.length; i++) {
+              var bytes = _blobPartToBytes(parts[i]);
+              buffers.push(bytes);
+              totalLength += bytes.byteLength;
+            }
+            var result = new Uint8Array(totalLength);
+            var offset = 0;
+            for (var j = 0; j < buffers.length; j++) {
+              result.set(buffers[j], offset);
+              offset += buffers[j].byteLength;
+            }
+            return result;
+          }
+
           function Blob(parts, options) {
             if (!(this instanceof Blob)) {
               throw new TypeError("Class constructor Blob cannot be invoked without 'new'");
             }
             this._parts = Array.isArray(parts) ? parts.slice() : [];
             this.type = options && options.type ? String(options.type).toLowerCase() : '';
-            var size = 0;
-            for (var index = 0; index < this._parts.length; index += 1) {
-              var part = this._parts[index];
-              if (typeof part === 'string') {
-                size += part.length;
-              } else if (part && typeof part.byteLength === 'number') {
-                size += part.byteLength;
-              }
-            }
-            this.size = size;
+            // Compute byte size by materializing parts. This matches the spec
+            // where Blob.size is the byte length, not the character count.
+            var bytes = _blobMaterialize(this);
+            this.size = bytes.byteLength;
           }
 
           Blob.prototype.arrayBuffer = function arrayBuffer() {
-            return Promise.resolve(new ArrayBuffer(0));
+            var bytes = _blobMaterialize(this);
+            // Return a copy as an ArrayBuffer (spec: returns a new ArrayBuffer).
+            return Promise.resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
           };
           Blob.prototype.text = function text() {
-            return Promise.resolve('');
+            var bytes = _blobMaterialize(this);
+            var decoder = new TextDecoder();
+            return Promise.resolve(decoder.decode(bytes));
           };
-          Blob.prototype.slice = function slice() {
-            return new Blob();
+          Blob.prototype.slice = function slice(start, end, contentType) {
+            var bytes = _blobMaterialize(this);
+            var s = start === undefined ? 0 : start < 0 ? Math.max(bytes.byteLength + start, 0) : Math.min(start, bytes.byteLength);
+            var e = end === undefined ? bytes.byteLength : end < 0 ? Math.max(bytes.byteLength + end, 0) : Math.min(end, bytes.byteLength);
+            var sliced = bytes.slice(s, e);
+            return new Blob([sliced], { type: contentType !== undefined ? String(contentType) : this.type });
           };
           Blob.prototype.stream = function stream() {
-            throw new Error('Blob.stream is not supported in sandbox');
+            if (typeof globalThis.ReadableStream === 'undefined') {
+              throw new Error('ReadableStream is not available');
+            }
+            var bytes = _blobMaterialize(this);
+            return new globalThis.ReadableStream({
+              start: function(controller) {
+                controller.enqueue(bytes);
+                controller.close();
+              }
+            });
           };
           Object.defineProperty(Blob.prototype, Symbol.toStringTag, {
             value: 'Blob',

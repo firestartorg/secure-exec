@@ -70,6 +70,9 @@ export const HOST_BRIDGE_GLOBAL_KEYS = {
 	childProcessKill: "_childProcessKill",
 	childProcessSpawnSync: "_childProcessSpawnSync",
 	networkFetchRaw: "_networkFetchRaw",
+	networkFetchStartRaw: "_networkFetchStartRaw",
+	networkFetchWriteChunkRaw: "_networkFetchWriteChunkRaw",
+	networkFetchFinishRaw: "_networkFetchFinishRaw",
 	networkDnsLookupRaw: "_networkDnsLookupRaw",
 	networkHttpRequestRaw: "_networkHttpRequestRaw",
 	networkHttpServerListenRaw: "_networkHttpServerListenRaw",
@@ -367,6 +370,9 @@ export type ChildProcessSpawnSyncBridgeRef = BridgeApplySyncPromiseRef<
 
 // Network boundary contracts.
 export type NetworkFetchRawBridgeRef = BridgeApplyRef<[string, string], string>;
+export type NetworkFetchStartRawBridgeRef = BridgeApplyRef<[string, string], string>;
+export type NetworkFetchWriteChunkRawBridgeRef = BridgeApplyRef<[string, string], void>;
+export type NetworkFetchFinishRawBridgeRef = BridgeApplyRef<[string], string>;
 export type NetworkDnsLookupRawBridgeRef = BridgeApplyRef<[string], string>;
 export type NetworkHttpRequestRawBridgeRef = BridgeApplyRef<[string, string], string>;
 export type NetworkHttpServerListenRawBridgeRef = BridgeApplyRef<[string], string>;

@@ -562,20 +562,74 @@ if (typeof DOMException === 'undefined') {
   });
 }
 if (typeof Blob === 'undefined') {
+  function _execBlobPartToBytes(part) {
+    if (typeof part === 'string') {
+      return new TextEncoder().encode(part);
+    }
+    if (part instanceof ArrayBuffer) {
+      return new Uint8Array(part);
+    }
+    if (ArrayBuffer.isView(part)) {
+      return new Uint8Array(part.buffer, part.byteOffset, part.byteLength);
+    }
+    if (part && typeof part === 'object' && Array.isArray(part._parts)) {
+      return _execBlobMaterialize(part);
+    }
+    return new TextEncoder().encode(String(part));
+  }
+
+  function _execBlobMaterialize(blob) {
+    const parts = blob._parts || [];
+    if (parts.length === 0) return new Uint8Array(0);
+    if (parts.length === 1) return _execBlobPartToBytes(parts[0]);
+    const buffers = [];
+    let totalLength = 0;
+    for (let i = 0; i < parts.length; i++) {
+      const bytes = _execBlobPartToBytes(parts[i]);
+      buffers.push(bytes);
+      totalLength += bytes.byteLength;
+    }
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (let j = 0; j < buffers.length; j++) {
+      result.set(buffers[j], offset);
+      offset += buffers[j].byteLength;
+    }
+    return result;
+  }
+
   globalThis.Blob = class Blob {
     constructor(parts = [], options = {}) {
       this._parts = Array.isArray(parts) ? parts.slice() : [];
       this.type = options && options.type ? String(options.type).toLowerCase() : '';
-      this.size = this._parts.reduce((total, part) => {
-        if (typeof part === 'string') return total + part.length;
-        if (part && typeof part.byteLength === 'number') return total + part.byteLength;
-        return total;
-      }, 0);
+      this.size = _execBlobMaterialize(this).byteLength;
     }
-    arrayBuffer() { return Promise.resolve(new ArrayBuffer(0)); }
-    text() { return Promise.resolve(''); }
-    slice() { return new globalThis.Blob(); }
-    stream() { throw new Error('Blob.stream is not supported in sandbox'); }
+    arrayBuffer() {
+      const bytes = _execBlobMaterialize(this);
+      return Promise.resolve(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    }
+    text() {
+      const bytes = _execBlobMaterialize(this);
+      return Promise.resolve(new TextDecoder().decode(bytes));
+    }
+    slice(start, end, contentType) {
+      const bytes = _execBlobMaterialize(this);
+      const s = start === undefined ? 0 : start < 0 ? Math.max(bytes.byteLength + start, 0) : Math.min(start, bytes.byteLength);
+      const e = end === undefined ? bytes.byteLength : end < 0 ? Math.max(bytes.byteLength + end, 0) : Math.min(end, bytes.byteLength);
+      return new globalThis.Blob([bytes.slice(s, e)], { type: contentType !== undefined ? String(contentType) : this.type });
+    }
+    stream() {
+      if (typeof globalThis.ReadableStream === 'undefined') {
+        throw new Error('ReadableStream is not available');
+      }
+      const bytes = _execBlobMaterialize(this);
+      return new globalThis.ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        }
+      });
+    }
     get [Symbol.toStringTag]() { return 'Blob'; }
   };
   Object.defineProperty(globalThis, 'Blob', {
