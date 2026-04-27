@@ -9,8 +9,8 @@
 import * as fs from "node:fs/promises";
 import * as fsSync from "node:fs";
 import * as path from "node:path";
-import type { VirtualFileSystem, VirtualStat, VirtualDirEntry } from "@secure-exec/core";
-import { KernelError, O_CREAT, O_EXCL, O_TRUNC } from "@secure-exec/core";
+import type { VirtualFileSystem, VirtualStat, VirtualDirEntry } from "@firestart/secure-exec-core";
+import { KernelError, O_CREAT, O_EXCL, O_TRUNC } from "@firestart/secure-exec-core";
 
 export interface HostNodeFileSystemOptions {
 	/** Root directory on the host — all paths are relative to this. */

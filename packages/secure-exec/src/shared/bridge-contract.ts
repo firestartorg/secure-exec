@@ -1,4 +1,4 @@
-// Re-exported from @secure-exec/nodejs (canonical source moved from core in US-002)
+// Re-exported from @firestart/secure-exec-nodejs (canonical source moved from core in US-002)
 export type {
 	BridgeApplyRef,
 	BridgeApplySyncPromiseRef,
@@ -53,11 +53,11 @@ export type {
 	ScheduleTimerBridgeRef,
 	UnregisterHandleBridgeFn,
 	ValueOf,
-} from "@secure-exec/core";
+} from "@firestart/secure-exec-core";
 export {
 	BRIDGE_GLOBAL_KEY_LIST,
 	HOST_BRIDGE_GLOBAL_KEY_LIST,
 	HOST_BRIDGE_GLOBAL_KEYS,
 	RUNTIME_BRIDGE_GLOBAL_KEY_LIST,
 	RUNTIME_BRIDGE_GLOBAL_KEYS,
-} from "@secure-exec/core";
+} from "@firestart/secure-exec-core";

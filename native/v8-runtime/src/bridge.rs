@@ -175,7 +175,9 @@ fn v8_to_cbor(scope: &mut v8::HandleScope, value: v8::Local<v8::Value>) -> cibor
         for i in 0..len {
             let key = names.get_index(scope, i).unwrap();
             let key_str = key.to_rust_string_lossy(scope);
-            let val = obj.get(scope, key).unwrap_or_else(|| v8::undefined(scope).into());
+            let val = obj
+                .get(scope, key)
+                .unwrap_or_else(|| v8::undefined(scope).into());
             entries.push((ciborium::Value::Text(key_str), v8_to_cbor(scope, val)));
         }
         return ciborium::Value::Map(entries);
@@ -200,9 +202,7 @@ fn cbor_to_v8<'s>(
             }
         }
         ciborium::Value::Float(f) => v8::Number::new(scope, *f).into(),
-        ciborium::Value::Text(s) => {
-            v8::String::new(scope, s).unwrap().into()
-        }
+        ciborium::Value::Text(s) => v8::String::new(scope, s).unwrap().into(),
         ciborium::Value::Bytes(b) => {
             let len = b.len();
             let ab = v8::ArrayBuffer::new(scope, len);
@@ -247,8 +247,7 @@ pub fn serialize_cbor_value(
 ) -> Result<Vec<u8>, String> {
     let cbor_val = v8_to_cbor(scope, value);
     let mut buf = Vec::new();
-    ciborium::into_writer(&cbor_val, &mut buf)
-        .map_err(|e| format!("CBOR encode failed: {}", e))?;
+    ciborium::into_writer(&cbor_val, &mut buf).map_err(|e| format!("CBOR encode failed: {}", e))?;
     Ok(buf)
 }
 
@@ -257,8 +256,8 @@ pub fn deserialize_cbor_value<'s>(
     scope: &mut v8::HandleScope<'s>,
     data: &[u8],
 ) -> Result<v8::Local<'s, v8::Value>, String> {
-    let cbor_val: ciborium::Value = ciborium::from_reader(data)
-        .map_err(|e| format!("CBOR decode failed: {}", e))?;
+    let cbor_val: ciborium::Value =
+        ciborium::from_reader(data).map_err(|e| format!("CBOR decode failed: {}", e))?;
     Ok(cbor_to_v8(scope, &cbor_val))
 }
 

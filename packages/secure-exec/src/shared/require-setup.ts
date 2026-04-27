@@ -1,2 +1,2 @@
-// Re-exported from @secure-exec/core
-export { getRequireSetupCode } from "@secure-exec/core";
+// Re-exported from @firestart/secure-exec-core
+export { getRequireSetupCode } from "@firestart/secure-exec-core";

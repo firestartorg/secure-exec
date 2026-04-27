@@ -3,7 +3,7 @@ import {
   createNodeDriver,
   createNodeRuntimeDriverFactory,
   allowAllChildProcess,
-} from "secure-exec";
+} from "@firestart/secure-exec";
 
 const runtime = new NodeRuntime({
   systemDriver: createNodeDriver({

@@ -2,7 +2,7 @@ import {
   NodeRuntime,
   createNodeDriver,
   createNodeRuntimeDriverFactory,
-} from "secure-exec";
+} from "@firestart/secure-exec";
 
 const runtime = new NodeRuntime({
   systemDriver: createNodeDriver(),

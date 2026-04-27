@@ -1,3 +1,3 @@
-// Re-exported from @secure-exec/nodejs
-export { NodeExecutionDriver } from "@secure-exec/nodejs/internal/execution-driver";
-export type { NodeExecutionDriverOptions } from "@secure-exec/nodejs/internal/isolate-bootstrap";
+// Re-exported from @firestart/secure-exec-nodejs
+export { NodeExecutionDriver } from "@firestart/secure-exec-nodejs/internal/execution-driver";
+export type { NodeExecutionDriverOptions } from "@firestart/secure-exec-nodejs/internal/isolate-bootstrap";

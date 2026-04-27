@@ -8,10 +8,10 @@ use std::thread;
 use crossbeam_channel::{Receiver, Sender};
 
 use crate::execution;
-use crate::ipc::ExecutionError;
-use crate::host_call::{CallIdRouter, SharedCallIdCounter};
 #[cfg(not(test))]
 use crate::host_call::{BridgeCallContext, ChannelFrameSender};
+use crate::host_call::{CallIdRouter, SharedCallIdCounter};
+use crate::ipc::ExecutionError;
 use crate::ipc_binary::BinaryFrame;
 #[cfg(not(test))]
 use crate::ipc_binary::{self, ExecutionErrorBin};
@@ -550,27 +550,27 @@ fn session_thread(
                         // are visible yet — the module body may have registered
                         // timers, stdin listeners, or child_process handles that
                         // need event loop pumping to deliver their callbacks.
-                        let should_enter_event_loop =
-                            pending.len() > 0
+                        let should_enter_event_loop = pending.len() > 0
                             || execution::has_pending_module_evaluation()
                             || execution::has_pending_script_evaluation()
                             || !deferred_queue.lock().unwrap().is_empty();
                         let event_loop_status = if should_enter_event_loop {
-                                let scope = &mut v8::HandleScope::new(iso);
-                                let ctx = v8::Local::new(scope, &exec_context);
-                                let scope = &mut v8::ContextScope::new(scope, ctx);
-                                run_event_loop(
-                                    scope,
-                                    &rx,
-                                    &pending,
-                                    maybe_abort_rx.as_ref(),
-                                    Some(&deferred_queue),
-                                )
-                            } else {
-                                EventLoopStatus::Completed
-                            };
+                            let scope = &mut v8::HandleScope::new(iso);
+                            let ctx = v8::Local::new(scope, &exec_context);
+                            let scope = &mut v8::ContextScope::new(scope, ctx);
+                            run_event_loop(
+                                scope,
+                                &rx,
+                                &pending,
+                                maybe_abort_rx.as_ref(),
+                                Some(&deferred_queue),
+                            )
+                        } else {
+                            EventLoopStatus::Completed
+                        };
 
-                        let mut terminated = matches!(event_loop_status, EventLoopStatus::Terminated);
+                        let mut terminated =
+                            matches!(event_loop_status, EventLoopStatus::Terminated);
                         if let EventLoopStatus::Failed(next_code, next_error) = event_loop_status {
                             code = next_code;
                             error = Some(next_error);
@@ -605,13 +605,18 @@ fn session_thread(
                                 let key = v8::String::new(scope, "_waitForActiveHandles").unwrap();
                                 if let Some(func) = global.get(scope, key.into()) {
                                     if func.is_function() {
-                                        let func = v8::Local::<v8::Function>::try_from(func).unwrap();
+                                        let func =
+                                            v8::Local::<v8::Function>::try_from(func).unwrap();
                                         let recv = v8::undefined(scope).into();
                                         if let Some(result) = func.call(scope, recv, &[]) {
                                             if result.is_promise() {
-                                                let promise = v8::Local::<v8::Promise>::try_from(result).unwrap();
+                                                let promise =
+                                                    v8::Local::<v8::Promise>::try_from(result)
+                                                        .unwrap();
                                                 if promise.state() == v8::PromiseState::Pending {
-                                                    execution::set_pending_script_evaluation(scope, promise);
+                                                    execution::set_pending_script_evaluation(
+                                                        scope, promise,
+                                                    );
                                                 }
                                             }
                                         }
@@ -638,7 +643,9 @@ fn session_thread(
                                 if matches!(event_loop_status, EventLoopStatus::Terminated) {
                                     terminated = true;
                                 }
-                                if let EventLoopStatus::Failed(next_code, next_error) = event_loop_status {
+                                if let EventLoopStatus::Failed(next_code, next_error) =
+                                    event_loop_status
+                                {
                                     code = next_code;
                                     error = Some(next_error);
                                 }
@@ -865,7 +872,9 @@ pub(crate) fn run_event_loop(
         if pending.len() == 0
             && !execution::pending_module_evaluation_needs_wait(scope)
             && !execution::pending_script_evaluation_needs_wait(scope)
-            && deferred.map(|dq| dq.lock().unwrap().is_empty()).unwrap_or(true)
+            && deferred
+                .map(|dq| dq.lock().unwrap().is_empty())
+                .unwrap_or(true)
         {
             break;
         }
@@ -907,7 +916,9 @@ pub(crate) fn run_event_loop(
             if pending.len() == 0
                 && !execution::pending_module_evaluation_needs_wait(scope)
                 && !execution::pending_script_evaluation_needs_wait(scope)
-                && deferred.map(|dq| dq.lock().unwrap().is_empty()).unwrap_or(true)
+                && deferred
+                    .map(|dq| dq.lock().unwrap().is_empty())
+                    .unwrap_or(true)
             {
                 return EventLoopStatus::Completed;
             }
@@ -928,6 +939,7 @@ pub(crate) fn run_event_loop(
 
 /// Dispatch a single BinaryFrame within the event loop.
 /// Returns the event-loop status after handling the frame.
+#[allow(dead_code)]
 pub(crate) enum EventLoopStatus {
     Completed,
     Terminated,

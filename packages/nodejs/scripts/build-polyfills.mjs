@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Resolve @secure-exec/core package root (generated files live in core).
+// Resolve @firestart/secure-exec-core package root (generated files live in core).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const coreRoot = path.resolve(__dirname, "..", "..", "core");
 

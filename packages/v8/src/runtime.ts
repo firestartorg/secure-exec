@@ -48,11 +48,11 @@ const __dirname = dirname(__filename);
 
 /** Platform-specific package name mapping. */
 const PLATFORM_PACKAGES: Record<string, string> = {
-	"linux-x64": "@secure-exec/v8-linux-x64-gnu",
-	"linux-arm64": "@secure-exec/v8-linux-arm64-gnu",
-	"darwin-x64": "@secure-exec/v8-darwin-x64",
-	"darwin-arm64": "@secure-exec/v8-darwin-arm64",
-	"win32-x64": "@secure-exec/v8-win32-x64",
+	"linux-x64": "@firestart/secure-exec-v8-linux-x64-gnu",
+	"linux-arm64": "@firestart/secure-exec-v8-linux-arm64-gnu",
+	"darwin-x64": "@firestart/secure-exec-v8-darwin-x64",
+	"darwin-arm64": "@firestart/secure-exec-v8-darwin-arm64",
+	"win32-x64": "@firestart/secure-exec-v8-win32-x64",
 };
 
 /** Options for creating a V8 runtime. */

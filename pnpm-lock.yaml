@@ -41,12 +41,12 @@ importers:
       '@ai-sdk/openai':
         specifier: ^3.0.41
         version: 3.0.47(zod@3.25.76)
+      '@firestart/secure-exec':
+        specifier: workspace:*
+        version: link:../../packages/secure-exec
       ai:
         specifier: ^6.0.116
         version: 6.0.134(zod@3.25.76)
-      secure-exec:
-        specifier: workspace:*
-        version: link:../../packages/secure-exec
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -66,12 +66,12 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^3.0.58
         version: 3.0.63(zod@3.25.76)
+      '@firestart/secure-exec':
+        specifier: workspace:*
+        version: link:../../packages/secure-exec
       ai:
         specifier: ^6.0.116
         version: 6.0.134(zod@3.25.76)
-      secure-exec:
-        specifier: workspace:*
-        version: link:../../packages/secure-exec
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -88,7 +88,7 @@ importers:
 
   examples/codemod:
     dependencies:
-      secure-exec:
+      '@firestart/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
     devDependencies:
@@ -98,12 +98,12 @@ importers:
 
   examples/features:
     dependencies:
+      '@firestart/secure-exec':
+        specifier: workspace:*
+        version: link:../../packages/secure-exec
       '@secure-exec/typescript':
         specifier: workspace:*
         version: link:../../packages/typescript
-      secure-exec:
-        specifier: workspace:*
-        version: link:../../packages/secure-exec
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -114,15 +114,15 @@ importers:
 
   examples/hono-dev-server:
     dependencies:
+      '@firestart/secure-exec':
+        specifier: workspace:*
+        version: link:../../packages/secure-exec
       '@hono/node-server':
         specifier: ^1.19.6
         version: 1.19.9(hono@4.12.2)
       hono:
         specifier: ^4.7.2
         version: 4.12.2
-      secure-exec:
-        specifier: workspace:*
-        version: link:../../packages/secure-exec
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -136,7 +136,7 @@ importers:
 
   examples/hono/loader:
     dependencies:
-      secure-exec:
+      '@firestart/secure-exec':
         specifier: workspace:*
         version: link:../../../packages/secure-exec
     devDependencies:
@@ -155,12 +155,12 @@ importers:
 
   examples/just-bash:
     dependencies:
+      '@firestart/secure-exec':
+        specifier: workspace:*
+        version: link:../../packages/secure-exec
       just-bash:
         specifier: github:vercel-labs/just-bash
         version: github.com/vercel-labs/just-bash/043e3410064cde8e4b2bbc3c8ee147f5b9d8b21c
-      secure-exec:
-        specifier: workspace:*
-        version: link:../../packages/secure-exec
     devDependencies:
       tsx:
         specifier: ^4.19.2
@@ -168,7 +168,7 @@ importers:
 
   examples/plugin-system:
     dependencies:
-      secure-exec:
+      '@firestart/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
     devDependencies:
@@ -184,6 +184,9 @@ importers:
 
   examples/quickstart:
     dependencies:
+      '@firestart/secure-exec':
+        specifier: workspace:*
+        version: link:../../packages/secure-exec
       '@hono/node-server':
         specifier: ^1.13.8
         version: 1.19.9(hono@4.12.2)
@@ -193,9 +196,6 @@ importers:
       hono:
         specifier: ^4.7.2
         version: 4.12.2
-      secure-exec:
-        specifier: workspace:*
-        version: link:../../packages/secure-exec
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -209,7 +209,7 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.700.0
         version: 3.1014.0
-      secure-exec:
+      '@firestart/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
     devDependencies:
@@ -222,7 +222,7 @@ importers:
 
   examples/virtual-file-system-sqlite:
     dependencies:
-      secure-exec:
+      '@firestart/secure-exec':
         specifier: workspace:*
         version: link:../../packages/secure-exec
       sql.js:
@@ -260,10 +260,10 @@ importers:
 
   packages/nodejs:
     dependencies:
-      '@secure-exec/core':
+      '@firestart/secure-exec-core':
         specifier: workspace:*
         version: link:../core
-      '@secure-exec/v8':
+      '@firestart/secure-exec-v8':
         specifier: workspace:*
         version: link:../v8
       cbor-x:
@@ -309,22 +309,22 @@ importers:
 
   packages/secure-exec:
     dependencies:
-      '@secure-exec/core':
+      '@firestart/secure-exec-core':
         specifier: workspace:*
         version: link:../core
-      '@secure-exec/nodejs':
+      '@firestart/secure-exec-nodejs':
         specifier: workspace:*
         version: link:../nodejs
     devDependencies:
+      '@firestart/secure-exec-v8':
+        specifier: workspace:*
+        version: link:../v8
       '@mariozechner/pi-coding-agent':
         specifier: ^0.60.0
         version: 0.60.0(zod@3.25.76)
       '@opencode-ai/sdk':
         specifier: ^1.2.27
         version: 1.2.27
-      '@secure-exec/v8':
-        specifier: workspace:*
-        version: link:../v8
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.3
@@ -358,12 +358,12 @@ importers:
 
   packages/typescript:
     dependencies:
-      '@secure-exec/core':
-        specifier: workspace:*
-        version: link:../core
-      secure-exec:
+      '@firestart/secure-exec':
         specifier: workspace:*
         version: link:../secure-exec
+      '@firestart/secure-exec-core':
+        specifier: workspace:*
+        version: link:../core
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -380,19 +380,6 @@ importers:
       cbor-x:
         specifier: ^1.6.4
         version: 1.6.4
-    optionalDependencies:
-      '@secure-exec/v8-darwin-arm64':
-        specifier: 0.2.1
-        version: 0.2.1
-      '@secure-exec/v8-darwin-x64':
-        specifier: 0.2.1
-        version: 0.2.1
-      '@secure-exec/v8-linux-arm64-gnu':
-        specifier: 0.2.1
-        version: 0.2.1
-      '@secure-exec/v8-linux-x64-gnu':
-        specifier: 0.2.1
-        version: 0.2.1
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -3599,38 +3586,6 @@ packages:
     cpu: [x64]
     os: [win32]
     requiresBuild: true
-    optional: true
-
-  /@secure-exec/v8-darwin-arm64@0.2.1:
-    resolution: {integrity: sha512-gEWhMHzUpLwzuBNAD0lVkZXE8wFlWMLp4IOZ+56FYwOW/C+m07cYxuW4TjHyPqZ+vPm3IkoaMqqH5yT9VhjX/Q==}
-    cpu: [arm64]
-    os: [darwin]
-    requiresBuild: true
-    dev: false
-    optional: true
-
-  /@secure-exec/v8-darwin-x64@0.2.1:
-    resolution: {integrity: sha512-H2Z5K+Cq+fn/kxjGvhJzepnNFWG6qNdyhZybVWGr5bAAZoSz/Qkad4WnXcurWU+880tKDtnf19LHBXrg7zewNQ==}
-    cpu: [x64]
-    os: [darwin]
-    requiresBuild: true
-    dev: false
-    optional: true
-
-  /@secure-exec/v8-linux-arm64-gnu@0.2.1:
-    resolution: {integrity: sha512-14subGhVV/gW35mYYm7Gv1Keeex7PxIgQfoKji/JH7wYyDuarP6kgaES0nJw+JXVkxEVud52c+kbcIjIggqCEw==}
-    cpu: [arm64]
-    os: [linux]
-    requiresBuild: true
-    dev: false
-    optional: true
-
-  /@secure-exec/v8-linux-x64-gnu@0.2.1:
-    resolution: {integrity: sha512-Az4s+vUf+78vWtsC7rTn/jQc6WKJafAdt2YpEjB4Gnu+sX+FFTIst1hRV4gJonbRyJdy6SW+OQ6DZatmwczorQ==}
-    cpu: [x64]
-    os: [linux]
-    requiresBuild: true
-    dev: false
     optional: true
 
   /@shikijs/core@3.23.0:

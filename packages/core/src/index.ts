@@ -308,7 +308,7 @@ export type { ChunkedVfsOptions, ChunkedVfsVersioning } from "./vfs/chunked-vfs.
 export { HostBlockStore } from "./vfs/host-block-store.js";
 
 // Test conformance suites (VFS, block store, metadata store) are available
-// via subpath imports: @secure-exec/core/test/vfs-conformance, etc.
+// via subpath imports: @firestart/secure-exec-core/test/vfs-conformance, etc.
 // They are not re-exported here to avoid pulling in vitest at runtime.
 
 // Filesystem helpers.

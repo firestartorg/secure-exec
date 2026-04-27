@@ -1,7 +1,10 @@
 {
-  "name": "@secure-exec/v8-darwin-arm64",
+  "name": "@firestart/secure-exec-v8-darwin-arm64",
   "version": "0.2.1",
   "license": "Apache-2.0",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "os": [
     "darwin"
   ],
@@ -15,7 +18,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/rivet-dev/secure-exec.git",
+    "url": "https://github.com/firestart/secure-exec.git",
     "directory": "native/v8-runtime/npm/darwin-arm64"
   }
 }

@@ -1,6 +1,7 @@
 {
   "name": "@secure-exec/typescript",
   "version": "0.2.1",
+  "private": true,
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
@@ -11,7 +12,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/rivet-dev/secure-exec.git",
+    "url": "https://github.com/firestart/secure-exec.git",
     "directory": "packages/typescript"
   },
   "exports": {
@@ -26,8 +27,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@secure-exec/core": "workspace:*",
-    "secure-exec": "workspace:*",
+    "@firestart/secure-exec-core": "workspace:*",
+    "@firestart/secure-exec": "workspace:*",
     "typescript": "^5.9.3"
   },
   "devDependencies": {

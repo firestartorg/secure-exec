@@ -33,7 +33,7 @@ import type {
 import {
   exposeCustomGlobal,
   exposeMutableRuntimeStateGlobal,
-} from "@secure-exec/core/internal/shared/global-exposure";
+} from "@firestart/secure-exec-core/internal/shared/global-exposure";
 import { bridgeDispatchSync } from "./dispatch.js";
 
 

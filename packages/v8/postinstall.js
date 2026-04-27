@@ -11,11 +11,11 @@ const { existsSync } = require("fs");
 const { join, dirname } = require("path");
 
 const PLATFORM_PACKAGES = {
-	"linux-x64": "@secure-exec/v8-linux-x64-gnu",
-	"linux-arm64": "@secure-exec/v8-linux-arm64-gnu",
-	"darwin-x64": "@secure-exec/v8-darwin-x64",
-	"darwin-arm64": "@secure-exec/v8-darwin-arm64",
-	"win32-x64": "@secure-exec/v8-win32-x64",
+	"linux-x64": "@firestart/secure-exec-v8-linux-x64-gnu",
+	"linux-arm64": "@firestart/secure-exec-v8-linux-arm64-gnu",
+	"darwin-x64": "@firestart/secure-exec-v8-darwin-x64",
+	"darwin-arm64": "@firestart/secure-exec-v8-darwin-arm64",
+	"win32-x64": "@firestart/secure-exec-v8-win32-x64",
 };
 
 const BINARY_NAME =
@@ -49,17 +49,17 @@ async function downloadFallback() {
 	const pkg = PLATFORM_PACKAGES[key];
 	if (!pkg) {
 		console.warn(
-			`@secure-exec/v8: No prebuilt binary available for ${process.platform}-${process.arch}. ` +
+			`@firestart/secure-exec-v8: No prebuilt binary available for ${process.platform}-${process.arch}. ` +
 				"Build from source: cd native/v8-runtime && cargo build --release",
 		);
 		return;
 	}
 
-	// Extract platform suffix from package name (e.g. "linux-x64-gnu" from "@secure-exec/v8-linux-x64-gnu")
-	const suffix = pkg.replace("@secure-exec/v8-", "");
+	// Extract platform suffix from package name (e.g. "linux-x64-gnu" from "@firestart/secure-exec-v8-linux-x64-gnu")
+	const suffix = pkg.replace("@firestart/secure-exec-v8-", "");
 	const url = `https://github.com/rivet-dev/secure-exec/releases/download/v${version}/${BINARY_NAME}-${suffix}`;
 
-	console.log(`@secure-exec/v8: Downloading binary from ${url}...`);
+	console.log(`@firestart/secure-exec-v8: Downloading binary from ${url}...`);
 
 	try {
 		const https = require("https");
@@ -96,10 +96,10 @@ async function downloadFallback() {
 			fetch(url, 0);
 		});
 
-		console.log(`@secure-exec/v8: Binary installed to ${dest}`);
+		console.log(`@firestart/secure-exec-v8: Binary installed to ${dest}`);
 	} catch (err) {
 		console.warn(
-			`@secure-exec/v8: Failed to download binary: ${err.message}. ` +
+			`@firestart/secure-exec-v8: Failed to download binary: ${err.message}. ` +
 				"Build from source: cd native/v8-runtime && cargo build --release",
 		);
 	}
@@ -115,5 +115,5 @@ async function main() {
 
 main().catch((err) => {
 	// Postinstall failures should warn, not break install
-	console.warn(`@secure-exec/v8 postinstall: ${err.message}`);
+	console.warn(`@firestart/secure-exec-v8 postinstall: ${err.message}`);
 });

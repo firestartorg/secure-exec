@@ -18,7 +18,7 @@ import type {
   DriverProcess,
   Permissions,
   VirtualFileSystem,
-} from '@secure-exec/core';
+} from '@firestart/secure-exec-core';
 import { NodeExecutionDriver } from './execution-driver.js';
 import { createDefaultNetworkAdapter, createNodeDriver } from './driver.js';
 import { transformSourceForRequireSync } from './module-source.js';
@@ -29,10 +29,10 @@ import {
   allowAllFs,
   allowAllNetwork,
   createProcessScopedFileSystem,
-} from '@secure-exec/core';
+} from '@firestart/secure-exec-core';
 import type {
   CommandExecutor,
-} from '@secure-exec/core';
+} from '@firestart/secure-exec-core';
 import type { LiveStdinSource } from './isolate-bootstrap.js';
 
 export interface NodeRuntimeOptions {

@@ -7,7 +7,7 @@
  * Usage:
  *
  * ```typescript
- * import { defineVfsConformanceTests } from "@secure-exec/core/test/vfs-conformance";
+ * import { defineVfsConformanceTests } from "@firestart/secure-exec-core/test/vfs-conformance";
  *
  * defineVfsConformanceTests({
  *   name: "MyDriver",

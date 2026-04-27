@@ -628,6 +628,7 @@ pub fn clear_pending_module_evaluation() {
     });
 }
 
+#[allow(dead_code)]
 pub fn clear_pending_script_evaluation() {
     PENDING_SCRIPT_EVALUATION.with(|cell| {
         *cell.borrow_mut() = None;
@@ -639,6 +640,7 @@ pub fn has_pending_module_evaluation() -> bool {
     PENDING_MODULE_EVALUATION.with(|cell| cell.borrow().is_some())
 }
 
+#[allow(dead_code)]
 pub fn has_pending_script_evaluation() -> bool {
     PENDING_SCRIPT_EVALUATION.with(|cell| cell.borrow().is_some())
 }
@@ -678,10 +680,7 @@ fn set_pending_module_evaluation(
     });
 }
 
-pub fn set_pending_script_evaluation(
-    scope: &mut v8::HandleScope,
-    promise: v8::Local<v8::Promise>,
-) {
+pub fn set_pending_script_evaluation(scope: &mut v8::HandleScope, promise: v8::Local<v8::Promise>) {
     PENDING_SCRIPT_EVALUATION.with(|cell| {
         *cell.borrow_mut() = Some(PendingScriptEvaluation {
             promise: v8::Global::new(scope, promise),
@@ -697,6 +696,7 @@ pub(crate) fn take_unhandled_promise_rejection(
         .and_then(|state| state.unhandled.drain().next().map(|(_, err)| err))
 }
 
+#[allow(dead_code)]
 pub fn finalize_pending_script_evaluation(
     scope: &mut v8::HandleScope,
 ) -> Option<(i32, Option<ExecutionError>)> {
@@ -931,8 +931,7 @@ pub fn execute_module(
 
         // Instantiate (calls resolve callback for each import — mostly cache hits now)
         let inst_result = module.instantiate_module(tc, module_resolve_callback);
-        if inst_result.is_none()
-        {
+        if inst_result.is_none() {
             clear_module_state();
             return match tc.exception() {
                 Some(e) => {
@@ -1174,12 +1173,10 @@ fn prefetch_module_imports(
                         state
                             .module_cache
                             .insert(resolved_path.clone(), global.clone());
-                        state
-                            .module_cache
-                            .insert(
-                                module_request_cache_key(&batch[i].0, &batch[i].1),
-                                global.clone(),
-                            );
+                        state.module_cache.insert(
+                            module_request_cache_key(&batch[i].0, &batch[i].1),
+                            global.clone(),
+                        );
                     }
                 });
 
@@ -1240,8 +1237,8 @@ fn resolve_or_compile_module<'s>(
         // Extract potential named exports by scanning for common patterns
         let exports = extract_cjs_export_names(&raw_source);
         let mut shim = format!(
-            "const _cjsModule = globalThis._requireFrom({}, \"/\");\nexport default _cjsModule;\n",
-            format!("\"{}\"", resolved_path.replace('\\', "\\\\").replace('"', "\\\""))
+            "const _cjsModule = globalThis._requireFrom(\"{}\", \"/\");\nexport default _cjsModule;\n",
+            resolved_path.replace('\\', "\\\\").replace('"', "\\\"")
         );
         if !exports.is_empty() {
             // Re-export each named export from the CJS module
@@ -1372,7 +1369,7 @@ pub fn dynamic_import_callback<'a>(
                 exception
             } else {
                 let msg = v8::String::new(tc, "Cannot dynamically import module").unwrap();
-                v8::Exception::error(tc, msg).into()
+                v8::Exception::error(tc, msg)
             };
             return rejected_promise(tc, reason);
         }
@@ -1388,7 +1385,7 @@ pub fn dynamic_import_callback<'a>(
         } else {
             let msg =
                 v8::String::new(tc, "Cannot instantiate dynamically imported module").unwrap();
-            v8::Exception::error(tc, msg).into()
+            v8::Exception::error(tc, msg)
         };
         return rejected_promise(tc, reason);
     }
@@ -1402,7 +1399,7 @@ pub fn dynamic_import_callback<'a>(
     if module.get_status() == v8::ModuleStatus::Evaluated {
         let namespace = v8::Global::new(tc, module.get_module_namespace());
         let namespace = v8::Local::new(tc, &namespace);
-        return resolved_promise(tc, namespace.into());
+        return resolved_promise(tc, namespace);
     }
 
     let eval_result = match module.evaluate(tc) {
@@ -1413,7 +1410,7 @@ pub fn dynamic_import_callback<'a>(
             } else {
                 let msg =
                     v8::String::new(tc, "Cannot evaluate dynamically imported module").unwrap();
-                v8::Exception::error(tc, msg).into()
+                v8::Exception::error(tc, msg)
             };
             return rejected_promise(tc, reason);
         }
@@ -1424,7 +1421,7 @@ pub fn dynamic_import_callback<'a>(
     if eval_result.is_promise() {
         let eval_promise = v8::Local::<v8::Promise>::try_from(eval_result).ok()?;
         let on_fulfilled = v8::FunctionTemplate::builder(dynamic_import_namespace_callback)
-            .data(namespace.into())
+            .data(namespace)
             .build(tc)
             .get_function(tc)?;
         let on_rejected = v8::FunctionTemplate::builder(dynamic_import_reject_callback)
@@ -1433,7 +1430,7 @@ pub fn dynamic_import_callback<'a>(
         return eval_promise.then2(tc, on_fulfilled, on_rejected);
     }
 
-    resolved_promise(tc, namespace.into())
+    resolved_promise(tc, namespace)
 }
 
 #[cfg_attr(test, allow(dead_code))]
@@ -1645,6 +1642,72 @@ fn throw_module_error(scope: &mut v8::HandleScope, message: &str) {
     let msg = v8::String::new(scope, message).unwrap();
     let exc = v8::Exception::error(scope, msg);
     scope.throw_exception(exc);
+}
+
+/// Detect if source code is likely CommonJS (not ESM).
+fn is_likely_cjs(source: &str) -> bool {
+    if source.contains("export ") || source.contains("import ") {
+        let has_esm_export = source.contains("export default")
+            || source.contains("export {")
+            || source.contains("export const")
+            || source.contains("export function")
+            || source.contains("export class")
+            || source.contains("export var")
+            || source.contains("export let");
+        let has_esm_import = source.contains("import {")
+            || source.contains("import \"")
+            || source.contains("import '")
+            || source.contains("import *");
+        if has_esm_export || has_esm_import {
+            return false;
+        }
+    }
+    source.contains("module.exports") || source.contains("exports.") || source.contains("require(")
+}
+
+/// Extract named export names from CJS source.
+fn extract_cjs_export_names(source: &str) -> Vec<String> {
+    use std::collections::HashSet;
+    let mut names = HashSet::new();
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("exports.") {
+            if let Some(eq_pos) = rest.find('=') {
+                let name = rest[..eq_pos].trim();
+                if is_valid_js_ident(name) && name != "default" {
+                    names.insert(name.to_string());
+                }
+            }
+        }
+        if trimmed.contains("Object.defineProperty(exports") {
+            if let Some(start) = trimmed.find('"').or_else(|| trimmed.find('\'')) {
+                let rest = &trimmed[start + 1..];
+                if let Some(end) = rest.find('"').or_else(|| rest.find('\'')) {
+                    let name = &rest[..end];
+                    if is_valid_js_ident(name) && name != "default" && name != "__esModule" {
+                        names.insert(name.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    let mut result: Vec<String> = names.into_iter().collect();
+    result.sort();
+    result
+}
+
+fn is_valid_js_ident(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    let mut chars = s.chars();
+    let first = chars.next().unwrap();
+    if !first.is_alphabetic() && first != '_' && first != '$' {
+        return false;
+    }
+    chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
 }
 
 #[cfg(test)]
@@ -3065,7 +3128,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &rx, &pending, None, None)
             };
 
-            assert!(completed, "event loop should complete normally");
+            assert!(
+                matches!(completed, crate::session::EventLoopStatus::Completed),
+                "event loop should complete normally"
+            );
             assert_eq!(pending.len(), 0);
             assert_eq!(
                 eval(&mut iso, &ctx, "_eventLoopResult"),
@@ -3141,7 +3207,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &rx, &pending, None, None)
             };
 
-            assert!(completed);
+            assert!(matches!(
+                completed,
+                crate::session::EventLoopStatus::Completed
+            ));
             assert_eq!(pending.len(), 0);
             assert_eq!(eval(&mut iso, &ctx, "_r1"), "fetch-result");
             assert_eq!(eval(&mut iso, &ctx, "_r2"), "dns-result");
@@ -3193,7 +3262,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &rx, &pending, None, None)
             };
 
-            assert!(!completed, "event loop should return false on termination");
+            assert!(
+                !matches!(completed, crate::session::EventLoopStatus::Completed),
+                "event loop should return false on termination"
+            );
             // Promise is still pending (not resolved)
             assert_eq!(pending.len(), 1);
 
@@ -3242,7 +3314,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &rx, &pending, None, None)
             };
 
-            assert!(!completed, "event loop should return false on shutdown");
+            assert!(
+                !matches!(completed, crate::session::EventLoopStatus::Completed),
+                "event loop should return false on shutdown"
+            );
         }
 
         // --- Part 35: Event loop — exits immediately when no pending promises ---
@@ -3261,7 +3336,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &rx, &pending, None, None)
             };
 
-            assert!(completed);
+            assert!(matches!(
+                completed,
+                crate::session::EventLoopStatus::Completed
+            ));
         }
 
         // --- Part 36: Event loop — StreamEvent dispatches to V8 callback ---
@@ -3337,7 +3415,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &rx, &pending, None, None)
             };
 
-            assert!(completed);
+            assert!(matches!(
+                completed,
+                crate::session::EventLoopStatus::Completed
+            ));
             assert_eq!(pending.len(), 0);
 
             // Verify stream event was dispatched
@@ -3493,7 +3574,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &rx, &pending, None, None)
             };
 
-            assert!(completed);
+            assert!(matches!(
+                completed,
+                crate::session::EventLoopStatus::Completed
+            ));
             assert_eq!(eval(&mut iso, &ctx, "_childEvents.length"), "2");
             assert_eq!(eval(&mut iso, &ctx, "_childEvents[0].type"), "child_stderr");
             assert_eq!(eval(&mut iso, &ctx, "_childEvents[0].data"), "error output");
@@ -3573,7 +3657,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &rx, &pending, None, None)
             };
 
-            assert!(completed);
+            assert!(matches!(
+                completed,
+                crate::session::EventLoopStatus::Completed
+            ));
             assert_eq!(eval(&mut iso, &ctx, "_httpEvents.length"), "1");
             assert_eq!(eval(&mut iso, &ctx, "_httpEvents[0].type"), "http_request");
             assert_eq!(eval(&mut iso, &ctx, "_httpEvents[0].data.method"), "GET");
@@ -3649,7 +3736,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &rx, &pending, None, None)
             };
 
-            assert!(completed);
+            assert!(matches!(
+                completed,
+                crate::session::EventLoopStatus::Completed
+            ));
             // Unknown event should NOT have dispatched to any handler
             assert!(eval_bool(&mut iso, &ctx, "_anyDispatched === false"));
         }
@@ -3718,7 +3808,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &rx, &pending, None, None)
             };
 
-            assert!(completed);
+            assert!(matches!(
+                completed,
+                crate::session::EventLoopStatus::Completed
+            ));
         }
 
         // --- Part 42: StreamEvent microtasks flushed after dispatch ---
@@ -3923,7 +4016,10 @@ mod tests {
                 crate::session::run_event_loop(scope, &cmd_rx, &pending, Some(&abort_rx), None)
             };
 
-            assert!(!completed, "event loop should have been terminated");
+            assert!(
+                !matches!(completed, crate::session::EventLoopStatus::Completed),
+                "event loop should have been terminated"
+            );
             assert!(guard.timed_out(), "timeout should have fired");
 
             guard.cancel();
@@ -5190,77 +5286,4 @@ mod tests {
             assert!(final_cap >= bufs.ser_buf.len(), "capacity >= len");
         }
     }
-}
-
-/// Detect if source code is likely CommonJS (not ESM).
-/// Checks for module.exports, exports.X, or require() patterns without ESM import/export.
-fn is_likely_cjs(source: &str) -> bool {
-    // If it has ESM syntax, it's not CJS
-    if source.contains("export ") || source.contains("import ") {
-        // Check for actual ESM: `export default`, `export {`, `export const`, `import {`, `import "`, `import(`
-        let has_esm_export = source.contains("export default")
-            || source.contains("export {")
-            || source.contains("export const")
-            || source.contains("export function")
-            || source.contains("export class")
-            || source.contains("export var")
-            || source.contains("export let");
-        let has_esm_import = source.contains("import {")
-            || source.contains("import \"")
-            || source.contains("import '")
-            || source.contains("import *");
-        if has_esm_export || has_esm_import {
-            return false;
-        }
-    }
-    // CJS indicators
-    source.contains("module.exports") || source.contains("exports.") || source.contains("require(")
-}
-
-/// Extract named export names from CJS source by scanning for `exports.X =` and
-/// `module.exports = { X: ... }` patterns. Returns a list of valid JS identifiers.
-fn extract_cjs_export_names(source: &str) -> Vec<String> {
-    use std::collections::HashSet;
-    let mut names = HashSet::new();
-
-    // Pattern 1: exports.NAME = ...
-    for line in source.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("exports.") {
-            if let Some(eq_pos) = rest.find('=') {
-                let name = rest[..eq_pos].trim();
-                if is_valid_js_ident(name) && name != "default" {
-                    names.insert(name.to_string());
-                }
-            }
-        }
-        // Pattern 2: Object.defineProperty(exports, "NAME", ...)
-        if trimmed.contains("Object.defineProperty(exports") {
-            if let Some(start) = trimmed.find('"').or_else(|| trimmed.find('\'')) {
-                let rest = &trimmed[start + 1..];
-                if let Some(end) = rest.find('"').or_else(|| rest.find('\'')) {
-                    let name = &rest[..end];
-                    if is_valid_js_ident(name) && name != "default" && name != "__esModule" {
-                        names.insert(name.to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    let mut result: Vec<String> = names.into_iter().collect();
-    result.sort();
-    result
-}
-
-fn is_valid_js_ident(s: &str) -> bool {
-    if s.is_empty() {
-        return false;
-    }
-    let mut chars = s.chars();
-    let first = chars.next().unwrap();
-    if !first.is_alphabetic() && first != '_' && first != '$' {
-        return false;
-    }
-    chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
 }

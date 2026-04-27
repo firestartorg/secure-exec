@@ -64,20 +64,10 @@ jobs:
             npm-dir: linux-arm64-gnu
             binary: secure-exec-v8
             cross: true
-          - target: x86_64-apple-darwin
-            os: macos-13
-            npm-dir: darwin-x64
-            binary: secure-exec-v8
-            test: true
           - target: aarch64-apple-darwin
             os: macos-latest
             npm-dir: darwin-arm64
             binary: secure-exec-v8
-            test: true
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            npm-dir: win32-x64
-            binary: secure-exec-v8.exe
             test: true
     runs-on: ${{ matrix.os }}
     steps:

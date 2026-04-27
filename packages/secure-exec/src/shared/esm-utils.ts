@@ -1,4 +1,4 @@
-// Re-exported from @secure-exec/core
+// Re-exported from @firestart/secure-exec-core
 export {
 	extractCjsNamedExports,
 	extractDynamicImportSpecifiers,
@@ -6,4 +6,4 @@ export {
 	transformDynamicImport,
 	wrapCJSForESM,
 	wrapCJSForESMWithModulePath,
-} from "@secure-exec/core";
+} from "@firestart/secure-exec-core";

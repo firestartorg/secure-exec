@@ -1,5 +1,5 @@
 /**
- * @deprecated Canonical source moved to @secure-exec/nodejs (US-002).
+ * @deprecated Canonical source moved to @firestart/secure-exec-nodejs (US-002).
  * This copy is retained for backward compatibility during phased migration.
  * Will be removed in US-005 when kernel merges into core.
  *

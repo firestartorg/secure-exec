@@ -7,7 +7,7 @@ import {
   type CommandExecutor,
   type SpawnedProcess,
   type VirtualFileSystem,
-} from "secure-exec";
+} from "@firestart/secure-exec";
 
 function createVirtualFs(fs: IFileSystem): VirtualFileSystem {
   return {

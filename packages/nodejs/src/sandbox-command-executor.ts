@@ -12,7 +12,7 @@ import type {
 	SystemDriver,
 	NodeRuntimeDriverFactory,
 	NodeRuntimeDriver,
-} from "@secure-exec/core";
+} from "@firestart/secure-exec-core";
 
 // Simple shell tokenizer for `bash -c "command"` extraction
 function parseShellCommand(
@@ -186,9 +186,9 @@ function spawnNodeChild(
 		system: childSystemDriver,
 		runtime: {
 			process:
-				childSystemDriver.runtime?.process ?? ({} as import("@secure-exec/core/internal/shared/api-types").ProcessConfig),
+				childSystemDriver.runtime?.process ?? ({} as import("@firestart/secure-exec-core/internal/shared/api-types").ProcessConfig),
 			os:
-				childSystemDriver.runtime?.os ?? ({} as import("@secure-exec/core/internal/shared/api-types").OSConfig),
+				childSystemDriver.runtime?.os ?? ({} as import("@firestart/secure-exec-core/internal/shared/api-types").OSConfig),
 		},
 		onStdio: (event) => {
 			if (event.channel === "stdout" && options.onStdout) {

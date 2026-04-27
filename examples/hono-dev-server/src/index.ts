@@ -4,7 +4,7 @@ import {
   allowAllNetwork,
   createNodeDriver,
   createNodeRuntimeDriverFactory,
-} from "secure-exec";
+} from "@firestart/secure-exec";
 
 const host = "127.0.0.1";
 const port = await findOpenPort();
