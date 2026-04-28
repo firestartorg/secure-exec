@@ -4145,28 +4145,11 @@ async function maybeDecompressHttpBody(
 }
 
 function shouldEncodeHttpBodyAsBinary(
-	urlString: string,
-	headers: http.IncomingHttpHeaders,
+	_urlString: string,
+	_headers: http.IncomingHttpHeaders,
 ): boolean {
-	const contentType = headers["content-type"] || "";
-	const headerValue = Array.isArray(contentType) ? contentType.join(", ") : contentType;
-	// No content-type — assume text for backward compatibility
-	if (!headerValue) {
-		return false;
-	}
-	// Explicitly text-based content types — keep as UTF-8 string
-	if (
-		headerValue.startsWith("text/") ||
-		headerValue.includes("application/json") ||
-		headerValue.includes("application/xml") ||
-		headerValue.includes("application/javascript") ||
-		headerValue.includes("application/x-www-form-urlencoded") ||
-		headerValue.includes("+xml") ||
-		headerValue.includes("+json")
-	) {
-		return false;
-	}
-	// Everything else (binary content types like application/pdf, image/*, etc.)
+	// Always encode response bodies as base64 across the bridge to prevent
+	// binary corruption. The isolate decodes via Buffer.from(body, "base64").
 	return true;
 }
 

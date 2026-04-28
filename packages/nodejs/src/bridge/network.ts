@@ -328,8 +328,17 @@ function encodeFetchBody(
   body: string,
   bodyEncoding: string | null,
 ): Uint8Array {
-  if (bodyEncoding === "base64" && typeof Buffer !== "undefined") {
-    return new Uint8Array(Buffer.from(body, "base64"));
+  if (bodyEncoding === "base64") {
+    if (typeof Buffer !== "undefined") {
+      return new Uint8Array(Buffer.from(body, "base64"));
+    }
+    // Fallback base64 decode via atob
+    const binary = atob(body);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   }
   if (typeof TextEncoder !== "undefined") {
     return new TextEncoder().encode(body);
