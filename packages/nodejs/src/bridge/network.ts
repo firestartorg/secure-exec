@@ -793,7 +793,7 @@ export class Request {
 
 // Response class
 export class Response {
-  private _body: string | null;
+  private _body: string | Uint8Array | null;
   status: number;
   statusText: string;
   headers: Headers;
@@ -802,8 +802,19 @@ export class Response {
   url: string;
   redirected: boolean;
 
-  constructor(body?: string | null, init: { status?: number; statusText?: string; headers?: Record<string, string> } = {}) {
-    this._body = body || null;
+  constructor(body?: string | ReadableStream | ArrayBuffer | Uint8Array | null, init: { status?: number; statusText?: string; headers?: Record<string, string> } = {}) {
+    if (body === null || body === undefined) {
+      this._body = null;
+    } else if (typeof body === "string") {
+      this._body = body;
+    } else if (body instanceof Uint8Array) {
+      this._body = body;
+    } else if (body instanceof ArrayBuffer) {
+      this._body = new Uint8Array(body);
+    } else {
+      // ReadableStream — store reference, will be consumed lazily
+      this._body = body as any;
+    }
     this.status = init.status || 200;
     this.statusText = init.statusText || "OK";
     this.headers = new Headers(init.headers);
@@ -813,26 +824,59 @@ export class Response {
     this.redirected = false;
   }
 
+  private async _bytes(): Promise<Uint8Array> {
+    const body = this._body;
+    if (body === null) return new Uint8Array(0);
+    if (body instanceof Uint8Array) return body;
+    if (typeof body === "string") return new TextEncoder().encode(body);
+    // ReadableStream
+    const reader = (body as any).getReader();
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value instanceof Uint8Array ? value : new Uint8Array(value));
+    }
+    const total = chunks.reduce((s: number, c: Uint8Array) => s + c.length, 0);
+    const result = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) { result.set(c, off); off += c.length; }
+    // Cache for subsequent calls
+    (this as any)._body = result;
+    return result;
+  }
+
   async text(): Promise<string> {
-    return String(this._body || "");
+    const bytes = await this._bytes();
+    return new TextDecoder().decode(bytes);
   }
 
   async json(): Promise<unknown> {
-    return JSON.parse(this._body || "{}");
+    return JSON.parse(await this.text());
+  }
+
+  async arrayBuffer(): Promise<ArrayBuffer> {
+    const bytes = await this._bytes();
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  }
+
+  async blob(): Promise<Blob> {
+    const bytes = await this._bytes();
+    return new Blob([bytes as any], { type: this.headers.get("content-type") || "" });
   }
 
   get body(): { getReader(): { read(): Promise<{ done: boolean; value?: Uint8Array }> } } | null {
-    const bodyStr = this._body;
-    if (bodyStr === null) return null;
+    const self = this;
+    if (this._body === null) return null;
     return {
       getReader() {
         let consumed = false;
         return {
           async read() {
-            if (consumed) return { done: true };
+            if (consumed) return { done: true as const };
             consumed = true;
-            const encoder = new TextEncoder();
-            return { done: false, value: encoder.encode(bodyStr) };
+            const bytes = await self._bytes();
+            return { done: false as const, value: bytes };
           },
         };
       },
@@ -840,7 +884,7 @@ export class Response {
   }
 
   clone(): Response {
-    return new Response(this._body, { status: this.status, statusText: this.statusText });
+    return new Response(this._body as any, { status: this.status, statusText: this.statusText });
   }
 
   static error(): Response {
