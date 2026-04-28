@@ -4150,11 +4150,24 @@ function shouldEncodeHttpBodyAsBinary(
 ): boolean {
 	const contentType = headers["content-type"] || "";
 	const headerValue = Array.isArray(contentType) ? contentType.join(", ") : contentType;
-	return (
-		headerValue.includes("octet-stream") ||
-		headerValue.includes("gzip") ||
-		urlString.endsWith(".tgz")
-	);
+	// No content-type — assume text for backward compatibility
+	if (!headerValue) {
+		return false;
+	}
+	// Explicitly text-based content types — keep as UTF-8 string
+	if (
+		headerValue.startsWith("text/") ||
+		headerValue.includes("application/json") ||
+		headerValue.includes("application/xml") ||
+		headerValue.includes("application/javascript") ||
+		headerValue.includes("application/x-www-form-urlencoded") ||
+		headerValue.includes("+xml") ||
+		headerValue.includes("+json")
+	) {
+		return false;
+	}
+	// Everything else (binary content types like application/pdf, image/*, etc.)
+	return true;
 }
 
 /**
