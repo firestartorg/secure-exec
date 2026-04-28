@@ -455,7 +455,12 @@ export async function fetch(input: string | URL | Request, options: FetchOptions
 
   const rawBody = options.body;
   const isBinaryBody = rawBody != null && (rawBody instanceof ArrayBuffer || rawBody instanceof Uint8Array);
-  const useChunkedPath = isBinaryBody && typeof _networkFetchStartRaw !== "undefined";
+  // Detect WHATWG ReadableStream or Node.js Readable stream bodies
+  const isStreamBody = rawBody != null && !isBinaryBody && (
+    (typeof ReadableStream !== "undefined" && (rawBody as any) instanceof ReadableStream) ||
+    (typeof rawBody === "object" && typeof (rawBody as any).pipe === "function" && typeof (rawBody as any).on === "function")
+  );
+  const useChunkedPath = (isBinaryBody || isStreamBody) && typeof _networkFetchStartRaw !== "undefined";
 
   const handleId = typeof _registerHandle === "function"
     ? `fetch:${++_fetchHandleCounter}`
@@ -468,34 +473,84 @@ export async function fetch(input: string | URL | Request, options: FetchOptions
     let responseJson: string;
 
     if (useChunkedPath) {
-      // Chunked binary upload path — streams body in chunks to reduce peak memory
-      const bytes = rawBody instanceof ArrayBuffer ? new Uint8Array(rawBody) : rawBody as Uint8Array;
-      const optionsJson = JSON.stringify({
-        method: options.method || "GET",
-        headers: serializeFetchHeaders(options.headers),
-        bodyLength: bytes.length,
-      });
+      if (isStreamBody) {
+        // Stream body upload path — consume ReadableStream or Node Readable via chunked bridge
+        const optionsJson = JSON.stringify({
+          method: options.method || "GET",
+          headers: serializeFetchHeaders(options.headers),
+        });
 
-      // Start the request (opens connection, sends headers)
-      const fetchId = await _networkFetchStartRaw.apply(undefined, [resolvedUrl, optionsJson], {
-        result: { promise: true },
-      });
-
-      // Stream body in chunks
-      for (let offset = 0; offset < bytes.length; offset += _FETCH_CHUNK_BYTES) {
-        const end = Math.min(offset + _FETCH_CHUNK_BYTES, bytes.length);
-        const chunk = bytes.subarray(offset, end);
-        const base64Chunk = _bytesToBase64(chunk);
-        await _networkFetchWriteChunkRaw.apply(undefined, [fetchId, base64Chunk], {
+        const fetchId = await _networkFetchStartRaw.apply(undefined, [resolvedUrl, optionsJson], {
           result: { promise: true },
         });
-        // chunk and base64Chunk are now eligible for GC
-      }
 
-      // Finish the request and get the response
-      responseJson = await _networkFetchFinishRaw.apply(undefined, [fetchId], {
-        result: { promise: true },
-      });
+        // Helper to send bytes in sub-chunks
+        const sendBytes = async (bytes: Uint8Array) => {
+          for (let off = 0; off < bytes.length; off += _FETCH_CHUNK_BYTES) {
+            const chunk = bytes.subarray(off, Math.min(off + _FETCH_CHUNK_BYTES, bytes.length));
+            await _networkFetchWriteChunkRaw.apply(undefined, [fetchId, _bytesToBase64(chunk)], {
+              result: { promise: true },
+            });
+          }
+        };
+
+        if (typeof ReadableStream !== "undefined" && (rawBody as any) instanceof ReadableStream) {
+          // WHATWG ReadableStream
+          const reader = (rawBody as unknown as ReadableStream<Uint8Array>).getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const bytes = value instanceof Uint8Array ? value : new Uint8Array(value as ArrayBuffer);
+            await sendBytes(bytes);
+          }
+        } else {
+          // Node.js Readable stream
+          await new Promise<void>((resolve, reject) => {
+            const stream = rawBody as any;
+            stream.on("data", (data: any) => {
+              const bytes = typeof data === "string"
+                ? new TextEncoder().encode(data)
+                : data instanceof Uint8Array ? data : new Uint8Array(data);
+              sendBytes(bytes);
+            });
+            stream.on("end", () => resolve());
+            stream.on("error", (err: any) => reject(err));
+          });
+        }
+
+        responseJson = await _networkFetchFinishRaw.apply(undefined, [fetchId], {
+          result: { promise: true },
+        });
+      } else {
+        // Chunked binary upload path — streams body in chunks to reduce peak memory
+        const bytes = rawBody instanceof ArrayBuffer ? new Uint8Array(rawBody) : rawBody as Uint8Array;
+        const optionsJson = JSON.stringify({
+          method: options.method || "GET",
+          headers: serializeFetchHeaders(options.headers),
+          bodyLength: bytes.length,
+        });
+
+        // Start the request (opens connection, sends headers)
+        const fetchId = await _networkFetchStartRaw.apply(undefined, [resolvedUrl, optionsJson], {
+          result: { promise: true },
+        });
+
+        // Stream body in chunks
+        for (let offset = 0; offset < bytes.length; offset += _FETCH_CHUNK_BYTES) {
+          const end = Math.min(offset + _FETCH_CHUNK_BYTES, bytes.length);
+          const chunk = bytes.subarray(offset, end);
+          const base64Chunk = _bytesToBase64(chunk);
+          await _networkFetchWriteChunkRaw.apply(undefined, [fetchId, base64Chunk], {
+            result: { promise: true },
+          });
+          // chunk and base64Chunk are now eligible for GC
+        }
+
+        // Finish the request and get the response
+        responseJson = await _networkFetchFinishRaw.apply(undefined, [fetchId], {
+          result: { promise: true },
+        });
+      }
     } else {
       // Standard path for string bodies and small payloads
       let serializedBody: string | null = null;
@@ -504,6 +559,34 @@ export async function fetch(input: string | URL | Request, options: FetchOptions
         if (rawBody instanceof ArrayBuffer || rawBody instanceof Uint8Array) {
           // Fallback: chunked bridge not available, encode entire body
           const bytes = rawBody instanceof ArrayBuffer ? new Uint8Array(rawBody) : rawBody;
+          serializedBody = _bytesToBase64(bytes);
+          bodyEncoding = "base64";
+        } else if (isStreamBody) {
+          // Fallback: consume stream fully into buffer
+          const chunks: Uint8Array[] = [];
+          if (typeof ReadableStream !== "undefined" && (rawBody as any) instanceof ReadableStream) {
+            const reader = (rawBody as unknown as ReadableStream<Uint8Array>).getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value instanceof Uint8Array ? value : new Uint8Array(value as ArrayBuffer));
+            }
+          } else {
+            await new Promise<void>((resolve, reject) => {
+              const stream = rawBody as any;
+              stream.on("data", (d: any) => {
+                chunks.push(typeof d === "string"
+                  ? new TextEncoder().encode(d)
+                  : d instanceof Uint8Array ? d : new Uint8Array(d));
+              });
+              stream.on("end", () => resolve());
+              stream.on("error", (e: any) => reject(e));
+            });
+          }
+          const total = chunks.reduce((s, c) => s + c.length, 0);
+          const bytes = new Uint8Array(total);
+          let off = 0;
+          for (const c of chunks) { bytes.set(c, off); off += c.length; }
           serializedBody = _bytesToBase64(bytes);
           bodyEncoding = "base64";
         } else {

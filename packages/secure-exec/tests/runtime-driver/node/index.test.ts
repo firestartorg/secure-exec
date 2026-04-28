@@ -6444,6 +6444,131 @@ describe("NodeRuntime", () => {
 		}
 	});
 
+	it("sends ReadableStream body through fetch without stringifying to [object ReadableStream]", async () => {
+		const capture = createConsoleCapture();
+		let receivedBody = "";
+		const server = nodeHttp.createServer((req, res) => {
+			const chunks: Buffer[] = [];
+			req.on("data", (chunk) => chunks.push(chunk));
+			req.on("end", () => {
+				receivedBody = Buffer.concat(chunks).toString("utf-8");
+				res.writeHead(200, { "content-type": "text/plain" });
+				res.end(receivedBody);
+			});
+		});
+		await new Promise<void>((resolve, reject) => {
+			server.once("error", reject);
+			server.listen(0, "127.0.0.1", () => resolve());
+		});
+
+		const address = server.address();
+		if (!address || typeof address === "string") {
+			throw new Error("expected an inet listener address");
+		}
+
+		try {
+			proc = createTestNodeRuntime({
+				onStdio: capture.onStdio,
+				driver: createNodeDriver({
+					useDefaultNetwork: true,
+					permissions: { ...allowAllNetwork },
+				}),
+			});
+			const result = await proc.exec(`
+		      (async () => {
+		        const stream = new ReadableStream({
+		          start(controller) {
+		            controller.enqueue(new TextEncoder().encode("hello from stream"));
+		            controller.close();
+		          }
+		        });
+		        const res = await fetch("http://127.0.0.1:${address.port}/", {
+		          method: "POST",
+		          body: stream,
+		        });
+		        const text = await res.text();
+		        console.log(text);
+		      })().catch((error) => {
+		        console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+		        process.exitCode = 1;
+		      });
+		    `);
+			expect(result.code).toBe(0);
+			expect(capture.stdout().trim()).toBe("hello from stream");
+			expect(receivedBody).toBe("hello from stream");
+		} finally {
+			await new Promise<void>((resolve, reject) => {
+				server.close((error) => {
+					if (error) reject(error);
+					else resolve();
+				});
+			});
+		}
+	});
+
+	it("sends Node.js Readable stream body through fetch", async () => {
+		const capture = createConsoleCapture();
+		let receivedBody = "";
+		const server = nodeHttp.createServer((req, res) => {
+			const chunks: Buffer[] = [];
+			req.on("data", (chunk) => chunks.push(chunk));
+			req.on("end", () => {
+				receivedBody = Buffer.concat(chunks).toString("utf-8");
+				res.writeHead(200, { "content-type": "text/plain" });
+				res.end(receivedBody);
+			});
+		});
+		await new Promise<void>((resolve, reject) => {
+			server.once("error", reject);
+			server.listen(0, "127.0.0.1", () => resolve());
+		});
+
+		const address = server.address();
+		if (!address || typeof address === "string") {
+			throw new Error("expected an inet listener address");
+		}
+
+		try {
+			proc = createTestNodeRuntime({
+				onStdio: capture.onStdio,
+				driver: createNodeDriver({
+					useDefaultNetwork: true,
+					permissions: { ...allowAllNetwork },
+				}),
+			});
+			const result = await proc.exec(`
+		      (async () => {
+		        const { Readable } = require("stream");
+		        const readable = new Readable({
+		          read() {
+		            this.push("hello from node readable");
+		            this.push(null);
+		          }
+		        });
+		        const res = await fetch("http://127.0.0.1:${address.port}/", {
+		          method: "POST",
+		          body: readable,
+		        });
+		        const text = await res.text();
+		        console.log(text);
+		      })().catch((error) => {
+		        console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+		        process.exitCode = 1;
+		      });
+		    `);
+			expect(result.code).toBe(0);
+			expect(capture.stdout().trim()).toBe("hello from node readable");
+			expect(receivedBody).toBe("hello from node readable");
+		} finally {
+			await new Promise<void>((resolve, reject) => {
+				server.close((error) => {
+					if (error) reject(error);
+					else resolve();
+				});
+			});
+		}
+	});
+
 	it("invokes process.stdout.write callbacks for empty flush writes", async () => {
 		const capture = createConsoleCapture();
 		proc = createTestNodeRuntime({
