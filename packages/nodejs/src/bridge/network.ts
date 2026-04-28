@@ -650,16 +650,27 @@ export async function fetch(input: string | URL | Request, options: FetchOptions
       },
 
       async text(): Promise<string> {
-        if (bodyEncoding === "base64" && typeof Buffer !== "undefined") {
-          return Buffer.from(responseBody, "base64").toString("utf8");
+        if (bodyEncoding === "base64") {
+          if (typeof Buffer !== "undefined") {
+            return Buffer.from(responseBody, "base64").toString("utf8");
+          }
+          const binary = atob(responseBody);
+          return new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)));
         }
         return responseBody;
       },
       async json(): Promise<unknown> {
-        const textBody =
-          bodyEncoding === "base64" && typeof Buffer !== "undefined"
-            ? Buffer.from(responseBody, "base64").toString("utf8")
-            : responseBody;
+        let textBody: string;
+        if (bodyEncoding === "base64") {
+          if (typeof Buffer !== "undefined") {
+            textBody = Buffer.from(responseBody, "base64").toString("utf8");
+          } else {
+            const binary = atob(responseBody);
+            textBody = new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)));
+          }
+        } else {
+          textBody = responseBody;
+        }
         return JSON.parse(textBody || "{}");
       },
       async arrayBuffer(): Promise<ArrayBuffer> {
