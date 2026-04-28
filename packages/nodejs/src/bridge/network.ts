@@ -504,16 +504,22 @@ export async function fetch(input: string | URL | Request, options: FetchOptions
             await sendBytes(bytes);
           }
         } else {
-          // Node.js Readable stream
+          // Node.js Readable stream — pause/resume for backpressure
           await new Promise<void>((resolve, reject) => {
             const stream = rawBody as any;
+            let pending: Promise<void> = Promise.resolve();
             stream.on("data", (data: any) => {
               const bytes = typeof data === "string"
                 ? new TextEncoder().encode(data)
                 : data instanceof Uint8Array ? data : new Uint8Array(data);
-              sendBytes(bytes);
+              stream.pause();
+              pending = pending.then(() => sendBytes(bytes)).then(() => {
+                stream.resume();
+              });
             });
-            stream.on("end", () => resolve());
+            stream.on("end", () => {
+              pending.then(() => resolve(), reject);
+            });
             stream.on("error", (err: any) => reject(err));
           });
         }
