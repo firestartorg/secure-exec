@@ -1,6 +1,6 @@
 {
   "name": "@firestartorg/secure-exec-nodejs",
-  "version": "0.2.2",
+  "version": "0.2.3-rc.1",
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
