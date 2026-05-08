@@ -9,7 +9,7 @@
   "dependencies": {
     "@secure-exec/typescript": "workspace:*",
     "@hono/node-server": "^1.13.8",
-    "hono": "^4.7.2",
+    "hono": "^4.12.16",
     "@firestartorg/secure-exec": "workspace:*"
   },
   "devDependencies": {

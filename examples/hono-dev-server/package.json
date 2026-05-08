@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.6",
-    "hono": "^4.7.2",
+    "hono": "^4.12.16",
     "@firestartorg/secure-exec": "workspace:*"
   },
   "devDependencies": {
