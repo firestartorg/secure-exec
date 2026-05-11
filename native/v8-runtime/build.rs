@@ -2,6 +2,20 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// The ICU major version that the bundled `icudtl.dat` was built for.
+/// Update this constant (and the `icudtl.dat` file) when upgrading the V8
+/// crate to a version that ships a different ICU.
+///
+/// To update:
+///   1. Check the new ICU version in the V8 crate's
+///      `third_party/icu/source/common/unicode/uvernum.h` (U_ICU_VERSION_MAJOR_NUM).
+///   2. Download the matching full ICU data from:
+///      https://github.com/unicode-org/icu/releases/download/release-{MAJOR}-{MINOR}/icu4c-{MAJOR}_{MINOR}-data-bin-l.zip
+///   3. Extract `icudt{MAJOR}l.dat`, rename to `icudtl.dat`, and place it
+///      in this directory (`native/v8-runtime/icudtl.dat`).
+///   4. Update `BUNDLED_ICU_MAJOR_VERSION` below.
+const BUNDLED_ICU_MAJOR_VERSION: u32 = 74;
+
 fn cargo_home() -> PathBuf {
     if let Some(home) = env::var_os("CARGO_HOME") {
         return PathBuf::from(home);
@@ -34,11 +48,61 @@ fn read_v8_version(lock_path: &Path) -> String {
     panic!("failed to locate v8 version in {}", lock_path.display());
 }
 
-fn find_v8_icu_data(v8_version: &str) -> PathBuf {
+/// Read U_ICU_VERSION_MAJOR_NUM from the V8 crate's uvernum.h header.
+fn read_v8_icu_major_version(v8_version: &str) -> Option<u32> {
     let registry_src = cargo_home().join("registry").join("src");
-    // Order matters: prefer full ICU data (flutter_desktop) over the
-    // stripped-down common variant which only supports English and causes
-    // "Internal error. Icu error." for non-English locales.
+    let entries = fs::read_dir(&registry_src).ok()?;
+
+    for entry in entries.flatten() {
+        let header = entry
+            .path()
+            .join(format!("v8-{}", v8_version))
+            .join("third_party/icu/source/common/unicode/uvernum.h");
+        if let Ok(content) = fs::read_to_string(&header) {
+            for line in content.lines() {
+                if line.contains("U_ICU_VERSION_MAJOR_NUM") && !line.contains("ifndef") {
+                    if let Some(num) = line.split_whitespace().last() {
+                        return num.parse().ok();
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn find_v8_icu_data(v8_version: &str, manifest_dir: &Path) -> PathBuf {
+    // Prefer the full ICU data bundled in the repo. The V8 crate only ships a
+    // stripped-down flutter_desktop/icudtl.dat (~1.6 MB) that excludes locale
+    // data for NumberFormat, DateTimeFormat, and most non-English locales,
+    // causing "Internal error. Icu error." at runtime.
+    let bundled = manifest_dir.join("icudtl.dat");
+    if bundled.exists() {
+        // Verify the bundled data matches the V8 crate's ICU version.
+        if let Some(v8_icu_major) = read_v8_icu_major_version(v8_version) {
+            if v8_icu_major != BUNDLED_ICU_MAJOR_VERSION {
+                panic!(
+                    "\n\n\
+                    *** ICU version mismatch ***\n\
+                    The V8 crate (v8-{v8}) uses ICU {v8_icu}, but the bundled icudtl.dat \
+                    is for ICU {bundled}.\n\n\
+                    To fix:\n  \
+                    1. Download: https://github.com/unicode-org/icu/releases/download/\
+                    release-{v8_icu}-1/icu4c-{v8_icu}_1-data-bin-l.zip\n  \
+                    2. Extract the .dat file and save as native/v8-runtime/icudtl.dat\n  \
+                    3. Update BUNDLED_ICU_MAJOR_VERSION to {v8_icu} in build.rs\n\n",
+                    v8 = v8_version,
+                    v8_icu = v8_icu_major,
+                    bundled = BUNDLED_ICU_MAJOR_VERSION,
+                );
+            }
+        }
+        return bundled;
+    }
+
+    // Fallback: search the V8 crate in the cargo registry.
+    let registry_src = cargo_home().join("registry").join("src");
     let candidates = [
         Path::new("third_party/icu/flutter_desktop/icudtl.dat"),
         Path::new("third_party/icu/common/icudtl.dat"),
@@ -60,6 +124,11 @@ fn find_v8_icu_data(v8_version: &str) -> PathBuf {
         for relative in candidates {
             let candidate = crate_root.join(relative);
             if candidate.exists() {
+                println!(
+                    "cargo:warning=Using stripped ICU data from V8 crate. \
+                    Intl.NumberFormat/DateTimeFormat may fail for non-English locales. \
+                    See native/v8-runtime/build.rs for instructions on bundling full ICU data."
+                );
                 return candidate;
             }
         }
@@ -80,9 +149,10 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}", lock_path.display());
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=icudtl.dat");
 
     let v8_version = read_v8_version(&lock_path);
-    let icu_data = find_v8_icu_data(&v8_version);
+    let icu_data = find_v8_icu_data(&v8_version, &manifest_dir);
     let dest_path = out_dir.join("icudtl.dat");
 
     fs::copy(&icu_data, &dest_path).unwrap_or_else(|error| {

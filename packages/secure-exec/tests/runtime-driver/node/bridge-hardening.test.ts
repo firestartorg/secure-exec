@@ -299,7 +299,7 @@ describe("bridge-side resource hardening", () => {
 			const capture = createConsoleCapture();
 			proc = createTestNodeRuntime({
 				onStdio: capture.onStdio,
-				cpuTimeMs: 200,
+				cpuTimeLimitMs: 200,
 			});
 
 			const result = await proc.exec(`
@@ -689,6 +689,87 @@ describe("bridge-side resource hardening", () => {
 				ascii: ['a', 'b', 'c', ' ', 't', 'h', 'i', 'n', 'k', 'i', 'n', 'g', ' ', 'o', 'f', 'f'],
 				bullet: ['a', 'b', 'c', ' ', '•', ' ', 't', 'h', 'i', 'n', 'k', 'i', 'n', 'g', ' ', 'o', 'f', 'f'],
 			});
+		});
+	});
+
+	describe("Intl locale support (full ICU)", () => {
+		it("Intl.NumberFormat formats with en-US locale", async () => {
+			const capture = createConsoleCapture();
+			proc = createTestNodeRuntime({ onStdio: capture.onStdio });
+
+			const result = await proc.exec(`
+				const formatted = new Intl.NumberFormat("en-US", {
+					minimumFractionDigits: 2,
+					maximumFractionDigits: 2,
+				}).format(1234.56);
+				console.log(formatted);
+			`);
+
+			expect(result.code).toBe(0);
+			expect(capture.stdout().trim()).toBe("1,234.56");
+		});
+
+		it("Intl.NumberFormat formats with non-English locale (de-DE)", async () => {
+			const capture = createConsoleCapture();
+			proc = createTestNodeRuntime({ onStdio: capture.onStdio });
+
+			const result = await proc.exec(`
+				const formatted = new Intl.NumberFormat("de-DE", {
+					minimumFractionDigits: 2,
+					maximumFractionDigits: 2,
+				}).format(1234.56);
+				console.log(formatted);
+			`);
+
+			expect(result.code).toBe(0);
+			expect(capture.stdout().trim()).toBe("1.234,56");
+		});
+
+		it("Number.toLocaleString works with non-English locale (de-DE)", async () => {
+			const capture = createConsoleCapture();
+			proc = createTestNodeRuntime({ onStdio: capture.onStdio });
+
+			const result = await proc.exec(`
+				const formatted = (5000).toLocaleString("de-DE", {
+					minimumFractionDigits: 2,
+					maximumFractionDigits: 2,
+				});
+				console.log(formatted);
+			`);
+
+			expect(result.code).toBe(0);
+			expect(capture.stdout().trim()).toBe("5.000,00");
+		});
+
+		it("Intl.DateTimeFormat works with non-English locale (de-DE)", async () => {
+			const capture = createConsoleCapture();
+			proc = createTestNodeRuntime({ onStdio: capture.onStdio });
+
+			const result = await proc.exec(`
+				const formatted = new Intl.DateTimeFormat("de-DE", {
+					year: "numeric",
+					month: "2-digit",
+					day: "2-digit",
+				}).format(new Date("2025-03-01T00:00:00Z"));
+				console.log(formatted);
+			`);
+
+			expect(result.code).toBe(0);
+			expect(capture.stdout().trim()).toBe("01.03.2025");
+		});
+
+		it("Intl.Collator sorts with non-English locale (de-DE)", async () => {
+			const capture = createConsoleCapture();
+			proc = createTestNodeRuntime({ onStdio: capture.onStdio });
+
+			const result = await proc.exec(`
+				const collator = new Intl.Collator("de-DE");
+				const sorted = ["Österreich", "Andorra", "Ägypten"].sort(collator.compare);
+				console.log(JSON.stringify(sorted));
+			`);
+
+			expect(result.code).toBe(0);
+			expect(JSON.parse(capture.stdout().trim())).toEqual(["Ägypten", "Andorra", "Österreich"]);
 		});
 	});
 
