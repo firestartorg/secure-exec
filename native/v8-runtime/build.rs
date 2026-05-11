@@ -36,9 +36,12 @@ fn read_v8_version(lock_path: &Path) -> String {
 
 fn find_v8_icu_data(v8_version: &str) -> PathBuf {
     let registry_src = cargo_home().join("registry").join("src");
+    // Order matters: prefer full ICU data (flutter_desktop) over the
+    // stripped-down common variant which only supports English and causes
+    // "Internal error. Icu error." for non-English locales.
     let candidates = [
-        Path::new("third_party/icu/common/icudtl.dat"),
         Path::new("third_party/icu/flutter_desktop/icudtl.dat"),
+        Path::new("third_party/icu/common/icudtl.dat"),
         Path::new("third_party/icu/chromecast_video/icudtl.dat"),
     ];
 
