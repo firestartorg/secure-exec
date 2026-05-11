@@ -1,6 +1,6 @@
 {
   "name": "@firestartorg/secure-exec-v8",
-  "version": "0.2.3-rc.4",
+  "version": "0.2.3-rc.5",
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
